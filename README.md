@@ -1,36 +1,134 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Live — Staff Scheduling
 
-## Getting Started
+Internal scheduling app for **Live Active Wear** (liveactivewear.com). One admin builds weekly schedules across multiple store locations; employees receive emails, a personal ICS calendar feed, and a read-only schedule page.
 
-First, run the development server:
+> Full architecture & decisions: [`PLAN.md`](./PLAN.md)
+> Working agreement for AI agents: [`AGENTS.md`](./AGENTS.md)
+> Project memory for Claude Code: [`CLAUDE.md`](./CLAUDE.md)
+
+## Stack
+
+| Layer | Tool |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript (strict) |
+| Styling | Tailwind v4 + shadcn/ui (dark theme by default) |
+| Database | Supabase (Postgres + Auth) |
+| Email | Resend |
+| Hosting | Vercel (Fluid Compute) |
+| Package manager | pnpm 10 |
+
+## Prerequisites
+
+- Node 22+ (24 recommended — Vercel's default)
+- pnpm 10+
+- A Supabase project (you'll create this yourself on a separate account)
+- A Resend account with a verified sender domain (testing can use `onboarding@resend.dev`)
+- A Vercel account (for production)
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# 1. Install dependencies
+pnpm install
+
+# 2. Copy env template and fill in real values
+cp .env.example .env.local
+
+# 3. Link your Supabase project (one-time)
+pnpm supabase login
+pnpm supabase link --project-ref <YOUR_PROJECT_REF>
+
+# 4. Push schema migrations to your Supabase project
+pnpm supabase db push
+
+# 5. Generate the TypeScript types from your schema
+pnpm supabase gen types typescript --linked > src/lib/supabase/types.ts
+
+# 6. Start the dev server
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script | What it does |
+|---|---|
+| `pnpm dev` | Start Next.js dev server |
+| `pnpm build` | Production build |
+| `pnpm start` | Run the production build |
+| `pnpm typecheck` | `tsc --noEmit` over the whole repo |
+| `pnpm test` | Run vitest once |
+| `pnpm test:watch` | Vitest in watch mode |
+| `pnpm lint` | ESLint |
+| `pnpm format` | Prettier write |
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+  app/
+    (admin)/      Auth-required admin UI
+    (public)/     Magic-token employee pages + ICS feed
+    api/cron/     Vercel cron handlers
+  components/     UI components (shadcn primitives in ui/)
+  lib/
+    scheduling/   Rules engine, stats, publish — pure functions
+    supabase/     Server + browser clients
+    emails/       React Email templates
+    ical.ts       ICS feed builder
+  server/         Server Actions — the only place that writes to the DB
+  types/          Shared TypeScript types
+supabase/
+  migrations/     Append-only SQL migrations
+.claude/          Commands, subagents, hooks, rules, skills for Claude Code
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+See [`.env.example`](./.env.example). Required:
 
-## Deploy on Vercel
+| Variable | Source |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase project settings → API → service role |
+| `RESEND_API_KEY` | resend.com → API keys |
+| `SENDER_EMAIL_ADDRESS` | Your verified sender, e.g. `schedules@notify.liveactivewear.com` |
+| `MAGIC_TOKEN_SECRET` | `openssl rand -base64 32` |
+| `CRON_SECRET` | `openssl rand -base64 32` |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+For Vercel deploys, set the same variables in **Vercel → Project → Settings → Environment Variables** or use `pnpm vercel env pull` after `vercel link`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## MCP servers
+
+This project ships with [`.mcp.json`](./.mcp.json) configured for:
+
+- **Supabase MCP** — schema introspection, migration listing
+- **Vercel MCP** — deployments, logs, env
+- **Resend MCP** — send test emails from your AI agent
+
+These activate inside Claude Code (or any MCP-aware client) when the relevant env vars are set in your shell or `.env.local`.
+
+## Deployment
+
+```bash
+# Link the project to Vercel (one-time)
+pnpm vercel link
+
+# Pull env vars from Vercel to local
+pnpm vercel env pull
+
+# Preview deploy
+pnpm vercel deploy --prebuilt
+
+# Production deploy (requires explicit confirmation in the slash command)
+pnpm vercel deploy --prod --prebuilt
+```
+
+The `/deploy` slash command in `.claude/commands/deploy.md` runs the full preflight (lint, typecheck, test, build) before deploying.
+
+## License
+
+Private — internal tool.
