@@ -4,14 +4,13 @@
 -- Authoritative source: .claude/rules/data-model.md and PLAN.md §3
 -- =============================================================================
 
-create extension if not exists "uuid-ossp";
-create extension if not exists "pgcrypto";
+-- gen_random_uuid() is built into Postgres 13+; no extension required.
 
 -- -----------------------------------------------------------------------------
 -- locations
 -- -----------------------------------------------------------------------------
 create table public.locations (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   name        text not null,
   slug        text not null unique,
   address     text,
@@ -30,7 +29,7 @@ comment on column public.locations.timezone is 'IANA timezone, e.g. America/Bogo
 create type public.employee_role as enum ('sales_rep', 'shift_lead', 'store_manager');
 
 create table public.employees (
-  id                   uuid primary key default uuid_generate_v4(),
+  id                   uuid primary key default gen_random_uuid(),
   location_id          uuid not null references public.locations(id) on delete restrict,
   name                 text not null,
   email                text not null unique,
@@ -56,7 +55,7 @@ create index employees_location_active_idx on public.employees (location_id, act
 -- shift_templates
 -- -----------------------------------------------------------------------------
 create table public.shift_templates (
-  id                 uuid primary key default uuid_generate_v4(),
+  id                 uuid primary key default gen_random_uuid(),
   location_id        uuid not null references public.locations(id) on delete cascade,
   name               text not null,
   start_time         time not null,
@@ -76,7 +75,7 @@ create index shift_templates_location_idx on public.shift_templates (location_id
 create type public.schedule_status as enum ('draft', 'published');
 
 create table public.schedules (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   location_id   uuid not null references public.locations(id) on delete cascade,
   week_start    date not null,
   status        public.schedule_status not null default 'draft',
@@ -93,7 +92,7 @@ create index schedules_status_idx on public.schedules (status, week_start);
 -- shifts
 -- -----------------------------------------------------------------------------
 create table public.shifts (
-  id                 uuid primary key default uuid_generate_v4(),
+  id                 uuid primary key default gen_random_uuid(),
   schedule_id        uuid not null references public.schedules(id) on delete cascade,
   employee_id        uuid not null references public.employees(id) on delete restrict,
   date               date not null,
@@ -114,7 +113,7 @@ create index shifts_employee_date_idx on public.shifts (employee_id, date);
 create type public.time_off_status as enum ('pending', 'approved', 'rejected');
 
 create table public.time_off_requests (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   employee_id   uuid not null references public.employees(id) on delete cascade,
   start_date    date not null,
   end_date      date not null,
