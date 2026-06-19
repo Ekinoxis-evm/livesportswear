@@ -59,6 +59,7 @@ export function ScheduleGrid({
   employees,
   templates,
   shifts,
+  hoursByEmployee,
 }: {
   scheduleId: string | null;
   locationId: string;
@@ -67,6 +68,7 @@ export function ScheduleGrid({
   employees: Employee[];
   templates: Template[];
   shifts: Shift[];
+  hoursByEmployee: Record<string, number>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -226,7 +228,7 @@ export function ScheduleGrid({
             ) : (
               employees.map((emp) => (
                 <tr key={emp.id} className="border-t">
-                  <td className="sticky left-0 z-10 bg-background p-2 font-medium">
+                  <td className="bg-background sticky left-0 z-10 p-2 font-medium">
                     <span className="flex items-center gap-2">
                       <span
                         aria-hidden
@@ -235,7 +237,12 @@ export function ScheduleGrid({
                           backgroundColor: emp.avatar_color ?? "transparent",
                         }}
                       />
-                      {emp.name}
+                      <span className="flex flex-col">
+                        {emp.name}
+                        <span className="text-muted-foreground text-xs tabular-nums">
+                          {(hoursByEmployee[emp.id] ?? 0).toFixed(1)}h
+                        </span>
+                      </span>
                     </span>
                   </td>
                   {days.map((d) => {

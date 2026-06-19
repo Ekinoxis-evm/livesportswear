@@ -4,10 +4,14 @@ import {
   currentWeekStart,
   weekDays,
 } from "@/lib/scheduling/week";
+import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
+import { validateSchedule } from "@/lib/scheduling/rules";
+import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScheduleControls } from "@/components/schedule/schedule-controls";
 import { ScheduleGrid } from "@/components/schedule/schedule-grid";
+import { ViolationsBanner } from "@/components/schedule/violations-banner";
 
 export default async function SchedulesPage({
   searchParams,
@@ -55,19 +59,21 @@ export default async function SchedulesPage({
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, name, avatar_color")
+    .select(
+      "id, name, avatar_color, weekly_hour_target, max_days_per_week, weekly_days_off, preferred_days_off",
+    )
     .eq("location_id", locationId)
     .eq("active", true)
     .order("name");
 
   const { data: templates } = await supabase
     .from("shift_templates")
-    .select("id, name, start_time, end_time, color")
+    .select("id, name, start_time, end_time, color, default_headcount")
     .eq("location_id", locationId)
     .eq("active", true)
     .order("start_time");
 
-  let shiftRows: {
+  type ShiftRow = {
     id: string;
     employee_id: string;
     date: string;
@@ -75,7 +81,8 @@ export default async function SchedulesPage({
     start_time: string;
     end_time: string;
     notes: string | null;
-  }[] = [];
+  };
+  let shiftRows: ShiftRow[] = [];
   if (schedule) {
     const { data } = await supabase
       .from("shifts")
@@ -86,12 +93,43 @@ export default async function SchedulesPage({
     shiftRows = data ?? [];
   }
 
+  const empList = employees ?? [];
+  const empIds = empList.map((e) => e.id);
+  const { data: timeOff } =
+    empIds.length > 0
+      ? await supabase
+          .from("time_off_requests")
+          .select("employee_id, start_date, end_date, status")
+          .in("employee_id", empIds)
+          .eq("status", "approved")
+      : { data: [] };
+
+  // Weekly hours per employee (for the grid).
+  const hoursByEmployee: Record<string, number> = {};
+  for (const s of shiftRows) {
+    hoursByEmployee[s.employee_id] =
+      (hoursByEmployee[s.employee_id] ?? 0) +
+      shiftDurationMinutes(s.start_time, s.end_time) / 60;
+  }
+
+  const violations: Violation[] = schedule
+    ? validateSchedule({
+        schedule: { week_start: weekStart },
+        shifts: shiftRows,
+        employees: empList,
+        timeOff: timeOff ?? [],
+        templates: templates ?? [],
+      })
+    : [];
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Schedules</h1>
         {schedule && (
-          <Badge variant={schedule.status === "published" ? "default" : "secondary"}>
+          <Badge
+            variant={schedule.status === "published" ? "default" : "secondary"}
+          >
             {schedule.status === "published" ? "Published" : "Draft"}
           </Badge>
         )}
@@ -103,14 +141,17 @@ export default async function SchedulesPage({
         weekStart={weekStart}
       />
 
+      {schedule && <ViolationsBanner violations={violations} />}
+
       <ScheduleGrid
         scheduleId={schedule?.id ?? null}
         locationId={locationId}
         weekStart={weekStart}
         days={days}
-        employees={employees ?? []}
+        employees={empList}
         templates={templates ?? []}
         shifts={shiftRows}
+        hoursByEmployee={hoursByEmployee}
       />
     </div>
   );
