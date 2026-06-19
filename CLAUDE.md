@@ -44,7 +44,7 @@ Full plan: see `PLAN.md`.
 ## Build phases (we are here)
 - [x] Phase 0 — Bootstrap
 - [x] Phase 1 — Schema + Auth + CRUD
-- [ ] Phase 2 — Schedule grid + shift CRUD
+- [x] Phase 2 — Schedule grid + shift CRUD
 - [ ] Phase 3 — Rules engine
 - [ ] Phase 4 — Publish + email + ICS
 - [ ] Phase 5 — Time-off requests
