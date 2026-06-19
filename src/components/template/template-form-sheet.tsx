@@ -119,6 +119,7 @@ export function TemplateFormSheet({
           <div className="flex flex-col gap-2">
             <Label htmlFor="location_id">Location</Label>
             <Select
+              items={Object.fromEntries(locations.map((l) => [l.id, l.name]))}
               value={locationId}
               onValueChange={(v) =>
                 setValue("location_id", v ?? "", { shouldValidate: true })

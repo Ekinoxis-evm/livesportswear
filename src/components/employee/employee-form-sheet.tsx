@@ -8,6 +8,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createEmployee, updateEmployee } from "@/server/employees";
 import { WEEKDAYS, shortWeekday } from "@/lib/weekdays";
+import {
+  DIAL_CODES,
+  DIAL_CODE_ITEMS,
+  splitPhone,
+  joinPhone,
+} from "@/lib/dial-codes";
 import { cn } from "@/lib/utils";
 import type { Employee } from "@/types/db";
 import { Button } from "@/components/ui/button";
@@ -36,10 +42,13 @@ const ROLES = [
   { value: "store_manager", label: "Store manager" },
 ] as const;
 
+const ROLE_ITEMS: Record<string, string> = Object.fromEntries(
+  ROLES.map((r) => [r.value, r.label]),
+);
+
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required."),
   email: z.string().trim().email("Enter a valid email."),
-  phone: z.string().trim().optional(),
   location_id: z.string().uuid("Pick a location."),
   role: z.enum(["sales_rep", "shift_lead", "store_manager"]),
   avatar_color: z
@@ -69,6 +78,9 @@ export function EmployeeFormSheet({
   const isEdit = Boolean(employee);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const initialPhone = splitPhone(employee?.phone);
+  const [dialCode, setDialCode] = useState(initialPhone.dialCode);
+  const [phoneNumber, setPhoneNumber] = useState(initialPhone.number);
 
   const {
     register,
@@ -82,7 +94,6 @@ export function EmployeeFormSheet({
     defaultValues: {
       name: employee?.name ?? "",
       email: employee?.email ?? "",
-      phone: employee?.phone ?? "",
       location_id: employee?.location_id ?? locations[0]?.id ?? "",
       role: employee?.role ?? "sales_rep",
       avatar_color: employee?.avatar_color ?? "",
@@ -107,7 +118,11 @@ export function EmployeeFormSheet({
 
   async function onSubmit(values: FormValues) {
     setPending(true);
-    const payload = { ...values, active: employee?.active ?? true };
+    const payload = {
+      ...values,
+      phone: joinPhone(dialCode, phoneNumber),
+      active: employee?.active ?? true,
+    };
     const res = isEdit
       ? await updateEmployee(employee!.id, payload)
       : await createEmployee(payload);
@@ -151,9 +166,35 @@ export function EmployeeFormSheet({
             )}
           </Field>
 
-          <Field label="Phone" error={errors.phone?.message} htmlFor="phone">
-            <Input id="phone" {...register("phone")} />
-          </Field>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="phone">Phone</Label>
+            <div className="flex gap-2">
+              <Select
+                items={DIAL_CODE_ITEMS}
+                value={dialCode}
+                onValueChange={(v) => setDialCode(v ?? dialCode)}
+              >
+                <SelectTrigger className="w-28 shrink-0">
+                  <SelectValue placeholder="Code" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DIAL_CODES.map((d) => (
+                    <SelectItem key={d.code} value={d.code}>
+                      {d.flag} {d.code} {d.country}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                id="phone"
+                inputMode="tel"
+                placeholder="300 123 4567"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className="flex-1"
+              />
+            </div>
+          </div>
 
           <Field
             label="Location"
@@ -161,6 +202,7 @@ export function EmployeeFormSheet({
             htmlFor="location_id"
           >
             <Select
+              items={Object.fromEntries(locations.map((l) => [l.id, l.name]))}
               value={locationId}
               onValueChange={(v) =>
                 setValue("location_id", v ?? "", { shouldValidate: true })
@@ -181,6 +223,7 @@ export function EmployeeFormSheet({
 
           <Field label="Role" error={errors.role?.message} htmlFor="role">
             <Select
+              items={ROLE_ITEMS}
               value={role}
               onValueChange={(v) =>
                 setValue(

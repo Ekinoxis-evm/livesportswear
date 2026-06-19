@@ -316,7 +316,19 @@ export function ScheduleGrid({
           <div className="flex flex-col gap-4 px-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="template">Shift</Label>
-              <Select value={templateId} onValueChange={(v) => setTemplateId(v ?? CUSTOM)}>
+              <Select
+                items={{
+                  ...Object.fromEntries(
+                    templates.map((t) => [
+                      t.id,
+                      `${t.name} (${hhmm(t.start_time)}–${hhmm(t.end_time)})`,
+                    ]),
+                  ),
+                  [CUSTOM]: "Custom hours",
+                }}
+                value={templateId}
+                onValueChange={(v) => setTemplateId(v ?? CUSTOM)}
+              >
                 <SelectTrigger id="template" className="w-full">
                   <SelectValue placeholder="Select shift" />
                 </SelectTrigger>

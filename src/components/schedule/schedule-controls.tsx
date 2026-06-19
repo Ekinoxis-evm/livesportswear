@@ -34,6 +34,7 @@ export function ScheduleControls({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <Select
+        items={Object.fromEntries(locations.map((l) => [l.id, l.name]))}
         value={locationId}
         onValueChange={(v) => v && go({ location: v })}
       >
