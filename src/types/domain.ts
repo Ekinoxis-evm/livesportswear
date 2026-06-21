@@ -9,6 +9,7 @@ export type ViolationCode =
   | "BELOW_MIN_DAYS_OFF"
   | "BELOW_COVERAGE"
   | "ABOVE_HOUR_TARGET"
+  | "ABOVE_BIWEEKLY_HOURS"
   | "PREFERRED_DAY_OFF_USED";
 
 export type Violation = {

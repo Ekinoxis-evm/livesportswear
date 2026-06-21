@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { validateSchedule, hasBlockers } from "@/lib/scheduling/rules";
+import {
+  validateSchedule,
+  hasBlockers,
+  biweeklyHourWarnings,
+} from "@/lib/scheduling/rules";
 import type {
   RuleEmployee,
   RuleShift,
@@ -163,5 +167,33 @@ describe("hasBlockers", () => {
     expect(hasBlockers([{ level: "warn", code: "BELOW_COVERAGE", message: "x" }])).toBe(
       false,
     );
+  });
+});
+
+describe("biweeklyHourWarnings", () => {
+  const eightHourShifts = (employee_id: string, n: number) =>
+    Array.from({ length: n }, () => ({
+      employee_id,
+      start_time: "09:00",
+      end_time: "17:00", // 8h
+    }));
+
+  it("warns when sprint hours exceed the cap", () => {
+    const out = biweeklyHourWarnings({
+      employees: [{ id: "e1", name: "Mara" }],
+      sprintShifts: eightHourShifts("e1", 11), // 88h
+      cap: 80,
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].code).toBe("ABOVE_BIWEEKLY_HOURS");
+  });
+
+  it("does not warn at or below the cap", () => {
+    const out = biweeklyHourWarnings({
+      employees: [{ id: "e1", name: "Mara" }],
+      sprintShifts: eightHourShifts("e1", 10), // 80h
+      cap: 80,
+    });
+    expect(out).toEqual([]);
   });
 });

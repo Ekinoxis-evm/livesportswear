@@ -3,9 +3,12 @@ import {
   normalizeWeekStart,
   currentWeekStart,
   weekDays,
+  addDays,
 } from "@/lib/scheduling/week";
+import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
-import { validateSchedule } from "@/lib/scheduling/rules";
+import { validateSchedule, biweeklyHourWarnings } from "@/lib/scheduling/rules";
+import { SPRINT_ANCHOR_MONDAY, BIWEEKLY_HOUR_CAP } from "@/lib/payroll-config";
 import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -113,15 +116,35 @@ export default async function SchedulesPage({
       shiftDurationMinutes(s.start_time, s.end_time) / 60;
   }
 
-  const violations: Violation[] = schedule
-    ? validateSchedule({
-        schedule: { week_start: weekStart },
-        shifts: shiftRows,
+  let violations: Violation[] = [];
+  if (schedule) {
+    violations = validateSchedule({
+      schedule: { week_start: weekStart },
+      shifts: shiftRows,
+      employees: empList,
+      timeOff: timeOff ?? [],
+      templates: templates ?? [],
+    });
+
+    // 80h-per-sprint cap spans both weeks of the pay sprint.
+    const sprint = sprintRange(SPRINT_ANCHOR_MONDAY, weekStart);
+    const sprintWeeks = [sprint.start, addDays(sprint.start, 7)];
+    const { data: sprintShifts } = await supabase
+      .from("shifts")
+      .select(
+        "employee_id, start_time, end_time, schedules!inner(location_id, week_start)",
+      )
+      .eq("schedules.location_id", locationId)
+      .in("schedules.week_start", sprintWeeks);
+
+    violations = violations.concat(
+      biweeklyHourWarnings({
         employees: empList,
-        timeOff: timeOff ?? [],
-        templates: templates ?? [],
-      })
-    : [];
+        sprintShifts: sprintShifts ?? [],
+        cap: BIWEEKLY_HOUR_CAP,
+      }),
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
