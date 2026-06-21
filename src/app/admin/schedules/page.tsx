@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScheduleControls } from "@/components/schedule/schedule-controls";
 import { ScheduleGrid } from "@/components/schedule/schedule-grid";
 import { ViolationsBanner } from "@/components/schedule/violations-banner";
+import { PublishButton } from "@/components/schedule/publish-button";
 
 export default async function SchedulesPage({
   searchParams,
@@ -127,11 +128,20 @@ export default async function SchedulesPage({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Schedules</h1>
         {schedule && (
-          <Badge
-            variant={schedule.status === "published" ? "default" : "secondary"}
-          >
-            {schedule.status === "published" ? "Published" : "Draft"}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge
+              variant={
+                schedule.status === "published" ? "default" : "secondary"
+              }
+            >
+              {schedule.status === "published" ? "Published" : "Draft"}
+            </Badge>
+            <PublishButton
+              scheduleId={schedule.id}
+              blockers={violations.filter((v) => v.level === "block").length}
+              published={schedule.status === "published"}
+            />
+          </div>
         )}
       </div>
 
