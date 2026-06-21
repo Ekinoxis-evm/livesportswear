@@ -98,6 +98,15 @@ One assignment.
 | `BELOW_COVERAGE` | warn | A weekday has fewer than `default_headcount` employees for a template |
 | `ABOVE_HOUR_TARGET` | warn | Total hours > `weekly_hour_target` for the week |
 | `PREFERRED_DAY_OFF_USED` | warn | Employee is scheduled on a `preferred_days_off` day |
+| `ABOVE_BIWEEKLY_HOURS` | warn | Employee exceeds the hour cap across a 2-week pay sprint (default 80h) |
+
+## Pay periods (config, not DB)
+Pay sprints are two Mon–Sun weeks (14 days). Payday is the Friday after a sprint's
+last Sunday. The sprint anchor Monday and the biweekly hour cap live in env
+(`SPRINT_ANCHOR_MONDAY`, `BIWEEKLY_HOUR_CAP`), read via `src/lib/payroll-config.ts`;
+the math is pure in `src/lib/scheduling/payroll.ts`. Time-off requests for a week
+are "due" before that week's preceding Friday (`submissionCutoff`); late ones are
+flagged (computed from `submitted_at`), not blocked.
 
 ## Indexes worth keeping in mind
 - `shifts (schedule_id, employee_id, date)` — already covered above

@@ -9,6 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { TimeOffRequestForm } from "@/components/time-off/request-form";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hhmm = (t: string) => t.slice(0, 5);
@@ -42,9 +44,17 @@ export default async function PublicSchedulePage({
     .order("date")
     .order("start_time");
 
+  const { data: requests } = await supabase
+    .from("time_off_requests")
+    .select("id, start_date, end_date, status")
+    .eq("employee_id", emp.id)
+    .order("submitted_at", { ascending: false })
+    .limit(8);
+
   const locationName =
     (emp.location as { name: string } | null)?.name ?? "Live Active Wear";
   const rows = shifts ?? [];
+  const timeOff = requests ?? [];
 
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-6">
@@ -112,6 +122,45 @@ export default async function PublicSchedulePage({
           >
             /s/{token}/calendar.ics
           </a>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Request time off</CardTitle>
+          <CardDescription>
+            Ask for specific days off. Your manager reviews each request.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {timeOff.length > 0 && (
+            <ul className="flex flex-col gap-2">
+              {timeOff.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="tabular-nums">
+                    {r.start_date === r.end_date
+                      ? r.start_date
+                      : `${r.start_date} – ${r.end_date}`}
+                  </span>
+                  <Badge
+                    variant={
+                      r.status === "approved"
+                        ? "default"
+                        : r.status === "rejected"
+                          ? "destructive"
+                          : "secondary"
+                    }
+                  >
+                    {r.status}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+          <TimeOffRequestForm token={token} />
         </CardContent>
       </Card>
     </div>

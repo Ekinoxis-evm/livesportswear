@@ -145,3 +145,34 @@ export function validateSchedule(input: ValidateScheduleInput): Violation[] {
 export function hasBlockers(violations: Violation[]): boolean {
   return violations.some((v) => v.level === "block");
 }
+
+/**
+ * Warns when an employee's hours across a full 2-week sprint exceed the cap.
+ * Separate from validateSchedule because it spans two weeks; callers pass all
+ * shifts in the sprint. Warning-level only.
+ */
+export function biweeklyHourWarnings(input: {
+  employees: { id: string; name: string }[];
+  sprintShifts: { employee_id: string; start_time: string; end_time: string }[];
+  cap: number;
+}): Violation[] {
+  const out: Violation[] = [];
+  for (const emp of input.employees) {
+    const minutes = input.sprintShifts
+      .filter((s) => s.employee_id === emp.id)
+      .reduce(
+        (sum, s) => sum + shiftDurationMinutes(s.start_time, s.end_time),
+        0,
+      );
+    const hours = minutes / 60;
+    if (hours > input.cap) {
+      out.push({
+        level: "warn",
+        code: "ABOVE_BIWEEKLY_HOURS",
+        employeeId: emp.id,
+        message: `${emp.name} is scheduled ${hours.toFixed(1)}h this pay period (cap ${input.cap}h).`,
+      });
+    }
+  }
+  return out;
+}

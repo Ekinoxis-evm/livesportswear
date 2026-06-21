@@ -47,7 +47,7 @@ Full plan: see `PLAN.md`.
 - [x] Phase 2 — Schedule grid + shift CRUD
 - [x] Phase 3 — Rules engine
 - [x] Phase 4 — Publish + email + ICS
-- [ ] Phase 5 — Time-off requests
+- [x] Phase 5 — Time-off requests
 - [ ] Phase 6 — Stats + dashboard
 - [ ] Phase 7 — Cron + polish + deploy
 
