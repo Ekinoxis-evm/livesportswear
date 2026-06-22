@@ -23,6 +23,9 @@ describe("sprintStart", () => {
   it("handles dates before the anchor", () => {
     expect(sprintStart(ANCHOR, "2026-06-15")).toBe("2026-06-08");
   });
+  it("tiles correctly several sprints before the anchor", () => {
+    expect(sprintStart(ANCHOR, "2026-06-01")).toBe("2026-05-25");
+  });
 });
 
 describe("sprintEnd / sprintRange", () => {

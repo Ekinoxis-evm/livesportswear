@@ -7,6 +7,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/auth";
 import { isMonday, addDays, isoWeekday, formatWeekRange } from "@/lib/scheduling/week";
+import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { validateSchedule, hasBlockers } from "@/lib/scheduling/rules";
 import { buildEmployeeFeed } from "@/lib/ical";
 import { sendSafe } from "@/lib/resend";
@@ -38,6 +39,9 @@ export async function ensureSchedule(
     .eq("location_id", locationId)
     .eq("week_start", weekStart)
     .maybeSingle();
+  if (existing.error) {
+    return { ok: false, error: dbError(existing.error) };
+  }
   if (existing.data) {
     revalidatePath("/admin/schedules");
     return { ok: true, data: existing.data };
@@ -93,6 +97,9 @@ export async function copyFromLastWeek(
     .from("shifts")
     .select("id", { count: "exact", head: true })
     .eq("schedule_id", targetId);
+  if (target.error) {
+    return { ok: false, error: dbError(target.error) };
+  }
   if ((target.count ?? 0) > 0) {
     return { ok: false, error: "This week already has shifts." };
   }
@@ -104,6 +111,9 @@ export async function copyFromLastWeek(
     .eq("location_id", locationId)
     .eq("week_start", prevWeek)
     .maybeSingle();
+  if (prev.error) {
+    return { ok: false, error: dbError(prev.error) };
+  }
   if (!prev.data) {
     return { ok: false, error: "There's no schedule for last week to copy." };
   }
@@ -135,7 +145,6 @@ export async function copyFromLastWeek(
 }
 
 const hhmm = (t: string) => t.slice(0, 5);
-const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /**
  * Canonical publish: load -> validate -> block-gate -> mark published + audit
@@ -144,7 +153,7 @@ const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
  */
 export async function publishSchedule(
   scheduleId: string,
-): Promise<ActionResult<{ sent: number }>> {
+): Promise<ActionResult<{ sent: number; total: number }>> {
   const admin = await requireAdmin();
   if (!uuid.safeParse(scheduleId).success) {
     return { ok: false, error: "Invalid schedule id." };
@@ -245,6 +254,7 @@ export async function publishSchedule(
   const weekRange = formatWeekRange(sched.data.week_start);
 
   let sent = 0;
+  let total = 0;
   for (const emp of employees) {
     const empShifts = shifts
       .filter((s) => s.employee_id === emp.id)
@@ -254,6 +264,7 @@ export async function publishSchedule(
           : a.date.localeCompare(b.date),
       );
     if (empShifts.length === 0) continue;
+    total++;
 
     const ics = buildEmployeeFeed({
       employeeName: emp.name,
@@ -278,7 +289,7 @@ export async function publishSchedule(
         weekRange,
         scheduleUrl: `${appUrl}/s/${emp.magic_token}`,
         shifts: empShifts.map((s) => ({
-          date: `${WD[isoWeekday(s.date) - 1]} ${s.date.slice(8, 10)}`,
+          date: `${SHORT_WEEKDAYS[isoWeekday(s.date) - 1]} ${s.date.slice(8, 10)}`,
           label: s.shift_template_id
             ? (templateName.get(s.shift_template_id) ?? "Shift")
             : "Custom",
@@ -291,5 +302,5 @@ export async function publishSchedule(
   }
 
   revalidatePath("/admin/schedules");
-  return { ok: true, data: { sent } };
+  return { ok: true, data: { sent, total } };
 }

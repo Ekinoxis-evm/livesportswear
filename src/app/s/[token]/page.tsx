@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { addDays, isoWeekday } from "@/lib/scheduling/week";
+import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   Card,
@@ -12,7 +13,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { TimeOffRequestForm } from "@/components/time-off/request-form";
 
-const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hhmm = (t: string) => t.slice(0, 5);
 
 export default async function PublicSchedulePage({
@@ -86,7 +86,7 @@ export default async function PublicSchedulePage({
                 <div className="flex items-center gap-3">
                   <div className="flex w-12 flex-col items-center">
                     <span className="text-muted-foreground text-xs">
-                      {WD[isoWeekday(s.date) - 1]}
+                      {SHORT_WEEKDAYS[isoWeekday(s.date) - 1]}
                     </span>
                     <span className="text-lg font-semibold tabular-nums">
                       {s.date.slice(8, 10)}

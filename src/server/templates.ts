@@ -11,14 +11,11 @@ import {
   dbError,
 } from "@/server/shared";
 
+import { toMinutes } from "@/lib/scheduling/conflicts";
+
 const time = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Use HH:MM.");
-
-const toMinutes = (t: string) => {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-};
 
 const templateSchema = z
   .object({

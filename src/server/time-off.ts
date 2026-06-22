@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/auth";
-import { isValidDateStr } from "@/lib/scheduling/week";
+import { isValidDateStr, addDays } from "@/lib/scheduling/week";
 import { sendSafe } from "@/lib/resend";
 import { TimeOffDecisionEmail } from "@/lib/emails/time-off-decision";
 import {
@@ -46,6 +46,21 @@ export async function submitTimeOff(input: unknown): Promise<ActionResult> {
     .maybeSingle();
   if (!emp) return { ok: false, error: "This link is no longer valid." };
 
+  // Bound the request to a sane window (public, unauthenticated input).
+  const today = new Date().toISOString().slice(0, 10);
+  if (
+    parsed.data.start_date < addDays(today, -7) ||
+    parsed.data.start_date > addDays(today, 180)
+  ) {
+    return { ok: false, error: "Choose dates within the next few months." };
+  }
+  const rangeDays =
+    (Date.parse(parsed.data.end_date) - Date.parse(parsed.data.start_date)) /
+    86_400_000;
+  if (rangeDays > 31) {
+    return { ok: false, error: "A request can't span more than 31 days." };
+  }
+
   const { error } = await service.from("time_off_requests").insert({
     employee_id: emp.id,
     start_date: parsed.data.start_date,
@@ -53,7 +68,13 @@ export async function submitTimeOff(input: unknown): Promise<ActionResult> {
     reason: parsed.data.reason,
     status: "pending",
   });
-  if (error) return { ok: false, error: dbError(error) };
+  // Generic message on a public endpoint — don't leak DB internals.
+  if (error) {
+    return {
+      ok: false,
+      error: "Couldn't submit your request. Please try again.",
+    };
+  }
 
   revalidatePath(`/s/${parsed.data.token}`);
   return { ok: true };
@@ -85,9 +106,22 @@ export async function decideTimeOff(
       decided_note: parsed.data.note,
     })
     .eq("id", id)
+    .eq("status", "pending")
     .select("employee_id, start_date, end_date")
-    .single();
+    .maybeSingle();
   if (upd.error) return { ok: false, error: dbError(upd.error) };
+  if (!upd.data) {
+    return { ok: false, error: "This request was already decided." };
+  }
+
+  // Auditable business action (audit_log has no authenticated insert policy).
+  await createServiceClient().from("audit_log").insert({
+    actor: admin.id,
+    action: "time_off.decided",
+    entity: "time_off_request",
+    entity_id: id,
+    diff: { status: parsed.data.status },
+  });
 
   const { data: emp } = await supabase
     .from("employees")

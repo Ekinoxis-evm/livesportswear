@@ -169,13 +169,13 @@ export default async function EmployeeDetailPage({
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground truncate text-sm">
-              {scheduleUrl}
+              {appUrl}/s/{"•".repeat(8)}
             </span>
             <CopyButton value={scheduleUrl} label="Schedule link" />
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground truncate text-sm">
-              {icsUrl}
+              {appUrl}/s/{"•".repeat(8)}/calendar.ics
             </span>
             <CopyButton value={icsUrl} label="Calendar link" />
           </div>

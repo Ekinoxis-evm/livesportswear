@@ -38,9 +38,8 @@ export function PublishButton({
       return;
     }
     const sent = res.data?.sent ?? 0;
-    toast.success(
-      `Schedule published — ${sent} email${sent === 1 ? "" : "s"} sent.`,
-    );
+    const total = res.data?.total ?? sent;
+    toast.success(`Schedule published — ${sent} of ${total} emails sent.`);
     setOpen(false);
     router.refresh();
   }

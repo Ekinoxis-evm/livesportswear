@@ -40,3 +40,8 @@
 ## PII
 - Don't log full employee email or phone. Mask: `j***@liveactivewear.com`.
 - Audit log captures the diff but not the magic token field.
+
+## Known v1 limitations (harden before changing these assumptions)
+- **RLS is authenticated-wide, not admin-scoped.** Every policy is `to authenticated using (true)`. Safe only because there is exactly one admin and employees never authenticate. **Creating any second Supabase Auth user grants it full read/write on all tables** — do not add one until policies are gated on an `is_admin()` check (admins table or `app_metadata.role` claim).
+- **Public endpoints are not rate-limited.** `submitTimeOff` and the `/s/[token]` routes rely on the 32-byte token's unguessability and bounded date ranges. Add a Vercel Firewall / token-bucket rule before exposing widely.
+- Audit log currently records `schedule.published` and `time_off.decided`; other admin mutations are not yet audited.

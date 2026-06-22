@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { isValidDateStr, weekDays } from "@/lib/scheduling/week";
+import { toMinutes } from "@/lib/scheduling/conflicts";
 import {
   type ActionResult,
   emptyToNull,
@@ -17,22 +18,37 @@ const time = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Use HH:MM.");
 
-const createSchema = z.object({
-  schedule_id: uuid,
-  employee_id: uuid,
-  date: z.string().refine(isValidDateStr, "Invalid date."),
-  shift_template_id: z.preprocess(emptyToNull, uuid.nullable().optional()),
-  start_time: z.preprocess(emptyToNull, time.nullable().optional()),
-  end_time: z.preprocess(emptyToNull, time.nullable().optional()),
-  notes: z.preprocess(emptyToNull, z.string().max(500).nullable()),
-});
+// When custom times are given (no template), end must be after start.
+const endAfterStart = (d: {
+  start_time?: string | null;
+  end_time?: string | null;
+}) =>
+  !d.start_time || !d.end_time || toMinutes(d.end_time) > toMinutes(d.start_time);
+const endAfterStartError = {
+  message: "End time must be after start time.",
+  path: ["end_time"],
+};
 
-const updateSchema = z.object({
-  shift_template_id: z.preprocess(emptyToNull, uuid.nullable().optional()),
-  start_time: z.preprocess(emptyToNull, time.nullable().optional()),
-  end_time: z.preprocess(emptyToNull, time.nullable().optional()),
-  notes: z.preprocess(emptyToNull, z.string().max(500).nullable()),
-});
+const createSchema = z
+  .object({
+    schedule_id: uuid,
+    employee_id: uuid,
+    date: z.string().refine(isValidDateStr, "Invalid date."),
+    shift_template_id: z.preprocess(emptyToNull, uuid.nullable().optional()),
+    start_time: z.preprocess(emptyToNull, time.nullable().optional()),
+    end_time: z.preprocess(emptyToNull, time.nullable().optional()),
+    notes: z.preprocess(emptyToNull, z.string().max(500).nullable()),
+  })
+  .refine(endAfterStart, endAfterStartError);
+
+const updateSchema = z
+  .object({
+    shift_template_id: z.preprocess(emptyToNull, uuid.nullable().optional()),
+    start_time: z.preprocess(emptyToNull, time.nullable().optional()),
+    end_time: z.preprocess(emptyToNull, time.nullable().optional()),
+    notes: z.preprocess(emptyToNull, z.string().max(500).nullable()),
+  })
+  .refine(endAfterStart, endAfterStartError);
 
 /** Resolves shift times from a template (authoritative) or explicit inputs. */
 async function resolveTimes(
@@ -137,9 +153,16 @@ export async function updateShift(
   if (shift.error || !shift.data) {
     return { ok: false, error: "Shift not found." };
   }
-  const locationId = (
-    shift.data.schedules as unknown as { location_id: string }
-  ).location_id;
+  const joined = shift.data.schedules as
+    | { location_id: string }
+    | { location_id: string }[]
+    | null;
+  const locationId = Array.isArray(joined)
+    ? joined[0]?.location_id
+    : joined?.location_id;
+  if (!locationId) {
+    return { ok: false, error: "Shift not found." };
+  }
 
   const times = await resolveTimes(
     supabase,

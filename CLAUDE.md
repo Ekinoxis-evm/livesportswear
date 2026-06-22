@@ -33,6 +33,7 @@ Full plan: see `PLAN.md`.
 - Send real emails from dev. `RESEND_DRY_RUN=true` in `.env.local` for local work.
 - Commit `.env.local`, `*.key`, or anything matching `*secret*`.
 - Bypass RLS by using the service-role client in any path that isn't an admin server action.
+- Create a second Supabase Auth user. RLS grants every authenticated user full read/write in v1 (single admin); a second login exposes all data until `is_admin()` gating lands. See `.claude/rules/security.md`.
 
 ## Where to find specifics
 - Schema decisions: `.claude/rules/data-model.md`
