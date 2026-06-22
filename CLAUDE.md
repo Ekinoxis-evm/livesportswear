@@ -48,7 +48,7 @@ Full plan: see `PLAN.md`.
 - [x] Phase 3 — Rules engine
 - [x] Phase 4 — Publish + email + ICS
 - [x] Phase 5 — Time-off requests
-- [ ] Phase 6 — Stats + dashboard
+- [x] Phase 6 — Stats + dashboard
 - [ ] Phase 7 — Cron + polish + deploy
 
 Update the box as phases complete.
