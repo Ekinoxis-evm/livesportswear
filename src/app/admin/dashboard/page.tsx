@@ -2,6 +2,12 @@ import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { SPRINT_ANCHOR_MONDAY } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
+import { weekStart, weekDays } from "@/lib/scheduling/week";
+import {
+  hoursByEmployee,
+  coverageSummary,
+  type StatShift,
+} from "@/lib/scheduling/stats";
 import {
   Card,
   CardContent,
@@ -9,60 +15,156 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { HoursChart } from "@/components/dashboard/hours-chart";
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
   const today = new Date().toISOString().slice(0, 10);
   const sprint = sprintRange(SPRINT_ANCHOR_MONDAY, today);
   const nextPayday = payday(SPRINT_ANCHOR_MONDAY, today);
+  const days = weekDays(weekStart(today));
 
-  const { count: pending } = await supabase
-    .from("time_off_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending");
+  const [{ count: pending }, locationsRes, templatesRes, weekShiftsRes] =
+    await Promise.all([
+      supabase
+        .from("time_off_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending"),
+      supabase.from("locations").select("id, name").eq("active", true).order("name"),
+      supabase
+        .from("shift_templates")
+        .select("id, location_id, default_headcount")
+        .eq("active", true),
+      supabase
+        .from("shifts")
+        .select(
+          "employee_id, date, start_time, end_time, shift_template_id, schedules!inner(location_id), employee:employees(name)",
+        )
+        .gte("date", days[0])
+        .lte("date", days[6]),
+    ]);
+
+  const locations = locationsRes.data ?? [];
+  const templates = templatesRes.data ?? [];
+  const weekShifts = (weekShiftsRes.data ?? []) as (StatShift & {
+    schedules: { location_id: string };
+    employee: { name: string } | null;
+  })[];
+
+  // Weekly hours per employee (chart).
+  const names = new Map<string, string>();
+  for (const s of weekShifts) names.set(s.employee_id, s.employee?.name ?? "?");
+  const hours = hoursByEmployee(weekShifts);
+  const chartData = Object.entries(hours)
+    .map(([id, h]) => ({
+      name: names.get(id) ?? "?",
+      hours: Math.round(h * 10) / 10,
+    }))
+    .sort((a, b) => b.hours - a.hours);
+
+  // Coverage per location (this week).
+  const coverage = locations.map((loc) => {
+    const locTemplates = templates.filter((t) => t.location_id === loc.id);
+    const locShifts = weekShifts.filter(
+      (s) => s.schedules.location_id === loc.id,
+    );
+    const cov = coverageSummary({ shifts: locShifts, templates: locTemplates, days });
+    const rate =
+      cov.rows.length === 0
+        ? 1
+        : cov.rows.reduce((a, r) => a + r.rate, 0) / cov.rows.length;
+    return { id: loc.id, name: loc.name, open: cov.openShifts, rate };
+  });
+  const openTotal = coverage.reduce((a, c) => a + c.open, 0);
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <Card>
           <CardHeader>
             <CardDescription>Current pay sprint</CardDescription>
-            <CardTitle className="text-lg tabular-nums">
+            <CardTitle className="text-base tabular-nums">
               {sprint.start} – {sprint.end}
             </CardTitle>
           </CardHeader>
         </Card>
-
         <Card>
           <CardHeader>
             <CardDescription>Next payday</CardDescription>
-            <CardTitle className="text-lg tabular-nums">{nextPayday}</CardTitle>
+            <CardTitle className="text-base tabular-nums">{nextPayday}</CardTitle>
           </CardHeader>
         </Card>
-
         <Link href="/admin/time-off" className="block">
-          <Card className="hover:border-primary transition-colors">
+          <Card className="hover:border-primary h-full transition-colors">
             <CardHeader>
               <CardDescription>Pending time off</CardDescription>
-              <CardTitle className="text-lg tabular-nums">
+              <CardTitle className="text-base tabular-nums">
                 {pending ?? 0}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        </Link>
+        <Link href="/admin/schedules" className="block">
+          <Card className="hover:border-primary h-full transition-colors">
+            <CardHeader>
+              <CardDescription>Open shifts this week</CardDescription>
+              <CardTitle className="text-base tabular-nums">
+                {openTotal}
               </CardTitle>
             </CardHeader>
           </Card>
         </Link>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Coming soon</CardTitle>
-          <CardDescription>
-            This week & next at a glance, coverage health, and reminders.
-          </CardDescription>
-        </CardHeader>
-        <CardContent />
-      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Hours this week</CardTitle>
+            <CardDescription>Scheduled hours per employee.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <HoursChart data={chartData} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Coverage health</CardTitle>
+            <CardDescription>
+              Template coverage this week, per store.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {coverage.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No active stores.</p>
+            ) : (
+              <ul className="flex flex-col divide-y">
+                {coverage.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex items-center justify-between py-2 text-sm"
+                  >
+                    <span>{c.name}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-muted-foreground tabular-nums">
+                        {Math.round(c.rate * 100)}%
+                      </span>
+                      {c.open > 0 ? (
+                        <Badge variant="secondary">{c.open} open</Badge>
+                      ) : (
+                        <Badge variant="default">Full</Badge>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

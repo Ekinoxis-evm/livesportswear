@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -95,7 +96,12 @@ export default async function EmployeesPage() {
                       }}
                     />
                     <span className="flex flex-col">
-                      {emp.name}
+                      <Link
+                        href={`/admin/employees/${emp.id}`}
+                        className="hover:underline"
+                      >
+                        {emp.name}
+                      </Link>
                       <span className="text-muted-foreground text-xs">
                         {emp.email}
                       </span>
