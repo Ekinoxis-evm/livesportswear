@@ -10,6 +10,17 @@ export const WEEKDAYS = [
 
 export type Weekday = (typeof WEEKDAYS)[number];
 
+/** 3-letter labels indexed by ISO weekday - 1 (Mon=0 … Sun=6). */
+export const SHORT_WEEKDAYS = [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+  "Sun",
+] as const;
+
 export function isWeekday(value: string): value is Weekday {
   return (WEEKDAYS as readonly string[]).includes(value);
 }

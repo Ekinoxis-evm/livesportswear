@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
+import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { cn } from "@/lib/utils";
 import { ensureSchedule, copyFromLastWeek } from "@/server/schedules";
 import { createShift, updateShift, deleteShift } from "@/server/shifts";
@@ -27,7 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const CUSTOM = "custom";
 const hhmm = (t: string) => t.slice(0, 5);
 
@@ -208,7 +208,7 @@ export function ScheduleGrid({
               {days.map((d) => (
                 <th key={d} className="min-w-32 p-2 text-left font-medium">
                   <span className="text-muted-foreground">
-                    {WD[isoWeekday(d) - 1]}
+                    {SHORT_WEEKDAYS[isoWeekday(d) - 1]}
                   </span>{" "}
                   <span className="tabular-nums">{d.slice(8, 10)}</span>
                 </th>

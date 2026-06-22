@@ -3,13 +3,12 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
+import { type ActionResult } from "@/server/shared";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
-
-type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function signIn(input: {
   email: string;
