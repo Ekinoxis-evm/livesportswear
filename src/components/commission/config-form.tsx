@@ -11,14 +11,11 @@ import { Label } from "@/components/ui/label";
 type Row = { min_sales: string; ratePct: string };
 
 export function CommissionConfigForm({
-  currency,
   tiers,
 }: {
-  currency: string;
   tiers: { min_sales: number; rate: number }[];
 }) {
   const router = useRouter();
-  const [cur, setCur] = useState(currency);
   const [rows, setRows] = useState<Row[]>(
     tiers.map((t) => ({
       min_sales: String(t.min_sales),
@@ -34,7 +31,6 @@ export function CommissionConfigForm({
   async function save() {
     setPending(true);
     const res = await setCommissionConfig({
-      currency: cur,
       tiers: rows.map((r) => ({
         min_sales: r.min_sales,
         rate: Number(r.ratePct) / 100,
@@ -45,22 +41,12 @@ export function CommissionConfigForm({
       toast.error(res.error);
       return;
     }
-    toast.success("Commission config saved.");
+    toast.success("Commission tiers saved.");
     router.refresh();
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="currency">Currency</Label>
-        <Input
-          id="currency"
-          value={cur}
-          onChange={(e) => setCur(e.target.value)}
-          className="w-24"
-        />
-      </div>
-
       <div className="flex flex-col gap-2">
         <Label>Tiers — sales at or above unlock the rate</Label>
         {rows.map((r, i) => (
@@ -100,7 +86,7 @@ export function CommissionConfigForm({
       </div>
 
       <Button onClick={save} disabled={pending} className="self-start">
-        {pending ? "Saving…" : "Save config"}
+        {pending ? "Saving…" : "Save tiers"}
       </Button>
     </div>
   );

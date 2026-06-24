@@ -6,8 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { type ActionResult, dbError, firstError } from "@/server/shared";
 
-const configSchema = z.object({
-  currency: z.string().trim().min(1).max(8),
+const tiersSchema = z.object({
   tiers: z
     .array(
       z.object({
@@ -20,16 +19,36 @@ const configSchema = z.object({
 
 export async function setCommissionConfig(input: unknown): Promise<ActionResult> {
   await requireAdmin();
-  const parsed = configSchema.safeParse(input);
+  const parsed = tiersSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
   const tiers = [...parsed.data.tiers].sort((a, b) => a.min_sales - b.min_sales);
   const supabase = await createServerClient();
   const { error } = await supabase
     .from("commission_config")
-    .upsert({ id: 1, currency: parsed.data.currency, tiers }, { onConflict: "id" });
+    .update({ tiers })
+    .eq("id", 1);
   if (error) return { ok: false, error: dbError(error) };
 
+  revalidatePath("/admin/commission");
+  return { ok: true };
+}
+
+const currencySchema = z.object({ currency: z.string().trim().min(1).max(8) });
+
+export async function setCurrency(input: unknown): Promise<ActionResult> {
+  await requireAdmin();
+  const parsed = currencySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from("commission_config")
+    .update({ currency: parsed.data.currency.toUpperCase() })
+    .eq("id", 1);
+  if (error) return { ok: false, error: dbError(error) };
+
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/commission");
   return { ok: true };
 }
