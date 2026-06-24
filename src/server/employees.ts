@@ -6,6 +6,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { generateMagicToken } from "@/lib/magic-token";
 import { isWeekday } from "@/lib/weekdays";
+import { inviteEmployee } from "@/server/employee-accounts";
 import {
   type ActionResult,
   emptyToNull,
@@ -41,6 +42,14 @@ const employeeSchema = z.object({
       .nullable(),
   ),
   active: z.boolean(),
+});
+
+const withAccessSchema = employeeSchema.extend({
+  hourly_rate: z.preprocess(
+    emptyToNull,
+    z.coerce.number().min(0).max(100000).nullable(),
+  ),
+  invite: z.boolean().default(false),
 });
 
 const uuid = z.string().uuid();
@@ -119,6 +128,46 @@ export async function setEmployeeActive(
   if (error) return { ok: false, error: dbError(error) };
   revalidatePath("/admin/employees");
   return { ok: true };
+}
+
+/**
+ * Wizard entry point: create the employee, set their (private) hourly rate, and
+ * optionally send the portal invite — in one step. Employee is still created if
+ * the invite later fails (admin can retry from the detail page).
+ */
+export async function createEmployeeWithAccess(
+  input: unknown,
+): Promise<ActionResult<{ id: string; invited: boolean; inviteError?: string }>> {
+  await requireAdmin();
+  const parsed = withAccessSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { hourly_rate, invite, ...employee } = parsed.data;
+
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from("employees")
+    .insert({ ...employee, magic_token: generateMagicToken() })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: dbError(error, EMAIL_TAKEN) };
+  const id = data.id;
+
+  if (hourly_rate != null) {
+    await supabase
+      .from("employee_compensation")
+      .upsert({ employee_id: id, hourly_rate }, { onConflict: "employee_id" });
+  }
+
+  let invited = false;
+  let inviteError: string | undefined;
+  if (invite) {
+    const res = await inviteEmployee(id);
+    invited = res.ok;
+    if (!res.ok) inviteError = res.error;
+  }
+
+  revalidatePath("/admin/employees");
+  return { ok: true, data: { id, invited, inviteError } };
 }
 
 export async function rotateMagicToken(id: string): Promise<ActionResult> {

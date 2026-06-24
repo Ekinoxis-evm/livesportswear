@@ -71,6 +71,12 @@ export default async function PortalPage() {
     .eq("id", 1)
     .maybeSingle();
   const currency = cfg?.currency ?? "USD";
+  const { data: compRow } = await supabase
+    .from("employee_compensation")
+    .select("hourly_rate")
+    .eq("employee_id", employee.id)
+    .maybeSingle();
+  const hourlyRate = compRow?.hourly_rate ?? null;
   const tiers = (cfg?.tiers ?? []) as unknown as CommissionTier[];
   const { data: myRow } = await supabase
     .from("monthly_sales")
@@ -97,8 +103,13 @@ export default async function PortalPage() {
           <CardTitle className="text-xl">Hi, {employee.name}</CardTitle>
           <CardDescription>Your schedule and hours at a glance.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
           <PhotoUpload avatarUrl={employee.avatar_url} name={employee.name} />
+          {hourlyRate != null && (
+            <p className="text-muted-foreground text-sm tabular-nums">
+              Hourly rate: {formatMoney(hourlyRate, currency)} / h
+            </p>
+          )}
         </CardContent>
       </Card>
 
