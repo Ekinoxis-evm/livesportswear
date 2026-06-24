@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -46,11 +46,9 @@ export default async function EmployeesPage() {
             Staff and the rules that govern their schedules.
           </p>
         </div>
-        {activeLocations.length > 0 && (
-          <EmployeeFormSheet locations={activeLocations}>
-            <Button>New employee</Button>
-          </EmployeeFormSheet>
-        )}
+        <Link href="/admin/employees/new" className={buttonVariants()}>
+          New employee
+        </Link>
       </div>
 
       {activeLocations.length === 0 ? (
