@@ -1,5 +1,11 @@
 import { requireEmployee } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import {
+  commissionFor,
+  formatMoney,
+  type CommissionTier,
+} from "@/lib/commission";
 import { weekStart, weekDays, addDays, isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
@@ -57,6 +63,33 @@ export default async function PortalPage() {
   );
   const upcoming = shifts.filter((s) => s.date >= today).slice(0, 10);
 
+  // Commission: own sales (RLS self-read) + global config; rank via service
+  // client so peers' sales are never exposed — only the rep's position.
+  const { data: cfg } = await supabase
+    .from("commission_config")
+    .select("currency, tiers")
+    .eq("id", 1)
+    .maybeSingle();
+  const currency = cfg?.currency ?? "COP";
+  const tiers = (cfg?.tiers ?? []) as unknown as CommissionTier[];
+  const { data: myRow } = await supabase
+    .from("monthly_sales")
+    .select("amount")
+    .eq("employee_id", employee.id)
+    .eq("month", month)
+    .maybeSingle();
+  const mySales = myRow ? Number(myRow.amount) : 0;
+  const commission = commissionFor(mySales, tiers);
+
+  const service = createServiceClient();
+  const { data: peerSales } = await service
+    .from("monthly_sales")
+    .select("amount, employees!inner(active)")
+    .eq("month", month)
+    .eq("employees.active", true);
+  const rank =
+    (peerSales ?? []).filter((s) => Number(s.amount) > mySales).length + 1;
+
   return (
     <div className="flex flex-col gap-6">
       <Card>
@@ -90,6 +123,36 @@ export default async function PortalPage() {
           </CardContent>
         </Card>
       </div>
+
+      {tiers.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Sales &amp; commission</CardTitle>
+            <CardDescription>{month}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-8">
+              <Stat label="Sales" value={formatMoney(mySales, currency)} />
+              <Stat label="Rate" value={`${(commission.rate * 100).toFixed(1)}%`} />
+              <Stat
+                label="Commission"
+                value={formatMoney(commission.earned, currency)}
+              />
+              <Stat label="Rank" value={`#${rank}`} />
+            </div>
+            {commission.nextTier ? (
+              <p className="text-muted-foreground text-sm">
+                {formatMoney(commission.nextTier.remaining, currency)} more in
+                sales to reach {(commission.nextTier.rate * 100).toFixed(1)}%.
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                You&apos;re at the top tier — great work.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
