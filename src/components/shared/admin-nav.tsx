@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/admin/locations", label: "Locations" },
   { href: "/admin/templates", label: "Templates" },
   { href: "/admin/time-off", label: "Time off" },
+  { href: "/admin/commission", label: "Commission" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

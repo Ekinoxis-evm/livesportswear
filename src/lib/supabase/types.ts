@@ -44,6 +44,27 @@ export type Database = {
         }
         Relationships: []
       }
+      commission_config: {
+        Row: {
+          currency: string
+          id: number
+          tiers: Json
+          updated_at: string
+        }
+        Insert: {
+          currency?: string
+          id?: number
+          tiers?: Json
+          updated_at?: string
+        }
+        Update: {
+          currency?: string
+          id?: number
+          tiers?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       employee_compensation: {
         Row: {
           created_at: string
@@ -179,6 +200,44 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      monthly_sales: {
+        Row: {
+          amount: number
+          created_at: string
+          employee_id: string
+          id: string
+          month: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          employee_id: string
+          id?: string
+          month: string
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          employee_id?: string
+          id?: string
+          month?: string
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_sales_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       schedules: {
         Row: {
