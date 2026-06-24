@@ -13,6 +13,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/shared/copy-button";
+import { EmployeeAccessActions } from "@/components/employee/account-actions";
+import { HourlyRateForm } from "@/components/employee/hourly-rate-form";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hhmm = (t: string) => t.slice(0, 5);
@@ -73,6 +75,15 @@ export default async function EmployeeDetailPage({
     id,
   );
   const upcoming = shifts.filter((s) => s.date >= today).slice(0, 8);
+
+  const { data: comp } = await supabase
+    .from("employee_compensation")
+    .select("hourly_rate")
+    .eq("employee_id", id)
+    .maybeSingle();
+  const hourlyRate = comp?.hourly_rate ?? null;
+  const monthLaborCost =
+    hourlyRate != null ? monthStats.totalHours * hourlyRate : null;
 
   const scheduleUrl = `${appUrl}/s/${emp.magic_token}`;
   const icsUrl = `${scheduleUrl}/calendar.ics`;
@@ -155,6 +166,29 @@ export default async function EmployeeDetailPage({
                 </li>
               ))}
             </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Portal &amp; pay</CardTitle>
+          <CardDescription>Private — visible to admins only.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm">Employee portal access</span>
+            <EmployeeAccessActions
+              id={emp.id}
+              linked={Boolean(emp.auth_user_id)}
+            />
+          </div>
+          <HourlyRateForm employeeId={emp.id} rate={hourlyRate} />
+          {monthLaborCost != null && (
+            <p className="text-muted-foreground text-sm tabular-nums">
+              Est. labor cost this month: {monthLaborCost.toFixed(2)} (
+              {monthStats.totalHours.toFixed(1)}h × {hourlyRate})
+            </p>
           )}
         </CardContent>
       </Card>

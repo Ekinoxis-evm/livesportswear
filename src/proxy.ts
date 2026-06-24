@@ -2,10 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 /**
- * Refreshes the Supabase session on every request and gates /admin behind auth.
- * Uses the request/response cookie bridge — next/headers cookies() is not
- * available here, so the SSR client is wired up inline.
- *
+ * Refreshes the Supabase session and gates routes by role. Roles come from the
+ * JWT claim app_metadata.role, so no DB call is needed here.
  * (Next 16 renamed the `middleware` convention to `proxy`.)
  */
 export async function proxy(request: NextRequest) {
@@ -35,19 +33,21 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const role = (user?.app_metadata as { role?: string } | undefined)?.role;
   const { pathname } = request.nextUrl;
-
-  if (!user && pathname.startsWith("/admin")) {
+  const redirectTo = (path: string) => {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = path;
     return NextResponse.redirect(url);
-  }
+  };
 
-  if (user && pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/admin/dashboard";
-    return NextResponse.redirect(url);
-  }
+  const isAdminPath = pathname.startsWith("/admin");
+  const isPortalPath = pathname.startsWith("/portal");
+
+  if (!user && (isAdminPath || isPortalPath)) return redirectTo("/login");
+  if (isAdminPath && role !== "admin") return redirectTo("/portal");
+  // "/" and "/login" route by role (see app/page.tsx); send signed-in users there.
+  if (user && pathname === "/login") return redirectTo("/");
 
   return response;
 }
