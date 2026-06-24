@@ -10,7 +10,7 @@
 -- fraction (0.04 = 4%). Base tier has min_sales 0.
 create table if not exists public.commission_config (
   id          int primary key default 1 check (id = 1),
-  currency    text not null default 'COP',
+  currency    text not null default 'USD',
   tiers       jsonb not null default
     '[{"min_sales":0,"rate":0.04},{"min_sales":20000000,"rate":0.045},{"min_sales":35000000,"rate":0.06}]'::jsonb,
   updated_at  timestamptz not null default now()

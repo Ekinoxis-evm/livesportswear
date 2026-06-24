@@ -33,7 +33,7 @@ export default async function CommissionPage() {
     .select("currency, tiers")
     .eq("id", 1)
     .maybeSingle();
-  const currency = config?.currency ?? "COP";
+  const currency = config?.currency ?? "USD";
   // tiers is jsonb (untyped at the DB layer).
   const tiers = (config?.tiers ?? []) as unknown as CommissionTier[];
 
@@ -77,7 +77,7 @@ export default async function CommissionPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <CommissionConfigForm currency={currency} tiers={tiers} />
+            <CommissionConfigForm tiers={tiers} />
           </CardContent>
         </Card>
 

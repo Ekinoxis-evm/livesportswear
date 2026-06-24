@@ -30,9 +30,9 @@ export function commissionFor(
   };
 }
 
-export function formatMoney(amount: number, currency = "COP"): string {
+export function formatMoney(amount: number, currency = "USD"): string {
   try {
-    return new Intl.NumberFormat("es-CO", {
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
       maximumFractionDigits: 0,

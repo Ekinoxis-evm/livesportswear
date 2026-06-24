@@ -70,7 +70,7 @@ export default async function PortalPage() {
     .select("currency, tiers")
     .eq("id", 1)
     .maybeSingle();
-  const currency = cfg?.currency ?? "COP";
+  const currency = cfg?.currency ?? "USD";
   const tiers = (cfg?.tiers ?? []) as unknown as CommissionTier[];
   const { data: myRow } = await supabase
     .from("monthly_sales")
