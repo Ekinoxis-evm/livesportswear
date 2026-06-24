@@ -30,6 +30,18 @@
       "sourceType": "github",
       "skillPath": "skills/resend-cli/SKILL.md",
       "computedHash": "d3514da9f8e21c77697afcf4a499150e327d0277fb8c7b25b74340f98a4118a9"
+    },
+    "shopify-admin": {
+      "source": "Shopify/agent-skills",
+      "sourceType": "github",
+      "skillPath": "shopify-admin/SKILL.md",
+      "computedHash": "cc0b480b86c851bf2d084ac1e5bc0f0f995d60f43e53578cbd66a9287271a9e8"
+    },
+    "shopify-dev": {
+      "source": "Shopify/agent-skills",
+      "sourceType": "github",
+      "skillPath": "shopify-dev/SKILL.md",
+      "computedHash": "40a8a97e66521ce6a180457c818f019f188ff82cbc1fe0bd9f353edc25e50ffc"
     }
   }
 }
