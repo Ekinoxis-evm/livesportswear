@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       audit_log: {
@@ -69,10 +44,41 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_compensation: {
+        Row: {
+          created_at: string
+          employee_id: string
+          hourly_rate: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          hourly_rate?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          hourly_rate?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_compensation_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           active: boolean
+          auth_user_id: string | null
           avatar_color: string | null
+          avatar_url: string | null
           created_at: string
           email: string
           hire_date: string | null
@@ -90,7 +96,9 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          auth_user_id?: string | null
           avatar_color?: string | null
+          avatar_url?: string | null
           created_at?: string
           email: string
           hire_date?: string | null
@@ -108,7 +116,9 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          auth_user_id?: string | null
           avatar_color?: string | null
+          avatar_url?: string | null
           created_at?: string
           email?: string
           hire_date?: string | null
@@ -371,7 +381,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      current_employee_id: { Args: never; Returns: string }
+      current_location_id: { Args: never; Returns: string }
+      is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       employee_role: "sales_rep" | "shift_lead" | "store_manager"
@@ -502,9 +514,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       employee_role: ["sales_rep", "shift_lead", "store_manager"],

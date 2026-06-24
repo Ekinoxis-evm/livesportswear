@@ -44,7 +44,7 @@ export default function LoginPage() {
       toast.error(res.error);
       return;
     }
-    router.replace("/admin/dashboard");
+    router.replace("/");
     router.refresh();
   }
 

@@ -17,7 +17,15 @@
 
 ## Row-Level Security
 - **Every table has RLS enabled. Default deny.**
-- Admin reads/writes via authenticated Supabase Auth session. Policies grant access to authenticated users only.
+- **Role-aware** (migration `0003`). Role comes from the JWT claim `app_metadata.role` (`admin` | `employee`), read by `public.is_admin()`. Helpers `public.current_employee_id()` / `public.current_location_id()` are `security definer` (bypass RLS to avoid policy recursion).
+  - **Admin** (`is_admin()`): full CRUD on every table.
+  - **Employee**: reads only their **own** `employees` row, their **own** `shifts` / `time_off_requests`, and their location's `schedules`; `locations` + `shift_templates` are readable by any authenticated user (not sensitive). Employees have **no write policy** on `employees` — profile/photo edits go through a service-role server action with controlled fields.
+  - `employee_compensation` (hourly rate) and `audit_log` are **admin-only** — employees get no policy, so default-deny hides them entirely.
+- The service-role client (`src/lib/supabase/service.ts`) bypasses RLS. Use it ONLY in:
+  - Public token-based routes (after token verification)
+  - Cron handlers (verified via `CRON_SECRET`)
+  - Admin/employee server actions that need controlled cross-cutting writes (e.g. employee photo, audit log, invites)
+- Never expose the service-role key to the client. It's `server-only` (enforce with `import "server-only"`).
 - The service-role client (`src/lib/supabase/service.ts`) bypasses RLS. Use it ONLY in:
   - Public token-based routes (after token verification)
   - Cron handlers (verified via `CRON_SECRET`)
@@ -41,7 +49,11 @@
 - Don't log full employee email or phone. Mask: `j***@liveactivewear.com`.
 - Audit log captures the diff but not the magic token field.
 
+## Roles & accounts
+- Admins and employees are both Supabase Auth users, distinguished by `app_metadata.role`. The admin claim is set out-of-band (service role). Employees get accounts via the admin "Invite to portal" action (`src/server/employee-accounts.ts`), which creates the auth user with `role=employee` + `employee_id` and links `employees.auth_user_id`.
+- `requireAdmin()` / `requireEmployee()` (`src/lib/auth.ts`) gate server code; `src/proxy.ts` gates `/admin` (admin only) and `/portal` (any authenticated) by the JWT claim — no DB call.
+- Changing an auth user's role requires updating `app_metadata`; the change lands on the next token refresh / re-login.
+
 ## Known v1 limitations (harden before changing these assumptions)
-- **RLS is authenticated-wide, not admin-scoped.** Every policy is `to authenticated using (true)`. Safe only because there is exactly one admin and employees never authenticate. **Creating any second Supabase Auth user grants it full read/write on all tables** — do not add one until policies are gated on an `is_admin()` check (admins table or `app_metadata.role` claim).
 - **Public endpoints are not rate-limited.** `submitTimeOff` and the `/s/[token]` routes rely on the 32-byte token's unguessability and bounded date ranges. Add a Vercel Firewall / token-bucket rule before exposing widely.
 - Audit log currently records `schedule.published` and `time_off.decided`; other admin mutations are not yet audited.

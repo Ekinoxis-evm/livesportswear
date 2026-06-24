@@ -31,6 +31,14 @@ A worker. Always belongs to one location in v1 (no multi-location reps yet).
 - `hire_date date`
 - `active boolean default true`
 - `magic_token text not null unique`                — see security.md
+- `auth_user_id uuid unique fk -> auth.users`       — set when invited to the portal (0003)
+- `avatar_url text`                                 — profile photo (Supabase Storage `avatars` bucket)
+- `created_at, updated_at`
+
+### `employee_compensation` (added 0003)
+Private, admin-only pay data — kept separate from `employees` so RLS default-deny hides it from the employee entirely (no column-level RLS).
+- `employee_id uuid pk fk -> employees`
+- `hourly_rate numeric(10,2)`
 - `created_at, updated_at`
 
 ### `shift_templates`
