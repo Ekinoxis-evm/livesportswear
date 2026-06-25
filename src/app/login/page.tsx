@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { signIn } from "@/server/auth";
@@ -92,6 +93,12 @@ export default function LoginPage() {
             <Button type="submit" disabled={pending} className="mt-2">
               {pending ? "Signing in…" : "Sign in"}
             </Button>
+            <Link
+              href="/forgot-password"
+              className="text-muted-foreground text-center text-sm hover:underline"
+            >
+              Forgot password?
+            </Link>
           </form>
         </CardContent>
       </Card>

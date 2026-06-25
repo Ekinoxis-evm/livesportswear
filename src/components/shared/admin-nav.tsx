@@ -2,39 +2,62 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  CalendarDays,
+  Users,
+  CalendarOff,
+  Percent,
+  MapPin,
+  Clock,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const LINKS = [
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/schedules", label: "Schedules" },
-  { href: "/admin/employees", label: "Employees" },
-  { href: "/admin/locations", label: "Locations" },
-  { href: "/admin/templates", label: "Templates" },
-  { href: "/admin/time-off", label: "Time off" },
-  { href: "/admin/commission", label: "Commission" },
-  { href: "/admin/settings", label: "Settings" },
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  primary: boolean; // shown in the mobile bottom bar
+};
+
+export const NAV_ITEMS: NavItem[] = [
+  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, primary: true },
+  { href: "/admin/schedules", label: "Schedules", icon: CalendarDays, primary: true },
+  { href: "/admin/employees", label: "Employees", icon: Users, primary: true },
+  { href: "/admin/time-off", label: "Time off", icon: CalendarOff, primary: true },
+  { href: "/admin/commission", label: "Commission", icon: Percent, primary: false },
+  { href: "/admin/locations", label: "Locations", icon: MapPin, primary: false },
+  { href: "/admin/templates", label: "Templates", icon: Clock, primary: false },
+  { href: "/admin/settings", label: "Settings", icon: Settings, primary: false },
 ];
+
+export function isActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function AdminNav() {
   const pathname = usePathname();
 
   return (
     <nav className="flex flex-col gap-1">
-      {LINKS.map((link) => {
-        const active =
-          pathname === link.href || pathname.startsWith(`${link.href}/`);
+      {NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
+        const active = isActive(pathname, item.href);
         return (
           <Link
-            key={link.href}
-            href={link.href}
+            key={item.href}
+            href={item.href}
             className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               active
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
-            {link.label}
+            <Icon className="size-4 shrink-0" />
+            {item.label}
           </Link>
         );
       })}
