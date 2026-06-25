@@ -39,7 +39,7 @@ export default async function EmployeesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Employees</h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -75,8 +75,8 @@ export default async function EmployeesPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Rules</TableHead>
+              <TableHead className="hidden md:table-cell">Location</TableHead>
+              <TableHead className="hidden md:table-cell">Rules</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -111,10 +111,10 @@ export default async function EmployeesPage() {
                     {ROLE_LABELS[emp.role] ?? emp.role}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-muted-foreground hidden md:table-cell">
                   {emp.location?.name ?? "—"}
                 </TableCell>
-                <TableCell className="text-muted-foreground tabular-nums text-xs">
+                <TableCell className="text-muted-foreground hidden tabular-nums text-xs md:table-cell">
                   {emp.weekly_hour_target}h · ≤{emp.max_days_per_week}d · ≥
                   {emp.weekly_days_off} off
                 </TableCell>

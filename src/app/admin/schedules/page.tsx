@@ -148,7 +148,7 @@ export default async function SchedulesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Schedules</h1>
         {schedule && (
           <div className="flex items-center gap-3">

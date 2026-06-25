@@ -62,7 +62,7 @@ export default async function TimeOffPage() {
             <TableRow>
               <TableHead>Employee</TableHead>
               <TableHead>Dates</TableHead>
-              <TableHead>Reason</TableHead>
+              <TableHead className="hidden md:table-cell">Reason</TableHead>
               <TableHead>Submitted</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -79,7 +79,7 @@ export default async function TimeOffPage() {
                   <TableCell className="tabular-nums">
                     {dateRange(r.start_date, r.end_date)}
                   </TableCell>
-                  <TableCell className="text-muted-foreground max-w-48 truncate">
+                  <TableCell className="text-muted-foreground hidden max-w-48 truncate md:table-cell">
                     {r.reason ?? "—"}
                   </TableCell>
                   <TableCell>

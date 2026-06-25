@@ -118,7 +118,7 @@ export default async function CommissionPage() {
                   <TableHead>Sales</TableHead>
                   <TableHead>Rate</TableHead>
                   <TableHead>Commission</TableHead>
-                  <TableHead>To next tier</TableHead>
+                  <TableHead className="hidden md:table-cell">To next tier</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -137,7 +137,7 @@ export default async function CommissionPage() {
                     <TableCell className="tabular-nums">
                       {formatMoney(r.earned, currency)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground tabular-nums">
+                    <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
                       {r.nextTier
                         ? `${formatMoney(r.nextTier.remaining, currency)} → ${(r.nextTier.rate * 100).toFixed(1)}%`
                         : "Top tier"}
