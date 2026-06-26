@@ -5,6 +5,9 @@ export const config: VercelConfig = {
   buildCommand: "pnpm build",
   installCommand: "pnpm install --frozen-lockfile",
 
+  // Daily Shopify sales sync (no-ops until Shopify env keys are set).
+  crons: [{ path: "/api/cron/shopify-sync", schedule: "0 6 * * *" }],
+
   headers: [
     routes.header("/(.*)", [
       { key: "X-Content-Type-Options", value: "nosniff" },
