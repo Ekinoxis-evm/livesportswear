@@ -111,6 +111,7 @@ export type Database = {
           phone: string | null
           preferred_days_off: string[]
           role: Database["public"]["Enums"]["employee_role"]
+          shopify_staff_id: string | null
           updated_at: string
           weekly_days_off: number
           weekly_hour_target: number
@@ -131,6 +132,7 @@ export type Database = {
           phone?: string | null
           preferred_days_off?: string[]
           role?: Database["public"]["Enums"]["employee_role"]
+          shopify_staff_id?: string | null
           updated_at?: string
           weekly_days_off?: number
           weekly_hour_target?: number
@@ -151,6 +153,7 @@ export type Database = {
           phone?: string | null
           preferred_days_off?: string[]
           role?: Database["public"]["Enums"]["employee_role"]
+          shopify_staff_id?: string | null
           updated_at?: string
           weekly_days_off?: number
           weekly_hour_target?: number

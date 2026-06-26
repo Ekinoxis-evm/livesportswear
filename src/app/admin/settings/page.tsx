@@ -8,8 +8,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { isShopifyConfigured } from "@/lib/shopify-config";
 import { CurrencyForm } from "@/components/settings/currency-form";
 import { RatesTable } from "@/components/settings/rates-table";
+import { ShopifyPanel } from "@/components/settings/shopify-panel";
 
 export default async function SettingsPage() {
   const supabase = await createServerClient();
@@ -23,7 +25,7 @@ export default async function SettingsPage() {
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, name")
+    .select("id, name, shopify_staff_id")
     .eq("active", true)
     .order("name");
   const { data: comp } = await supabase
@@ -94,6 +96,22 @@ export default async function SettingsPage() {
             Current sprint: {sprint.start} – {sprint.end}
           </span>
           <span>Next payday: {nextPayday}</span>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Shopify</CardTitle>
+          <CardDescription>
+            Sync monthly sales by POS staff member (feeds commission &amp;
+            ranking).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ShopifyPanel
+            configured={isShopifyConfigured()}
+            employees={employees ?? []}
+          />
         </CardContent>
       </Card>
     </div>
