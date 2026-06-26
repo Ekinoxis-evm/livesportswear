@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { setHourlyRate } from "@/server/compensation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 
 export function HourlyRateForm({
   employeeId,
   rate,
+  currency = "USD",
 }: {
   employeeId: string;
   rate: number | null;
+  currency?: string;
 }) {
   const router = useRouter();
   const [value, setValue] = useState(rate != null ? String(rate) : "");
@@ -39,13 +41,11 @@ export function HourlyRateForm({
     <form onSubmit={onSubmit} className="flex items-end gap-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor="rate">Hourly rate</Label>
-        <Input
+        <MoneyInput
           id="rate"
-          type="number"
-          step="0.01"
-          min="0"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onValueChange={setValue}
+          currency={currency}
           className="w-36"
           placeholder="0.00"
         />

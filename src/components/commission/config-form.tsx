@@ -6,14 +6,17 @@ import { toast } from "sonner";
 import { setCommissionConfig } from "@/server/commission";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 
 type Row = { min_sales: string; ratePct: string };
 
 export function CommissionConfigForm({
   tiers,
+  currency,
 }: {
   tiers: { min_sales: number; rate: number }[];
+  currency: string;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>(
@@ -51,11 +54,12 @@ export function CommissionConfigForm({
         <Label>Tiers — sales at or above unlock the rate</Label>
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-2">
-            <Input
-              type="number"
-              placeholder="Min sales"
+            <MoneyInput
+              placeholder="Min sales (goal)"
               value={r.min_sales}
-              onChange={(e) => update(i, "min_sales", e.target.value)}
+              onValueChange={(v) => update(i, "min_sales", v)}
+              currency={currency}
+              className="flex-1"
             />
             <Input
               type="number"

@@ -1,5 +1,5 @@
 import { createServerClient } from "@/lib/supabase/server";
-import { SPRINT_ANCHOR_MONDAY, BIWEEKLY_HOUR_CAP } from "@/lib/payroll-config";
+import { getPayPeriod } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
 import {
   Card,
@@ -11,6 +11,7 @@ import {
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { CurrencyForm } from "@/components/settings/currency-form";
 import { RatesTable } from "@/components/settings/rates-table";
+import { PayPeriodForm } from "@/components/settings/pay-period-form";
 import { ShopifyPanel } from "@/components/settings/shopify-panel";
 
 export default async function SettingsPage() {
@@ -41,8 +42,9 @@ export default async function SettingsPage() {
   }));
 
   const today = new Date().toISOString().slice(0, 10);
-  const sprint = sprintRange(SPRINT_ANCHOR_MONDAY, today);
-  const nextPayday = payday(SPRINT_ANCHOR_MONDAY, today);
+  const { anchor, cap } = await getPayPeriod();
+  const sprint = sprintRange(anchor, today);
+  const nextPayday = payday(anchor, today);
 
   return (
     <div className="flex flex-col gap-6">
@@ -76,7 +78,7 @@ export default async function SettingsPage() {
           {rates.length === 0 ? (
             <p className="text-muted-foreground text-sm">No active employees.</p>
           ) : (
-            <RatesTable employees={rates} />
+            <RatesTable employees={rates} currency={currency} />
           )}
         </CardContent>
       </Card>
@@ -85,17 +87,18 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Pay period</CardTitle>
           <CardDescription>
-            Configured via environment (`SPRINT_ANCHOR_MONDAY`,
-            `BIWEEKLY_HOUR_CAP`).
+            Sprints are two weeks; payday is the Friday after a sprint ends. The
+            anchor must be a Monday.
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-muted-foreground flex flex-col gap-1 text-sm tabular-nums">
-          <span>Sprint anchor: {SPRINT_ANCHOR_MONDAY}</span>
-          <span>Biweekly hour cap: {BIWEEKLY_HOUR_CAP}h</span>
-          <span>
-            Current sprint: {sprint.start} – {sprint.end}
-          </span>
-          <span>Next payday: {nextPayday}</span>
+        <CardContent className="flex flex-col gap-4">
+          <PayPeriodForm anchor={anchor} cap={cap} />
+          <div className="text-muted-foreground flex flex-col gap-1 border-t pt-3 text-sm tabular-nums">
+            <span>
+              Current sprint: {sprint.start} – {sprint.end}
+            </span>
+            <span>Next payday: {nextPayday}</span>
+          </div>
         </CardContent>
       </Card>
 

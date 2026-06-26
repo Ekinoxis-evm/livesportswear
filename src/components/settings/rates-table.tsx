@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { setHourlyRate } from "@/server/compensation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 
 export function RatesTable({
   employees,
+  currency,
 }: {
   employees: { id: string; name: string; rate: number | null }[];
+  currency: string;
 }) {
   const router = useRouter();
   const [vals, setVals] = useState<Record<string, string>>(
@@ -41,13 +43,11 @@ export function RatesTable({
         <li key={e.id} className="flex items-center justify-between gap-2">
           <span className="text-sm">{e.name}</span>
           <span className="flex items-center gap-2">
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
+            <MoneyInput
               value={vals[e.id] ?? ""}
-              onChange={(ev) => setVals({ ...vals, [e.id]: ev.target.value })}
-              className="w-32 tabular-nums"
+              onValueChange={(v) => setVals({ ...vals, [e.id]: v })}
+              currency={currency}
+              className="w-32"
               placeholder="0.00"
             />
             <Button

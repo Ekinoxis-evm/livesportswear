@@ -8,7 +8,7 @@ import {
 import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
 import { validateSchedule, biweeklyHourWarnings } from "@/lib/scheduling/rules";
-import { SPRINT_ANCHOR_MONDAY, BIWEEKLY_HOUR_CAP } from "@/lib/payroll-config";
+import { getPayPeriod } from "@/lib/payroll-config";
 import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,6 +24,7 @@ export default async function SchedulesPage({
 }) {
   const sp = await searchParams;
   const supabase = await createServerClient();
+  const { anchor: sprintAnchor, cap: biweeklyCap } = await getPayPeriod();
 
   const { data: locationRows } = await supabase
     .from("locations")
@@ -127,7 +128,7 @@ export default async function SchedulesPage({
     });
 
     // 80h-per-sprint cap spans both weeks of the pay sprint.
-    const sprint = sprintRange(SPRINT_ANCHOR_MONDAY, weekStart);
+    const sprint = sprintRange(sprintAnchor, weekStart);
     const sprintWeeks = [sprint.start, addDays(sprint.start, 7)];
     const { data: sprintShifts } = await supabase
       .from("shifts")
@@ -141,7 +142,7 @@ export default async function SchedulesPage({
       biweeklyHourWarnings({
         employees: empList,
         sprintShifts: sprintShifts ?? [],
-        cap: BIWEEKLY_HOUR_CAP,
+        cap: biweeklyCap,
       }),
     );
   }

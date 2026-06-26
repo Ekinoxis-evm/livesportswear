@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
-import { SPRINT_ANCHOR_MONDAY } from "@/lib/payroll-config";
+import { getPayPeriod } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
 import { weekStart, weekDays } from "@/lib/scheduling/week";
 import {
@@ -21,8 +21,9 @@ import { HoursChart } from "@/components/dashboard/hours-chart";
 export default async function DashboardPage() {
   const supabase = await createServerClient();
   const today = new Date().toISOString().slice(0, 10);
-  const sprint = sprintRange(SPRINT_ANCHOR_MONDAY, today);
-  const nextPayday = payday(SPRINT_ANCHOR_MONDAY, today);
+  const { anchor } = await getPayPeriod();
+  const sprint = sprintRange(anchor, today);
+  const nextPayday = payday(anchor, today);
   const days = weekDays(weekStart(today));
 
   const [{ count: pending }, locationsRes, templatesRes, weekShiftsRes] =
