@@ -4,9 +4,9 @@ export type ActionResult<T = undefined> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
 
-/** Treat blank form strings as SQL NULL. */
+/** Treat blank strings and missing values (undefined/null) as SQL NULL. */
 export const emptyToNull = (v: unknown) =>
-  typeof v === "string" && v.trim() === "" ? null : v;
+  v == null || (typeof v === "string" && v.trim() === "") ? null : v;
 
 export function firstError(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Invalid input.";

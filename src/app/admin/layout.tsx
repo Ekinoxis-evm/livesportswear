@@ -29,7 +29,7 @@ export default async function AdminLayout({
         </div>
       </aside>
 
-      <main className="flex-1">
+      <main className="min-w-0 flex-1">
         {/* Mobile top bar */}
         <header className="bg-background/80 sticky top-0 z-30 flex h-12 items-center border-b px-4 backdrop-blur md:hidden">
           <span className="text-base font-bold tracking-tight">LIVE!</span>

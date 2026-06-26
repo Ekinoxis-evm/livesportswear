@@ -12,6 +12,7 @@ import { DIAL_CODES, DIAL_CODE_ITEMS, joinPhone } from "@/lib/dial-codes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -306,13 +307,13 @@ export function EmployeeWizard({
             error={errors.hourly_rate?.message}
             htmlFor="hourly_rate"
           >
-            <Input
+            <MoneyInput
               id="hourly_rate"
-              type="number"
-              step="0.01"
-              min="0"
               placeholder="0.00"
-              {...register("hourly_rate")}
+              value={watch("hourly_rate") ?? ""}
+              onValueChange={(v) =>
+                setValue("hourly_rate", v, { shouldValidate: true })
+              }
               className="w-40"
             />
           </Field>

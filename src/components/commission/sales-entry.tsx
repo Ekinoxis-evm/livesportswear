@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { setMonthlySales } from "@/server/commission";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 
 export function SalesEntry({
   month,
   employees,
+  currency,
 }: {
   month: string;
   employees: { id: string; name: string; amount: number }[];
+  currency: string;
 }) {
   const router = useRouter();
   const [amounts, setAmounts] = useState<Record<string, string>>(
@@ -42,13 +44,11 @@ export function SalesEntry({
         <li key={e.id} className="flex items-center justify-between gap-2">
           <span className="text-sm">{e.name}</span>
           <span className="flex items-center gap-2">
-            <Input
-              type="number"
+            <MoneyInput
               value={amounts[e.id] ?? ""}
-              onChange={(ev) =>
-                setAmounts({ ...amounts, [e.id]: ev.target.value })
-              }
-              className="w-40 tabular-nums"
+              onValueChange={(v) => setAmounts({ ...amounts, [e.id]: v })}
+              currency={currency}
+              className="w-40"
             />
             <Button
               size="sm"

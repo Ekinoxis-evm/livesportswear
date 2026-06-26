@@ -46,20 +46,26 @@ export type Database = {
       }
       commission_config: {
         Row: {
+          biweekly_hour_cap: number
           currency: string
           id: number
+          sprint_anchor_monday: string
           tiers: Json
           updated_at: string
         }
         Insert: {
+          biweekly_hour_cap?: number
           currency?: string
           id?: number
+          sprint_anchor_monday?: string
           tiers?: Json
           updated_at?: string
         }
         Update: {
+          biweekly_hour_cap?: number
           currency?: string
           id?: number
+          sprint_anchor_monday?: string
           tiers?: Json
           updated_at?: string
         }

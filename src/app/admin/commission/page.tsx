@@ -77,7 +77,7 @@ export default async function CommissionPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <CommissionConfigForm tiers={tiers} />
+            <CommissionConfigForm tiers={tiers} currency={currency} />
           </CardContent>
         </Card>
 
@@ -92,7 +92,7 @@ export default async function CommissionPage() {
             {emps.length === 0 ? (
               <p className="text-muted-foreground text-sm">No active employees.</p>
             ) : (
-              <SalesEntry month={month} employees={emps} />
+              <SalesEntry month={month} employees={emps} currency={currency} />
             )}
           </CardContent>
         </Card>

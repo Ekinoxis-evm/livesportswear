@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmployeeAccessActions } from "@/components/employee/account-actions";
 import { HourlyRateForm } from "@/components/employee/hourly-rate-form";
+import { formatMoney } from "@/lib/commission";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hhmm = (t: string) => t.slice(0, 5);
@@ -84,6 +85,13 @@ export default async function EmployeeDetailPage({
   const hourlyRate = comp?.hourly_rate ?? null;
   const monthLaborCost =
     hourlyRate != null ? monthStats.totalHours * hourlyRate : null;
+
+  const { data: cfg } = await supabase
+    .from("commission_config")
+    .select("currency")
+    .eq("id", 1)
+    .maybeSingle();
+  const currency = cfg?.currency ?? "USD";
 
   const scheduleUrl = `${appUrl}/s/${emp.magic_token}`;
   const icsUrl = `${scheduleUrl}/calendar.ics`;
@@ -190,11 +198,16 @@ export default async function EmployeeDetailPage({
               linked={Boolean(emp.auth_user_id)}
             />
           </div>
-          <HourlyRateForm employeeId={emp.id} rate={hourlyRate} />
+          <HourlyRateForm
+            employeeId={emp.id}
+            rate={hourlyRate}
+            currency={currency}
+          />
           {monthLaborCost != null && (
             <p className="text-muted-foreground text-sm tabular-nums">
-              Est. labor cost this month: {monthLaborCost.toFixed(2)} (
-              {monthStats.totalHours.toFixed(1)}h × {hourlyRate})
+              Est. labor cost this month: {formatMoney(monthLaborCost, currency)}{" "}
+              ({monthStats.totalHours.toFixed(1)}h ×{" "}
+              {formatMoney(hourlyRate ?? 0, currency)})
             </p>
           )}
         </CardContent>
