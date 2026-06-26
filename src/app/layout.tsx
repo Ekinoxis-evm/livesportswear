@@ -1,23 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Fraunces } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Editorial serif for display headings (free stand-in for Perfectly Nineties).
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
+  weight: ["400", "600"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
-  title: "Live · Staff Scheduling",
+  title: "LIVE! · Staff Scheduling",
   description:
-    "Internal scheduling tool for Live Active Wear retail staff across stores.",
+    "Internal scheduling tool for LIVE! Activewear retail staff across stores.",
 };
 
 export default function RootLayout({
@@ -28,7 +31,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${inter.variable} ${fraunces.variable} dark h-full antialiased`}
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">
         <TooltipProvider delay={150}>{children}</TooltipProvider>

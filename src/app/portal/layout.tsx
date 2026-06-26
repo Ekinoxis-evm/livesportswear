@@ -12,9 +12,7 @@ export default async function PortalLayout({
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between">
-        <span className="text-primary text-sm font-semibold tracking-widest">
-          LIVE
-        </span>
+        <span className="text-base font-bold tracking-tight">LIVE!</span>
         <div className="flex items-center gap-3">
           <span className="text-muted-foreground text-sm">{employee.name}</span>
           <form action={signOut}>

@@ -59,9 +59,7 @@ export default async function PublicSchedulePage({
   return (
     <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-1">
-        <span className="text-primary text-sm font-semibold tracking-widest">
-          LIVE
-        </span>
+        <span className="text-base font-bold tracking-tight">LIVE!</span>
         <h1 className="text-2xl font-semibold tracking-tight">{emp.name}</h1>
         <p className="text-muted-foreground text-sm">
           {locationName} · upcoming shifts

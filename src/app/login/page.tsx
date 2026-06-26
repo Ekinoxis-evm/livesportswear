@@ -53,7 +53,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">Live · Admin</CardTitle>
+          <CardTitle className="text-xl font-bold tracking-tight">LIVE!</CardTitle>
           <CardDescription>Sign in to manage schedules.</CardDescription>
         </CardHeader>
         <CardContent>
