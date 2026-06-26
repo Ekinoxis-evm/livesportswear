@@ -22,7 +22,7 @@ export function AdminMobileNav({ email }: { email: string }) {
   const primary = NAV_ITEMS.filter((i) => i.primary);
 
   return (
-    <nav className="bg-card fixed inset-x-0 bottom-0 z-40 flex border-t md:hidden">
+    <nav className="bg-background fixed inset-x-0 bottom-0 z-40 flex border-t md:hidden">
       {primary.map((item) => {
         const Icon = item.icon;
         const active = isActive(pathname, item.href);
