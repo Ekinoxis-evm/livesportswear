@@ -15,9 +15,7 @@ export default async function AdminLayout({
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <aside className="bg-background hidden w-60 shrink-0 flex-col border-r p-4 md:flex">
-        <div className="px-3 pb-6 text-lg font-semibold tracking-tight">
-          Live
-        </div>
+        <div className="px-3 pb-6 text-xl font-bold tracking-tight">LIVE!</div>
         <AdminNav />
         <div className="mt-auto flex flex-col gap-2 px-3 pt-6">
           <span className="text-muted-foreground truncate text-xs">
@@ -34,7 +32,7 @@ export default async function AdminLayout({
       <main className="flex-1">
         {/* Mobile top bar */}
         <header className="bg-background/80 sticky top-0 z-30 flex h-12 items-center border-b px-4 backdrop-blur md:hidden">
-          <span className="text-base font-semibold tracking-tight">Live</span>
+          <span className="text-base font-bold tracking-tight">LIVE!</span>
         </header>
         <div className="mx-auto max-w-7xl p-4 pb-24 md:p-6 md:pb-6">
           {children}
