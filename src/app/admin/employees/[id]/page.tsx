@@ -177,7 +177,14 @@ export default async function EmployeeDetailPage({
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm">Employee portal access</span>
+            <div className="flex flex-col">
+              <span className="text-sm">Employee portal access</span>
+              <span className="text-muted-foreground text-xs">
+                {emp.auth_user_id
+                  ? "Has a login to see their schedule & stats."
+                  : "Invite to give them an email + password login."}
+              </span>
+            </div>
             <EmployeeAccessActions
               id={emp.id}
               linked={Boolean(emp.auth_user_id)}
@@ -195,23 +202,29 @@ export default async function EmployeeDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Personal links</CardTitle>
+          <CardTitle className="text-base">Share links</CardTitle>
           <CardDescription>
-            Share the schedule page; the calendar URL is for subscribing.
+            For sharing without a login — most employees just use the portal.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground truncate text-sm">
-              {appUrl}/s/{"•".repeat(8)}
-            </span>
-            <CopyButton value={scheduleUrl} label="Schedule link" />
+            <div className="flex flex-col">
+              <span className="text-sm">Public schedule page</span>
+              <span className="text-muted-foreground text-xs">
+                A no-login web page of their shifts.
+              </span>
+            </div>
+            <CopyButton value={scheduleUrl} label="Copy" />
           </div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground truncate text-sm">
-              {appUrl}/s/{"•".repeat(8)}/calendar.ics
-            </span>
-            <CopyButton value={icsUrl} label="Calendar link" />
+            <div className="flex flex-col">
+              <span className="text-sm">Calendar feed (.ics)</span>
+              <span className="text-muted-foreground text-xs">
+                Subscribe in Apple / Google / Outlook calendar.
+              </span>
+            </div>
+            <CopyButton value={icsUrl} label="Copy" />
           </div>
         </CardContent>
       </Card>

@@ -14,7 +14,7 @@ export default async function AdminLayout({
   return (
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
-      <aside className="bg-card hidden w-60 shrink-0 flex-col border-r p-4 md:flex">
+      <aside className="bg-background hidden w-60 shrink-0 flex-col border-r p-4 md:flex">
         <div className="px-3 pb-6 text-lg font-semibold tracking-tight">
           Live
         </div>
