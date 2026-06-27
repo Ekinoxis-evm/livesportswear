@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_insights: {
+        Row: {
+          campaign_id: string
+          campaign_name: string | null
+          clicks: number
+          currency: string | null
+          date: string
+          id: string
+          impressions: number
+          purchases: number
+          revenue: number
+          spend: number
+          updated_at: string
+        }
+        Insert: {
+          campaign_id: string
+          campaign_name?: string | null
+          clicks?: number
+          currency?: string | null
+          date: string
+          id?: string
+          impressions?: number
+          purchases?: number
+          revenue?: number
+          spend?: number
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          campaign_name?: string | null
+          clicks?: number
+          currency?: string | null
+          date?: string
+          id?: string
+          impressions?: number
+          purchases?: number
+          revenue?: number
+          spend?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
