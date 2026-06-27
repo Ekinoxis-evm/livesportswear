@@ -9,10 +9,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { isShopifyConfigured } from "@/lib/shopify-config";
+import { isMetaConfigured } from "@/lib/meta-config";
 import { CurrencyForm } from "@/components/settings/currency-form";
 import { RatesTable } from "@/components/settings/rates-table";
 import { PayPeriodForm } from "@/components/settings/pay-period-form";
 import { ShopifyPanel } from "@/components/settings/shopify-panel";
+import { MetaPanel } from "@/components/settings/meta-panel";
 
 export default async function SettingsPage() {
   const supabase = await createServerClient();
@@ -115,6 +117,18 @@ export default async function SettingsPage() {
             configured={isShopifyConfigured()}
             employees={employees ?? []}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Meta Ads</CardTitle>
+          <CardDescription>
+            Sync ad spend &amp; ROAS (shown on the Marketing page).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MetaPanel configured={isMetaConfigured()} />
         </CardContent>
       </Card>
     </div>
