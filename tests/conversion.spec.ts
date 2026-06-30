@@ -1,0 +1,79 @@
+import { describe, it, expect } from "vitest";
+import {
+  conversionRate,
+  totals,
+  byPerson,
+  formatPct,
+  type ConversionInput,
+} from "@/lib/conversion";
+import { businessDate } from "@/lib/business-date";
+
+const ev = (
+  employee_id: string,
+  sold: boolean,
+  got_contact = false,
+): ConversionInput => ({ employee_id, sold, got_contact });
+
+describe("conversionRate", () => {
+  it("is zero when nobody was attended", () => {
+    expect(conversionRate(0, 0)).toBe(0);
+  });
+
+  it("is sold over attended otherwise", () => {
+    expect(conversionRate(3, 12)).toBe(0.25);
+  });
+});
+
+describe("totals", () => {
+  it("counts attended, sold, contacts and derives rates", () => {
+    const t = totals([ev("a", true, true), ev("a", false), ev("a", true, false)]);
+    expect(t).toEqual({
+      attended: 3,
+      sold: 2,
+      contacts: 1,
+      conversion: 2 / 3,
+      contactRate: 0.5,
+    });
+  });
+
+  it("returns zeroed rates for an empty day", () => {
+    expect(totals([])).toEqual({
+      attended: 0,
+      sold: 0,
+      contacts: 0,
+      conversion: 0,
+      contactRate: 0,
+    });
+  });
+});
+
+describe("byPerson", () => {
+  it("groups per employee and orders by sold then attended", () => {
+    const rows = byPerson([
+      ev("a", false),
+      ev("b", true),
+      ev("b", true, true),
+      ev("a", false),
+      ev("a", false),
+    ]);
+    expect(rows.map((r) => r.employeeId)).toEqual(["b", "a"]);
+    expect(rows[0]).toMatchObject({ employeeId: "b", attended: 2, sold: 2 });
+    expect(rows[1]).toMatchObject({ employeeId: "a", attended: 3, sold: 0 });
+  });
+});
+
+describe("formatPct", () => {
+  it("rounds to a whole percent", () => {
+    expect(formatPct(2 / 3)).toBe("67%");
+    expect(formatPct(0)).toBe("0%");
+  });
+});
+
+describe("businessDate", () => {
+  it("uses the location-local calendar day, not UTC", () => {
+    // 02:30 UTC on the 2nd is still the 1st in New York (UTC-5/-4).
+    const m = new Date("2026-06-02T02:30:00Z");
+    expect(businessDate("America/New_York", m)).toBe("2026-06-01");
+    expect(businessDate("UTC", m)).toBe("2026-06-02");
+  });
+});

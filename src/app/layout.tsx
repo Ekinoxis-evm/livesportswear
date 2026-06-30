@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Fraunces } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -21,6 +21,15 @@ export const metadata: Metadata = {
   title: "LIVE! · Staff Scheduling",
   description:
     "Internal scheduling tool for LIVE! Activewear retail staff across stores.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "LIVE!", statusBarStyle: "black-translucent" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
