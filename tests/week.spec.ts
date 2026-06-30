@@ -7,6 +7,7 @@ import {
   weekStart,
   weekDays,
   currentWeekStart,
+  nextWeekStart,
   normalizeWeekStart,
   formatWeekRange,
 } from "@/lib/scheduling/week";
@@ -89,6 +90,12 @@ describe("currentWeekStart", () => {
     expect(currentWeekStart(new Date("2025-06-01T23:00:00Z"))).toBe(
       "2025-05-26",
     );
+  });
+});
+
+describe("nextWeekStart", () => {
+  it("is the Monday after the current week", () => {
+    expect(nextWeekStart(new Date("2025-05-29T09:00:00Z"))).toBe("2025-06-02");
   });
 });
 

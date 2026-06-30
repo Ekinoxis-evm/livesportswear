@@ -20,6 +20,10 @@ export type Schedule = Tables<"schedules">;
 export type Shift = Tables<"shifts">;
 export type TimeOffRequest = Tables<"time_off_requests">;
 export type AuditLog = Tables<"audit_log">;
+export type ClientEvent = Tables<"client_events">;
+export type StoreDayClose = Tables<"store_day_closes">;
+export type StoreGoal = Tables<"store_goals">;
+export type AdminLocation = Tables<"admin_locations">;
 
 export type EmployeeRole = Enums<"employee_role">;
 export type ScheduleStatus = Enums<"schedule_status">;

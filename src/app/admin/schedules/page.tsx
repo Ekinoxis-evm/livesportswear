@@ -1,4 +1,5 @@
 import { createServerClient } from "@/lib/supabase/server";
+import { accessibleLocationIds } from "@/lib/auth";
 import {
   normalizeWeekStart,
   currentWeekStart,
@@ -13,7 +14,7 @@ import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScheduleControls } from "@/components/schedule/schedule-controls";
-import { ScheduleGrid } from "@/components/schedule/schedule-grid";
+import { ScheduleWorkspace } from "@/components/schedule/schedule-workspace";
 import { ViolationsBanner } from "@/components/schedule/violations-banner";
 import { PublishButton } from "@/components/schedule/publish-button";
 
@@ -30,8 +31,9 @@ export default async function SchedulesPage({
     .from("locations")
     .select("id, name, active")
     .order("name");
+  const access = await accessibleLocationIds();
   const activeLocations = (locationRows ?? [])
-    .filter((l) => l.active)
+    .filter((l) => l.active && (access === "all" || access.includes(l.id)))
     .map((l) => ({ id: l.id, name: l.name }));
 
   if (activeLocations.length === 0) {
@@ -109,6 +111,42 @@ export default async function SchedulesPage({
           .eq("status", "approved")
       : { data: [] };
 
+  // Pending day-off requests overlapping the displayed week — what the admin
+  // needs to see when building this week (and especially next week).
+  const weekEnd = days[days.length - 1];
+  const nameById = new Map(empList.map((e) => [e.id, e.name]));
+  const { data: pendingOff } =
+    empIds.length > 0
+      ? await supabase
+          .from("time_off_requests")
+          .select("id, employee_id, start_date, end_date, reason")
+          .in("employee_id", empIds)
+          .eq("status", "pending")
+          .lte("start_date", weekEnd)
+          .gte("end_date", weekStart)
+          .order("start_date")
+      : { data: [] };
+  const pending = pendingOff ?? [];
+
+  // Per-day off markers for the grid/board (approved = solid, pending = requested).
+  const daysOff: {
+    employee_id: string;
+    date: string;
+    status: "approved" | "pending";
+  }[] = [];
+  const addOff = (
+    empId: string,
+    start: string,
+    end: string,
+    status: "approved" | "pending",
+  ) => {
+    for (const d of days) {
+      if (d >= start && d <= end) daysOff.push({ employee_id: empId, date: d, status });
+    }
+  };
+  for (const r of timeOff ?? []) addOff(r.employee_id, r.start_date, r.end_date, "approved");
+  for (const r of pending) addOff(r.employee_id, r.start_date, r.end_date, "pending");
+
   // Weekly hours per employee (for the grid).
   const hoursByEmployee: Record<string, number> = {};
   for (const s of shiftRows) {
@@ -175,9 +213,34 @@ export default async function SchedulesPage({
         weekStart={weekStart}
       />
 
+      {pending.length > 0 && (
+        <Alert>
+          <AlertTitle>
+            {pending.length} day-off request{pending.length > 1 ? "s" : ""} for this
+            week
+          </AlertTitle>
+          <AlertDescription>
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {pending.map((r) => (
+                <li key={r.id} className="text-sm tabular-nums">
+                  <span className="font-medium">
+                    {nameById.get(r.employee_id) ?? "—"}
+                  </span>{" "}
+                  · {r.start_date === r.end_date ? r.start_date : `${r.start_date} → ${r.end_date}`}
+                  {r.reason ? ` · ${r.reason}` : ""}
+                </li>
+              ))}
+            </ul>
+            <a href="/admin/time-off" className="text-primary mt-2 inline-block text-sm underline">
+              Review in Time off →
+            </a>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {schedule && <ViolationsBanner violations={violations} />}
 
-      <ScheduleGrid
+      <ScheduleWorkspace
         scheduleId={schedule?.id ?? null}
         locationId={locationId}
         weekStart={weekStart}
@@ -186,6 +249,7 @@ export default async function SchedulesPage({
         templates={templates ?? []}
         shifts={shiftRows}
         hoursByEmployee={hoursByEmployee}
+        daysOff={daysOff}
       />
     </div>
   );

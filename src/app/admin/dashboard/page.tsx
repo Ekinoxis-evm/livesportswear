@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HoursChart } from "@/components/dashboard/hours-chart";
+import { formatMoney } from "@/lib/commission";
+import { formatPct } from "@/lib/conversion";
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -79,6 +81,39 @@ export default async function DashboardPage() {
   });
   const openTotal = coverage.reduce((a, c) => a + c.open, 0);
 
+  // This-month business metrics (all degrade gracefully before keys connect).
+  const month = today.slice(0, 7);
+  const year = Number(today.slice(0, 4));
+  const monthNum = Number(today.slice(5, 7));
+  const [salesRes, goalsRes, eventsRes, adsRes, cfgRes] = await Promise.all([
+    supabase.from("monthly_sales").select("amount").eq("month", month),
+    supabase
+      .from("store_goals")
+      .select("goal_amount")
+      .eq("year", year)
+      .eq("month", monthNum),
+    supabase
+      .from("client_events")
+      .select("sold")
+      .gte("business_date", `${month}-01`)
+      .lte("business_date", `${month}-31`),
+    supabase
+      .from("ad_insights")
+      .select("spend, revenue")
+      .gte("date", `${month}-01`)
+      .lte("date", `${month}-31`),
+    supabase.from("commission_config").select("currency").eq("id", 1).maybeSingle(),
+  ]);
+  const currency = cfgRes.data?.currency ?? "USD";
+  const salesMTD = (salesRes.data ?? []).reduce((a, r) => a + Number(r.amount), 0);
+  const goalMTD = (goalsRes.data ?? []).reduce((a, r) => a + Number(r.goal_amount), 0);
+  const goalPct = goalMTD > 0 ? salesMTD / goalMTD : null;
+  const evs = eventsRes.data ?? [];
+  const convMTD = evs.length === 0 ? null : evs.filter((e) => e.sold).length / evs.length;
+  const spend = (adsRes.data ?? []).reduce((a, r) => a + Number(r.spend), 0);
+  const revenue = (adsRes.data ?? []).reduce((a, r) => a + Number(r.revenue), 0);
+  const roas = spend > 0 ? revenue / spend : null;
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
@@ -115,6 +150,56 @@ export default async function DashboardPage() {
               <CardTitle className="text-base tabular-nums">
                 {openTotal}
               </CardTitle>
+            </CardHeader>
+          </Card>
+        </Link>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardDescription>Sales vs goal · {month}</CardDescription>
+            <CardTitle className="text-base tabular-nums">
+              {formatMoney(salesMTD, currency)}
+              {goalMTD > 0 && (
+                <span className="text-muted-foreground text-sm font-normal">
+                  {" "}
+                  / {formatMoney(goalMTD, currency)}
+                </span>
+              )}
+            </CardTitle>
+            <CardDescription>
+              {goalPct != null
+                ? `${Math.round(goalPct * 100)}% of goal`
+                : "Set monthly goals in Settings"}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Conversion · {month}</CardDescription>
+            <CardTitle className="text-base tabular-nums">
+              {convMTD != null ? formatPct(convMTD) : "—"}
+            </CardTitle>
+            <CardDescription>
+              {convMTD != null
+                ? `${evs.length} clients attended`
+                : "No clients logged yet"}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+        <Link href="/admin/marketing" className="block">
+          <Card className="hover:border-primary h-full transition-colors">
+            <CardHeader>
+              <CardDescription>Ad ROAS · {month}</CardDescription>
+              <CardTitle className="text-base tabular-nums">
+                {roas != null ? `${roas.toFixed(2)}×` : "—"}
+              </CardTitle>
+              <CardDescription>
+                {roas != null
+                  ? `${formatMoney(spend, currency)} spend`
+                  : "Connect Meta Ads"}
+              </CardDescription>
             </CardHeader>
           </Card>
         </Link>

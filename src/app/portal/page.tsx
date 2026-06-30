@@ -1,7 +1,13 @@
 import { requireEmployee } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { weekStart, weekDays, addDays, isoWeekday } from "@/lib/scheduling/week";
+import {
+  weekStart,
+  weekDays,
+  addDays,
+  isoWeekday,
+  formatWeekRange,
+} from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
 import {
@@ -10,6 +16,8 @@ import {
   type CommissionTier,
 } from "@/lib/commission";
 import { googleCalendarUrl, webcalUrl } from "@/lib/calendar-links";
+import { ScheduleView, type DayCell } from "@/components/portal/schedule-view";
+import { RequestDayOff } from "@/components/portal/request-day-off";
 import {
   Card,
   CardContent,
@@ -17,7 +25,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { PhotoUpload } from "@/components/portal/photo-upload";
 import { CopyButton } from "@/components/shared/copy-button";
@@ -73,7 +80,6 @@ export default async function PortalPage() {
     shifts.filter((s) => s.date.slice(0, 7) === month),
     employee.id,
   );
-  const upcoming = shifts.filter((s) => s.date >= today).slice(0, 10);
 
   // Commission
   const { data: cfg } = await supabase
@@ -106,6 +112,57 @@ export default async function PortalPage() {
   const rank =
     (peerSales ?? []).filter((s) => Number(s.amount) > mySales).length + 1;
 
+  // Weekly calendar (current week): my shifts + the store roster, per day.
+  const weekDates = weekDays(weekStart(today));
+  const myByDate = new Map<string, typeof shifts>();
+  for (const s of shifts.filter((s) => thisWeek.has(s.date))) {
+    const arr = myByDate.get(s.date) ?? [];
+    arr.push(s);
+    myByDate.set(s.date, arr);
+  }
+
+  const { data: storeShiftRows } = await service
+    .from("shifts")
+    .select(
+      "date, start_time, end_time, employee_id, employees!inner(name), schedules!inner(status, location_id, week_start)",
+    )
+    .eq("schedules.location_id", employee.location_id)
+    .eq("schedules.status", "published")
+    .eq("schedules.week_start", weekStart(today))
+    .order("start_time");
+
+  const scheduleDays: DayCell[] = weekDates.map((d) => ({
+    date: d,
+    weekday: SHORT_WEEKDAYS[isoWeekday(d) - 1],
+    dayNum: d.slice(8, 10),
+    isToday: d === today,
+    mine: (myByDate.get(d) ?? [])
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+      .map((s) => {
+        const name = s.template?.name ?? "Shift";
+        return {
+          time: `${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
+          title: name,
+          gcal: googleCalendarUrl({
+            title: `${name} · ${locName}`,
+            date: s.date,
+            start: s.start_time,
+            end: s.end_time,
+            tz,
+            location: location?.address ?? locName,
+          }),
+        };
+      }),
+    store: (storeShiftRows ?? [])
+      .filter((r) => r.date === d)
+      .map((r) => ({
+        name: (r.employees as { name: string } | null)?.name ?? "—",
+        time: `${hhmm(r.start_time)}–${hhmm(r.end_time)}`,
+        isMe: r.employee_id === employee.id,
+      })),
+  }));
+  const weekLabel = formatWeekRange(weekStart(today));
+
   const icsUrl = `${appUrl}/s/${employee.magic_token}/calendar.ics`;
 
   return (
@@ -132,59 +189,18 @@ export default async function PortalPage() {
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <div>
-            <CardTitle className="text-base">Your shifts</CardTitle>
-            <CardDescription>Published upcoming shifts.</CardDescription>
+            <CardTitle className="text-base">Schedule</CardTitle>
+            <CardDescription>This week — yours and the store.</CardDescription>
           </div>
-          <a href={webcalUrl(icsUrl)} className={buttonVariants({ size: "sm" })}>
-            Subscribe in calendar
-          </a>
+          <div className="flex items-center gap-2">
+            <RequestDayOff />
+            <a href={webcalUrl(icsUrl)} className={buttonVariants({ size: "sm" })}>
+              Subscribe
+            </a>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {upcoming.length === 0 ? (
-            <Alert>
-              <AlertTitle>No upcoming shifts</AlertTitle>
-              <AlertDescription>
-                Your manager hasn&apos;t published shifts for you yet.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <ul className="flex flex-col divide-y">
-              {upcoming.map((s) => {
-                const name = s.template?.name ?? "Shift";
-                const gcal = googleCalendarUrl({
-                  title: `${name} · ${locName}`,
-                  date: s.date,
-                  start: s.start_time,
-                  end: s.end_time,
-                  tz,
-                  location: location?.address ?? locName,
-                });
-                return (
-                  <li
-                    key={s.id}
-                    className="flex items-center justify-between gap-3 py-2 text-sm"
-                  >
-                    <span className="flex flex-col">
-                      <span className="tabular-nums">
-                        {SHORT_WEEKDAYS[isoWeekday(s.date) - 1]} {s.date}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {name} · {hhmm(s.start_time)}–{hhmm(s.end_time)}
-                      </span>
-                    </span>
-                    <a
-                      href={gcal}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary shrink-0 text-xs underline"
-                    >
-                      + Google
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <ScheduleView days={scheduleDays} weekLabel={weekLabel} />
           <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
             <span>Google Calendar (whole schedule): add this URL under “From URL”.</span>
             <CopyButton value={icsUrl} label="Copy feed URL" />

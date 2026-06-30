@@ -7,7 +7,6 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createEmployeeWithAccess } from "@/server/employees";
-import { WEEKDAYS, shortWeekday } from "@/lib/weekdays";
 import { DIAL_CODES, DIAL_CODE_ITEMS, joinPhone } from "@/lib/dial-codes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -62,7 +61,6 @@ export function EmployeeWizard({
   const [pending, setPending] = useState(false);
   const [dialCode, setDialCode] = useState(DIAL_CODES[0].code);
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [preferred, setPreferred] = useState<string[]>([]);
   const [invite, setInvite] = useState(true);
 
   const {
@@ -103,7 +101,7 @@ export function EmployeeWizard({
     const res = await createEmployeeWithAccess({
       ...v,
       phone: joinPhone(dialCode, phoneNumber),
-      preferred_days_off: preferred,
+      preferred_days_off: [],
       hourly_rate: v.hourly_rate ?? "",
       hire_date: v.hire_date ?? "",
       invite,
@@ -268,32 +266,6 @@ export function EmployeeWizard({
               />
             </Field>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label>Preferred days off</Label>
-            <div className="flex flex-wrap gap-1">
-              {WEEKDAYS.map((day) => {
-                const on = preferred.includes(day);
-                return (
-                  <Button
-                    key={day}
-                    type="button"
-                    size="sm"
-                    variant={on ? "default" : "outline"}
-                    onClick={() =>
-                      setPreferred(
-                        on
-                          ? preferred.filter((d) => d !== day)
-                          : [...preferred, day],
-                      )
-                    }
-                    className="w-12"
-                  >
-                    {shortWeekday(day)}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
           <Field label="Hire date" error={errors.hire_date?.message} htmlFor="hire_date">
             <Input id="hire_date" type="date" {...register("hire_date")} />
           </Field>
@@ -342,10 +314,6 @@ export function EmployeeWizard({
           <Review
             label="Rules"
             value={`${v.weekly_hour_target}h · ≤${v.max_days_per_week}d · ≥${v.weekly_days_off} off`}
-          />
-          <Review
-            label="Preferred off"
-            value={preferred.length ? preferred.join(", ") : "—"}
           />
           <Review label="Hourly rate" value={v.hourly_rate || "—"} />
           <Review label="Invite" value={invite ? "Yes" : "No"} />

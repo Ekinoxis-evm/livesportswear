@@ -11,6 +11,14 @@ export function roleOf(user: User | null): Role | null {
   return r === "admin" || r === "employee" ? r : null;
 }
 
+/** A master admin (no admin_scope claim, or 'master') sees every location. */
+export function isMasterAdmin(user: User | null): boolean {
+  if (roleOf(user) !== "admin") return false;
+  const scope = (user?.app_metadata as { admin_scope?: string } | undefined)
+    ?.admin_scope;
+  return !scope || scope === "master";
+}
+
 export async function getSessionUser(): Promise<User | null> {
   const supabase = await createServerClient();
   const {
@@ -30,6 +38,26 @@ export async function requireAdmin(): Promise<User> {
   if (!user) redirect("/login");
   if (roleOf(user) !== "admin") redirect("/portal");
   return user;
+}
+
+/** Guard for master-admin-only actions (managing admins, shared config). */
+export async function requireMasterAdmin(): Promise<User> {
+  const user = await requireAdmin();
+  if (!isMasterAdmin(user)) redirect("/admin/dashboard");
+  return user;
+}
+
+/** Location ids the current admin may manage (all, for a master admin). */
+export async function accessibleLocationIds(): Promise<string[] | "all"> {
+  const user = await getSessionUser();
+  if (isMasterAdmin(user)) return "all";
+  if (!user) return [];
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from("admin_locations")
+    .select("location_id")
+    .eq("admin_user_id", user.id);
+  return (data ?? []).map((r) => r.location_id);
 }
 
 /** Guard for the employee portal; returns the linked employee row. */

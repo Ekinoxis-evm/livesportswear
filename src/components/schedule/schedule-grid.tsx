@@ -3,9 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, CalendarOff } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
+import {
+  SHIFT_SLOTS,
+  slotCreatePayload,
+  templateForSlot,
+  shiftMatchesSlot,
+} from "@/lib/shift-slots";
 import { cn } from "@/lib/utils";
 import { ensureSchedule, copyFromLastWeek } from "@/server/schedules";
 import { createShift, updateShift, deleteShift } from "@/server/shifts";
@@ -27,6 +33,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const CUSTOM = "custom";
 const hhmm = (t: string) => t.slice(0, 5);
@@ -48,6 +61,7 @@ type Template = {
   color: string | null;
 };
 type Employee = { id: string; name: string; avatar_color: string | null };
+type DayOff = { employee_id: string; date: string; status: "approved" | "pending" };
 
 type EditorCtx = { employeeId: string; date: string; shift: Shift | null };
 
@@ -60,6 +74,7 @@ export function ScheduleGrid({
   templates,
   shifts,
   hoursByEmployee,
+  daysOff,
 }: {
   scheduleId: string | null;
   locationId: string;
@@ -69,6 +84,7 @@ export function ScheduleGrid({
   templates: Template[];
   shifts: Shift[];
   hoursByEmployee: Record<string, number>;
+  daysOff: DayOff[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -81,24 +97,37 @@ export function ScheduleGrid({
   const [notes, setNotes] = useState("");
 
   const byCell = new Map<string, Shift[]>();
+  const daysWorked = new Map<string, Set<string>>();
   for (const s of shifts) {
     const key = `${s.employee_id}|${s.date}`;
     const list = byCell.get(key) ?? [];
     list.push(s);
     byCell.set(key, list);
+    const set = daysWorked.get(s.employee_id) ?? new Set<string>();
+    set.add(s.date);
+    daysWorked.set(s.employee_id, set);
+  }
+
+  const offByCell = new Map<string, "approved" | "pending">();
+  for (const o of daysOff) {
+    const key = `${o.employee_id}|${o.date}`;
+    if (o.status === "approved" || !offByCell.has(key)) offByCell.set(key, o.status);
   }
 
   function openEditor(ctx: EditorCtx) {
     if (ctx.shift) {
-      setTemplateId(ctx.shift.shift_template_id ?? CUSTOM);
+      const slot = SHIFT_SLOTS.find((s) =>
+        shiftMatchesSlot(ctx.shift!, s, templateForSlot(s, templates)),
+      );
+      setTemplateId(slot ? slot.key : CUSTOM);
       setStart(hhmm(ctx.shift.start_time));
       setEnd(hhmm(ctx.shift.end_time));
       setNotes(ctx.shift.notes ?? "");
     } else {
-      const first = templates[0];
-      setTemplateId(first ? first.id : CUSTOM);
-      setStart(first ? hhmm(first.start_time) : "09:00");
-      setEnd(first ? hhmm(first.end_time) : "17:00");
+      // Default to the Morning shift with its predefined hours.
+      setTemplateId(SHIFT_SLOTS[0].key);
+      setStart(SHIFT_SLOTS[0].start);
+      setEnd(SHIFT_SLOTS[0].end);
       setNotes("");
     }
     setEditor(ctx);
@@ -136,13 +165,10 @@ export function ScheduleGrid({
 
   async function onSave() {
     if (!editor || !scheduleId) return;
-    const custom = templateId === CUSTOM;
-    const payload = {
-      shift_template_id: custom ? null : templateId,
-      start_time: custom ? start : undefined,
-      end_time: custom ? end : undefined,
-      notes,
-    };
+    const slot = SHIFT_SLOTS.find((s) => s.key === templateId);
+    const payload = slot
+      ? { ...slotCreatePayload(slot, templates), notes }
+      : { shift_template_id: null, start_time: start, end_time: end, notes };
     const ok = editor.shift
       ? await start_(updateShift(editor.shift.id, payload))
       : await start_(
@@ -156,6 +182,22 @@ export function ScheduleGrid({
     if (ok) {
       toast.success(editor.shift ? "Shift updated." : "Shift added.");
       setEditor(null);
+    }
+  }
+
+  async function quickAdd(employeeId: string, date: string, slotIndex: number) {
+    if (!scheduleId) return;
+    if (
+      await start_(
+        createShift({
+          schedule_id: scheduleId,
+          employee_id: employeeId,
+          date,
+          ...slotCreatePayload(SHIFT_SLOTS[slotIndex], templates),
+        }),
+      )
+    ) {
+      toast.success("Shift added.");
     }
   }
 
@@ -240,19 +282,30 @@ export function ScheduleGrid({
                       <span className="flex flex-col">
                         {emp.name}
                         <span className="text-muted-foreground text-xs tabular-nums">
-                          {(hoursByEmployee[emp.id] ?? 0).toFixed(1)}h
+                          {(hoursByEmployee[emp.id] ?? 0).toFixed(1)}h ·{" "}
+                          {daysWorked.get(emp.id)?.size ?? 0}d
                         </span>
                       </span>
                     </span>
                   </td>
                   {days.map((d) => {
                     const cell = byCell.get(`${emp.id}|${d}`) ?? [];
+                    const off = offByCell.get(`${emp.id}|${d}`);
                     return (
                       <td
                         key={d}
-                        className="hover:bg-muted/40 group border-l p-1 align-top transition-colors"
+                        className={cn(
+                          "group border-l p-1 align-top transition-colors",
+                          off ? "bg-destructive/10" : "hover:bg-muted/40",
+                        )}
                       >
                         <div className="flex flex-col gap-1">
+                          {off && (
+                            <span className="text-destructive flex items-center gap-0.5 text-[10px] font-medium">
+                              <CalendarOff className="size-2.5" />
+                              {off === "approved" ? "Off" : "Off req."}
+                            </span>
+                          )}
                           {cell.map((s) => {
                             const tpl = templates.find(
                               (t) => t.id === s.shift_template_id,
@@ -283,20 +336,37 @@ export function ScheduleGrid({
                               </button>
                             );
                           })}
-                          <button
-                            type="button"
-                            aria-label="Add shift"
-                            onClick={() =>
-                              openEditor({
-                                employeeId: emp.id,
-                                date: d,
-                                shift: null,
-                              })
-                            }
-                            className="text-muted-foreground hover:bg-muted flex items-center justify-center rounded-md py-1 opacity-0 transition-opacity group-hover:opacity-100"
-                          >
-                            <Plus className="size-3.5" />
-                          </button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label="Add shift"
+                                  className="text-muted-foreground hover:bg-muted flex items-center justify-center rounded-md py-1 opacity-0 transition-opacity group-hover:opacity-100 data-[popup-open]:opacity-100"
+                                >
+                                  <Plus className="size-3.5" />
+                                </button>
+                              }
+                            />
+                            <DropdownMenuContent align="start">
+                              {SHIFT_SLOTS.map((s, i) => (
+                                <DropdownMenuItem
+                                  key={s.key}
+                                  onClick={() => quickAdd(emp.id, d, i)}
+                                >
+                                  {s.label} · {s.start}–{s.end}
+                                </DropdownMenuItem>
+                              ))}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  openEditor({ employeeId: emp.id, date: d, shift: null })
+                                }
+                              >
+                                Custom…
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     );
@@ -326,23 +396,28 @@ export function ScheduleGrid({
               <Select
                 items={{
                   ...Object.fromEntries(
-                    templates.map((t) => [
-                      t.id,
-                      `${t.name} (${hhmm(t.start_time)}–${hhmm(t.end_time)})`,
-                    ]),
+                    SHIFT_SLOTS.map((s) => [s.key, `${s.label} (${s.start}–${s.end})`]),
                   ),
                   [CUSTOM]: "Custom hours",
                 }}
                 value={templateId}
-                onValueChange={(v) => setTemplateId(v ?? CUSTOM)}
+                onValueChange={(v) => {
+                  const key = v ?? CUSTOM;
+                  setTemplateId(key);
+                  const slot = SHIFT_SLOTS.find((s) => s.key === key);
+                  if (slot) {
+                    setStart(slot.start);
+                    setEnd(slot.end);
+                  }
+                }}
               >
                 <SelectTrigger id="template" className="w-full">
                   <SelectValue placeholder="Select shift" />
                 </SelectTrigger>
                 <SelectContent>
-                  {templates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({hhmm(t.start_time)}–{hhmm(t.end_time)})
+                  {SHIFT_SLOTS.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>
+                      {s.label} ({s.start}–{s.end})
                     </SelectItem>
                   ))}
                   <SelectItem value={CUSTOM}>Custom hours</SelectItem>

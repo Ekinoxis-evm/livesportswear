@@ -67,6 +67,11 @@ export function currentWeekStart(now: Date = new Date()): string {
   return weekStart(fmt(now));
 }
 
+/** Monday of the week after the one containing `now` (defaults to current time). */
+export function nextWeekStart(now: Date = new Date()): string {
+  return addDays(currentWeekStart(now), 7);
+}
+
 /** Returns the Monday for a user-supplied week param, or `fallback` if invalid. */
 export function normalizeWeekStart(
   param: string | undefined | null,
