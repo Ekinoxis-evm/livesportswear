@@ -56,6 +56,32 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_locations: {
+        Row: {
+          admin_user_id: string
+          created_at: string
+          location_id: string
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string
+          location_id: string
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string
+          location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_locations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -85,6 +111,54 @@ export type Database = {
           id?: number
         }
         Relationships: []
+      }
+      client_events: {
+        Row: {
+          attended_at: string
+          business_date: string
+          created_at: string
+          employee_id: string
+          got_contact: boolean
+          id: string
+          location_id: string
+          sold: boolean
+        }
+        Insert: {
+          attended_at?: string
+          business_date: string
+          created_at?: string
+          employee_id: string
+          got_contact?: boolean
+          id?: string
+          location_id: string
+          sold?: boolean
+        }
+        Update: {
+          attended_at?: string
+          business_date?: string
+          created_at?: string
+          employee_id?: string
+          got_contact?: boolean
+          id?: string
+          location_id?: string
+          sold?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_events_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_events_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       commission_config: {
         Row: {
@@ -435,6 +509,101 @@ export type Database = {
             columns: ["shift_template_id"]
             isOneToOne: false
             referencedRelation: "shift_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_day_closes: {
+        Row: {
+          attended_count: number
+          business_date: string
+          closed_at: string
+          closed_by: string | null
+          contact_count: number
+          created_at: string
+          currency: string | null
+          id: string
+          location_id: string
+          shopify_sales: number | null
+          sold_count: number
+        }
+        Insert: {
+          attended_count?: number
+          business_date: string
+          closed_at?: string
+          closed_by?: string | null
+          contact_count?: number
+          created_at?: string
+          currency?: string | null
+          id?: string
+          location_id: string
+          shopify_sales?: number | null
+          sold_count?: number
+        }
+        Update: {
+          attended_count?: number
+          business_date?: string
+          closed_at?: string
+          closed_by?: string | null
+          contact_count?: number
+          created_at?: string
+          currency?: string | null
+          id?: string
+          location_id?: string
+          shopify_sales?: number | null
+          sold_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_day_closes_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_day_closes_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_goals: {
+        Row: {
+          created_at: string
+          currency: string | null
+          goal_amount: number
+          location_id: string
+          month: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          currency?: string | null
+          goal_amount?: number
+          location_id: string
+          month: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          currency?: string | null
+          goal_amount?: number
+          location_id?: string
+          month?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_goals_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]

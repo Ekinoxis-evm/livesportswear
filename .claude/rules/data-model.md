@@ -96,6 +96,54 @@ One assignment.
 - `diff jsonb`
 - `created_at timestamptz default now()`
 
+### `client_events` (added 0009)
+In-store conversion engine — one row per customer an employee attends. Sales
+revenue stays Shopify-sourced (`monthly_sales`); this table is the **conversion**
+layer (counts), not money.
+- `id uuid pk`
+- `location_id uuid fk -> locations`
+- `employee_id uuid fk -> employees`
+- `business_date date not null` — location-local day (for daily grouping/close)
+- `attended_at timestamptz not null default now()` — when the rep marked it
+- `sold boolean not null default false`
+- `got_contact boolean not null default false`
+- index `(location_id, business_date)`, `(employee_id, business_date)`
+
+### `store_day_closes` (added 0009)
+End-of-day snapshot per `(location, business_date)` produced by the "Close day"
+action; drives the daily email report. `shopify_sales` is filled once Shopify POS
+keys are connected.
+- `id uuid pk`
+- `location_id uuid fk -> locations`
+- `business_date date not null`
+- `closed_by uuid fk -> employees (on delete set null)`
+- `closed_at timestamptz not null default now()`
+- `attended_count int`, `sold_count int`, `contact_count int`
+- `shopify_sales numeric(12,2)` (nullable), `currency text`
+- `unique (location_id, business_date)`
+
+### `store_goals` (added 0009)
+Monthly store sales target — 12 months/year per location. Surfaced as progress on
+the admin dashboard.
+- `location_id uuid fk -> locations`
+- `year int not null`, `month int not null check (1..12)`
+- `goal_amount numeric(12,2) not null default 0`, `currency text`
+- `created_at, updated_at`
+- `primary key (location_id, year, month)`
+
+### `admin_locations` (added 0009)
+Maps a **scoped** admin (`app_metadata.admin_scope = 'location'`) to the
+location(s) they may manage. A **master** admin (no `admin_scope` claim, or
+`'master'`) has access to every location. See security.md.
+- `admin_user_id uuid fk -> auth.users`
+- `location_id uuid fk -> locations`
+- `primary key (admin_user_id, location_id)`
+
+> RLS helpers (0009): `is_master_admin()`, `admin_can_access_location(loc)`
+> (`security definer`). New tables are already location-scoped; the existing
+> tables' admin policies switch from bare `is_admin()` to
+> `admin_can_access_location()` in a later migration (Phase F).
+
 ## Rules summary
 | Code | Level | Description |
 |---|---|---|
