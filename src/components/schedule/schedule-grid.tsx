@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, CalendarOff } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,7 @@ type Template = {
   color: string | null;
 };
 type Employee = { id: string; name: string; avatar_color: string | null };
+type DayOff = { employee_id: string; date: string; status: "approved" | "pending" };
 
 type EditorCtx = { employeeId: string; date: string; shift: Shift | null };
 
@@ -60,6 +61,7 @@ export function ScheduleGrid({
   templates,
   shifts,
   hoursByEmployee,
+  daysOff,
 }: {
   scheduleId: string | null;
   locationId: string;
@@ -69,6 +71,7 @@ export function ScheduleGrid({
   templates: Template[];
   shifts: Shift[];
   hoursByEmployee: Record<string, number>;
+  daysOff: DayOff[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -90,6 +93,12 @@ export function ScheduleGrid({
     const set = daysWorked.get(s.employee_id) ?? new Set<string>();
     set.add(s.date);
     daysWorked.set(s.employee_id, set);
+  }
+
+  const offByCell = new Map<string, "approved" | "pending">();
+  for (const o of daysOff) {
+    const key = `${o.employee_id}|${o.date}`;
+    if (o.status === "approved" || !offByCell.has(key)) offByCell.set(key, o.status);
   }
 
   function openEditor(ctx: EditorCtx) {
@@ -252,12 +261,22 @@ export function ScheduleGrid({
                   </td>
                   {days.map((d) => {
                     const cell = byCell.get(`${emp.id}|${d}`) ?? [];
+                    const off = offByCell.get(`${emp.id}|${d}`);
                     return (
                       <td
                         key={d}
-                        className="hover:bg-muted/40 group border-l p-1 align-top transition-colors"
+                        className={cn(
+                          "group border-l p-1 align-top transition-colors",
+                          off ? "bg-destructive/10" : "hover:bg-muted/40",
+                        )}
                       >
                         <div className="flex flex-col gap-1">
+                          {off && (
+                            <span className="text-destructive flex items-center gap-0.5 text-[10px] font-medium">
+                              <CalendarOff className="size-2.5" />
+                              {off === "approved" ? "Off" : "Off req."}
+                            </span>
+                          )}
                           {cell.map((s) => {
                             const tpl = templates.find(
                               (t) => t.id === s.shift_template_id,

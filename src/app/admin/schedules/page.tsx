@@ -14,7 +14,7 @@ import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScheduleControls } from "@/components/schedule/schedule-controls";
-import { ScheduleGrid } from "@/components/schedule/schedule-grid";
+import { ScheduleWorkspace } from "@/components/schedule/schedule-workspace";
 import { ViolationsBanner } from "@/components/schedule/violations-banner";
 import { PublishButton } from "@/components/schedule/publish-button";
 
@@ -128,6 +128,25 @@ export default async function SchedulesPage({
       : { data: [] };
   const pending = pendingOff ?? [];
 
+  // Per-day off markers for the grid/board (approved = solid, pending = requested).
+  const daysOff: {
+    employee_id: string;
+    date: string;
+    status: "approved" | "pending";
+  }[] = [];
+  const addOff = (
+    empId: string,
+    start: string,
+    end: string,
+    status: "approved" | "pending",
+  ) => {
+    for (const d of days) {
+      if (d >= start && d <= end) daysOff.push({ employee_id: empId, date: d, status });
+    }
+  };
+  for (const r of timeOff ?? []) addOff(r.employee_id, r.start_date, r.end_date, "approved");
+  for (const r of pending) addOff(r.employee_id, r.start_date, r.end_date, "pending");
+
   // Weekly hours per employee (for the grid).
   const hoursByEmployee: Record<string, number> = {};
   for (const s of shiftRows) {
@@ -221,7 +240,7 @@ export default async function SchedulesPage({
 
       {schedule && <ViolationsBanner violations={violations} />}
 
-      <ScheduleGrid
+      <ScheduleWorkspace
         scheduleId={schedule?.id ?? null}
         locationId={locationId}
         weekStart={weekStart}
@@ -230,6 +249,7 @@ export default async function SchedulesPage({
         templates={templates ?? []}
         shifts={shiftRows}
         hoursByEmployee={hoursByEmployee}
+        daysOff={daysOff}
       />
     </div>
   );
