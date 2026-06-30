@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createBrowserClient } from "@/lib/supabase/browser";
+import { requestPasswordReset } from "@/server/auth-recovery";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,10 +22,7 @@ export default function ForgotPasswordPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
-    const supabase = createBrowserClient();
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
+    await requestPasswordReset(email);
     setPending(false);
     // Always show success — don't reveal whether the email has an account.
     setSent(true);

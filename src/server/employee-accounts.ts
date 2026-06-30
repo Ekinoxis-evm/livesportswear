@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/auth";
+import { sendSafe } from "@/lib/resend";
+import { InviteEmail } from "@/lib/emails/invite";
 import { type ActionResult, dbError } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -19,7 +21,7 @@ export async function inviteEmployee(employeeId: string): Promise<ActionResult> 
   const supabase = await createServerClient();
   const { data: emp, error } = await supabase
     .from("employees")
-    .select("id, email, auth_user_id")
+    .select("id, name, email, auth_user_id, locations(name)")
     .eq("id", employeeId)
     .single();
   if (error || !emp) return { ok: false, error: "Employee not found." };
@@ -29,14 +31,19 @@ export async function inviteEmployee(employeeId: string): Promise<ActionResult> 
 
   const service = createServiceClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const invited = await service.auth.admin.inviteUserByEmail(emp.email, {
-    redirectTo: `${appUrl}/login`,
+
+  // Generate the invite link ourselves (instead of inviteUserByEmail) so we can
+  // deliver it through Resend rather than Supabase's built-in SMTP.
+  const { data: link, error: linkErr } = await service.auth.admin.generateLink({
+    type: "invite",
+    email: emp.email,
+    options: { redirectTo: `${appUrl}/reset-password` },
   });
-  if (invited.error || !invited.data.user) {
-    return { ok: false, error: invited.error?.message ?? "Couldn't invite." };
+  if (linkErr || !link.user || !link.properties) {
+    return { ok: false, error: linkErr?.message ?? "Couldn't create the invite." };
   }
 
-  const userId = invited.data.user.id;
+  const userId = link.user.id;
   const claimed = await service.auth.admin.updateUserById(userId, {
     app_metadata: { role: "employee", employee_id: emp.id },
   });
@@ -47,6 +54,20 @@ export async function inviteEmployee(employeeId: string): Promise<ActionResult> 
     .update({ auth_user_id: userId })
     .eq("id", emp.id);
   if (linked.error) return { ok: false, error: dbError(linked.error) };
+
+  const sent = await sendSafe({
+    to: emp.email,
+    subject: "Set up your Live team portal access",
+    react: InviteEmail({
+      employeeName: emp.name,
+      actionUrl: link.properties.action_link,
+      locationName: emp.locations?.name,
+    }),
+  });
+  if (!sent.ok) {
+    // Account exists now; surface a soft error so the admin can resend.
+    return { ok: false, error: `Account created, but the email failed: ${sent.error}` };
+  }
 
   revalidatePath(`/admin/employees/${emp.id}`);
   return { ok: true };
