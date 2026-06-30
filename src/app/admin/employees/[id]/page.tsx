@@ -14,7 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmployeeAccessActions } from "@/components/employee/account-actions";
+import { AdminRoleActions } from "@/components/employee/admin-role-actions";
 import { HourlyRateForm } from "@/components/employee/hourly-rate-form";
+import { getEmployeeAuthRole } from "@/server/employee-accounts";
 import { formatMoney } from "@/lib/commission";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -92,6 +94,8 @@ export default async function EmployeeDetailPage({
     .eq("id", 1)
     .maybeSingle();
   const currency = cfg?.currency ?? "USD";
+
+  const authRole = emp.auth_user_id ? await getEmployeeAuthRole(emp.id) : null;
 
   const scheduleUrl = `${appUrl}/s/${emp.magic_token}`;
   const icsUrl = `${scheduleUrl}/calendar.ics`;
@@ -198,6 +202,19 @@ export default async function EmployeeDetailPage({
               linked={Boolean(emp.auth_user_id)}
             />
           </div>
+          {emp.auth_user_id && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <span className="text-sm">Admin access</span>
+                <span className="text-muted-foreground text-xs">
+                  {authRole === "admin"
+                    ? "Full access to every location, schedule & pay. Takes effect next time they sign in."
+                    : "Grant full admin access. Takes effect next time they sign in."}
+                </span>
+              </div>
+              <AdminRoleActions id={emp.id} isAdmin={authRole === "admin"} />
+            </div>
+          )}
           <HourlyRateForm
             employeeId={emp.id}
             rate={hourlyRate}

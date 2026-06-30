@@ -82,3 +82,66 @@ export async function revokeEmployeeAccess(
   revalidatePath(`/admin/employees/${emp.id}`);
   return { ok: true };
 }
+
+/** Current auth role of an employee's linked account, or null if no portal access. */
+export async function getEmployeeAuthRole(
+  employeeId: string,
+): Promise<"admin" | "employee" | null> {
+  await requireAdmin();
+  if (!uuid.safeParse(employeeId).success) return null;
+
+  const supabase = await createServerClient();
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("auth_user_id")
+    .eq("id", employeeId)
+    .maybeSingle();
+  if (!emp?.auth_user_id) return null;
+
+  const service = createServiceClient();
+  const { data, error } = await service.auth.admin.getUserById(
+    emp.auth_user_id,
+  );
+  if (error || !data.user) return null;
+  const role = (data.user.app_metadata as { role?: string } | undefined)?.role;
+  return role === "admin" ? "admin" : "employee";
+}
+
+/**
+ * Promote/demote a linked account between full admin and employee. The change
+ * lands on the user's next token refresh / re-login (the JWT claim is cached).
+ */
+export async function setEmployeeAdmin(
+  employeeId: string,
+  makeAdmin: boolean,
+): Promise<ActionResult> {
+  const actor = await requireAdmin();
+  if (!uuid.safeParse(employeeId).success) {
+    return { ok: false, error: "Invalid employee id." };
+  }
+
+  const supabase = await createServerClient();
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("id, auth_user_id")
+    .eq("id", employeeId)
+    .maybeSingle();
+  if (!emp?.auth_user_id) {
+    return { ok: false, error: "Invite this employee to the portal first." };
+  }
+  if (!makeAdmin && emp.auth_user_id === actor.id) {
+    return { ok: false, error: "You can't remove your own admin access." };
+  }
+
+  const service = createServiceClient();
+  const updated = await service.auth.admin.updateUserById(emp.auth_user_id, {
+    app_metadata: {
+      role: makeAdmin ? "admin" : "employee",
+      employee_id: emp.id,
+    },
+  });
+  if (updated.error) return { ok: false, error: updated.error.message };
+
+  revalidatePath(`/admin/employees/${emp.id}`);
+  return { ok: true };
+}
