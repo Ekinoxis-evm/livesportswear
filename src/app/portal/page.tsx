@@ -1,7 +1,13 @@
 import { requireEmployee } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { weekStart, weekDays, addDays, isoWeekday } from "@/lib/scheduling/week";
+import {
+  weekStart,
+  weekDays,
+  addDays,
+  isoWeekday,
+  formatWeekRange,
+} from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
 import {
@@ -10,11 +16,7 @@ import {
   type CommissionTier,
 } from "@/lib/commission";
 import { googleCalendarUrl, webcalUrl } from "@/lib/calendar-links";
-import {
-  ScheduleView,
-  type MyShift,
-  type StoreDay,
-} from "@/components/portal/schedule-view";
+import { ScheduleView, type DayCell } from "@/components/portal/schedule-view";
 import { RequestDayOff } from "@/components/portal/request-day-off";
 import {
   Card,
@@ -110,27 +112,14 @@ export default async function PortalPage() {
   const rank =
     (peerSales ?? []).filter((s) => Number(s.amount) > mySales).length + 1;
 
-  // My-week + store-week schedule views (current week).
+  // Weekly calendar (current week): my shifts + the store roster, per day.
   const weekDates = weekDays(weekStart(today));
-  const mine: MyShift[] = shifts
-    .filter((s) => thisWeek.has(s.date))
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((s) => {
-      const name = s.template?.name ?? "Shift";
-      return {
-        date: s.date,
-        weekday: SHORT_WEEKDAYS[isoWeekday(s.date) - 1],
-        label: `${name} · ${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
-        gcal: googleCalendarUrl({
-          title: `${name} · ${locName}`,
-          date: s.date,
-          start: s.start_time,
-          end: s.end_time,
-          tz,
-          location: location?.address ?? locName,
-        }),
-      };
-    });
+  const myByDate = new Map<string, typeof shifts>();
+  for (const s of shifts.filter((s) => thisWeek.has(s.date))) {
+    const arr = myByDate.get(s.date) ?? [];
+    arr.push(s);
+    myByDate.set(s.date, arr);
+  }
 
   const { data: storeShiftRows } = await service
     .from("shifts")
@@ -141,10 +130,30 @@ export default async function PortalPage() {
     .eq("schedules.status", "published")
     .eq("schedules.week_start", weekStart(today))
     .order("start_time");
-  const store: StoreDay[] = weekDates.map((d) => ({
+
+  const scheduleDays: DayCell[] = weekDates.map((d) => ({
     date: d,
     weekday: SHORT_WEEKDAYS[isoWeekday(d) - 1],
-    entries: (storeShiftRows ?? [])
+    dayNum: d.slice(8, 10),
+    isToday: d === today,
+    mine: (myByDate.get(d) ?? [])
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+      .map((s) => {
+        const name = s.template?.name ?? "Shift";
+        return {
+          time: `${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
+          title: name,
+          gcal: googleCalendarUrl({
+            title: `${name} · ${locName}`,
+            date: s.date,
+            start: s.start_time,
+            end: s.end_time,
+            tz,
+            location: location?.address ?? locName,
+          }),
+        };
+      }),
+    store: (storeShiftRows ?? [])
       .filter((r) => r.date === d)
       .map((r) => ({
         name: (r.employees as { name: string } | null)?.name ?? "—",
@@ -152,6 +161,7 @@ export default async function PortalPage() {
         isMe: r.employee_id === employee.id,
       })),
   }));
+  const weekLabel = formatWeekRange(weekStart(today));
 
   const icsUrl = `${appUrl}/s/${employee.magic_token}/calendar.ics`;
 
@@ -190,7 +200,7 @@ export default async function PortalPage() {
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <ScheduleView mine={mine} store={store} />
+          <ScheduleView days={scheduleDays} weekLabel={weekLabel} />
           <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
             <span>Google Calendar (whole schedule): add this URL under “From URL”.</span>
             <CopyButton value={icsUrl} label="Copy feed URL" />
