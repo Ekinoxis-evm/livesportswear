@@ -11,6 +11,13 @@ import type { ActionResult } from "@/server/shared";
 const uuid = z.string().uuid();
 const resultSchema = z.object({ sold: z.boolean(), got_contact: z.boolean() });
 
+const isLead = (role: string) => role === "shift_lead" || role === "store_manager";
+
+const NOT_ALLOWED = {
+  ok: false as const,
+  error: "Only a shift lead can manage other employees on the floor.",
+};
+
 /** Shared context: the signed-in employee, a service client, tz and today. */
 async function floorCtx() {
   const { employee } = await requireEmployee();
@@ -24,9 +31,12 @@ async function floorCtx() {
   return { employee, service, bd: businessDate(tz) };
 }
 
-/** Open the store day for the rotation queue. */
+/** Open the store day for the rotation queue. Shift leads only. */
 export async function openDay(): Promise<ActionResult> {
   const { employee, service, bd } = await floorCtx();
+  if (!isLead(employee.role)) {
+    return { ok: false, error: "Only a shift lead can open the day." };
+  }
   const { error } = await service.from("floor_days").upsert(
     { location_id: employee.location_id, business_date: bd, opened_by: employee.id },
     { onConflict: "location_id,business_date" },
@@ -42,6 +52,8 @@ export async function checkIn(employeeId: string): Promise<ActionResult> {
   if (!uuid.safeParse(employeeId).success) {
     return { ok: false, error: "Invalid employee." };
   }
+  // Self check-in is fine; checking in a coworker requires a lead.
+  if (employeeId !== employee.id && !isLead(employee.role)) return NOT_ALLOWED;
   const { data: target } = await service
     .from("employees")
     .select("id, location_id")
@@ -72,6 +84,10 @@ async function updateCheckin(
   patch: TablesUpdate<"floor_checkins">,
 ): Promise<ActionResult> {
   const { employee, service, bd } = await floorCtx();
+  if (!uuid.safeParse(employeeId).success) {
+    return { ok: false, error: "Invalid employee." };
+  }
+  if (employeeId !== employee.id && !isLead(employee.role)) return NOT_ALLOWED;
   const { error } = await service
     .from("floor_checkins")
     .update(patch)
@@ -110,6 +126,11 @@ export async function finishCustomer(
   input: z.input<typeof resultSchema>,
 ): Promise<ActionResult> {
   const { employee, service, bd } = await floorCtx();
+  if (!uuid.safeParse(employeeId).success) {
+    return { ok: false, error: "Invalid employee." };
+  }
+  // Employees record their own result; a lead may record for a coworker.
+  if (employeeId !== employee.id && !isLead(employee.role)) return NOT_ALLOWED;
   const parsed = resultSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
 
