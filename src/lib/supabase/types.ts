@@ -290,6 +290,86 @@ export type Database = {
           },
         ]
       }
+      floor_checkins: {
+        Row: {
+          arrived_at: string
+          business_date: string
+          created_at: string
+          employee_id: string
+          id: string
+          left_at: string | null
+          location_id: string
+          rotation_count: number
+          status: string
+        }
+        Insert: {
+          arrived_at?: string
+          business_date: string
+          created_at?: string
+          employee_id: string
+          id?: string
+          left_at?: string | null
+          location_id: string
+          rotation_count?: number
+          status?: string
+        }
+        Update: {
+          arrived_at?: string
+          business_date?: string
+          created_at?: string
+          employee_id?: string
+          id?: string
+          left_at?: string | null
+          location_id?: string
+          rotation_count?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_checkins_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "floor_checkins_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      floor_days: {
+        Row: {
+          business_date: string
+          location_id: string
+          opened_at: string
+          opened_by: string | null
+        }
+        Insert: {
+          business_date: string
+          location_id: string
+          opened_at?: string
+          opened_by?: string | null
+        }
+        Update: {
+          business_date?: string
+          location_id?: string
+          opened_at?: string
+          opened_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_days_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           active: boolean

@@ -139,6 +139,27 @@ location(s) they may manage. A **master** admin (no `admin_scope` claim, or
 - `location_id uuid fk -> locations`
 - `primary key (admin_user_id, location_id)`
 
+### `floor_days` (added 0011)
+Marks a store day open for the rotation queue ("up system").
+- `location_id uuid`, `business_date date` — `primary key`
+- `opened_by uuid fk -> employees (on delete set null)`, `opened_at timestamptz`
+
+### `floor_checkins` (added 0011)
+One row per employee present on the floor today. Drives who is "up next":
+available members are ordered by `rotation_count` then `arrived_at`; finishing a
+customer increments `rotation_count` (→ back of the line). See
+`src/lib/floor-queue.ts` (`orderFloor`/`upNext`) and `src/server/floor.ts`.
+- `id uuid pk`
+- `location_id uuid fk -> locations`, `employee_id uuid fk -> employees`
+- `business_date date not null`
+- `arrived_at timestamptz not null default now()` — the recorded arrival time
+- `left_at timestamptz` (null = on the floor)
+- `status text` — `available | attending`
+- `rotation_count int not null default 0`
+- `unique (location_id, business_date, employee_id)`
+- RLS: admin location-scoped; any employee at the location can read/write the
+  store's floor (shared shop-floor data).
+
 > RLS helpers (0009): `is_master_admin()`, `admin_can_access_location(loc)`
 > (`security definer`). New tables are already location-scoped; the existing
 > tables' admin policies switch from bare `is_admin()` to
