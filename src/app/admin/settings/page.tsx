@@ -11,6 +11,10 @@ import {
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { isMetaConfigured } from "@/lib/meta-config";
 import { CurrencyForm } from "@/components/settings/currency-form";
+import {
+  StoreGoalsForm,
+  type GoalsByLocation,
+} from "@/components/settings/store-goals-form";
 import { RatesTable } from "@/components/settings/rates-table";
 import { PayPeriodForm } from "@/components/settings/pay-period-form";
 import { ShopifyPanel } from "@/components/settings/shopify-panel";
@@ -43,6 +47,22 @@ export default async function SettingsPage() {
     rate: rateBy.get(e.id) ?? null,
   }));
 
+  const year = new Date().getUTCFullYear();
+  const { data: locationRows } = await supabase
+    .from("locations")
+    .select("id, name, active")
+    .eq("active", true)
+    .order("name");
+  const goalLocations = (locationRows ?? []).map((l) => ({ id: l.id, name: l.name }));
+  const { data: goalRows } = await supabase
+    .from("store_goals")
+    .select("location_id, month, goal_amount")
+    .eq("year", year);
+  const goalsByLocation: GoalsByLocation = {};
+  for (const g of goalRows ?? []) {
+    (goalsByLocation[g.location_id] ??= {})[g.month] = Number(g.goal_amount);
+  }
+
   const today = new Date().toISOString().slice(0, 10);
   const { anchor, cap } = await getPayPeriod();
   const sprint = sprintRange(anchor, today);
@@ -66,6 +86,24 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <CurrencyForm currency={currency} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Monthly sales goals</CardTitle>
+          <CardDescription>
+            Target per store per month ({year}). Tracked against Shopify sales on
+            the dashboard.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StoreGoalsForm
+            locations={goalLocations}
+            year={year}
+            goalsByLocation={goalsByLocation}
+            currency={currency}
+          />
         </CardContent>
       </Card>
 
