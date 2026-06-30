@@ -81,11 +81,15 @@ export function ScheduleGrid({
   const [notes, setNotes] = useState("");
 
   const byCell = new Map<string, Shift[]>();
+  const daysWorked = new Map<string, Set<string>>();
   for (const s of shifts) {
     const key = `${s.employee_id}|${s.date}`;
     const list = byCell.get(key) ?? [];
     list.push(s);
     byCell.set(key, list);
+    const set = daysWorked.get(s.employee_id) ?? new Set<string>();
+    set.add(s.date);
+    daysWorked.set(s.employee_id, set);
   }
 
   function openEditor(ctx: EditorCtx) {
@@ -240,7 +244,8 @@ export function ScheduleGrid({
                       <span className="flex flex-col">
                         {emp.name}
                         <span className="text-muted-foreground text-xs tabular-nums">
-                          {(hoursByEmployee[emp.id] ?? 0).toFixed(1)}h
+                          {(hoursByEmployee[emp.id] ?? 0).toFixed(1)}h ·{" "}
+                          {daysWorked.get(emp.id)?.size ?? 0}d
                         </span>
                       </span>
                     </span>

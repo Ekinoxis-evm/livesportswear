@@ -5,8 +5,9 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireEmployee } from "@/lib/auth";
 import { isValidDateStr, addDays } from "@/lib/scheduling/week";
+import { isLateSubmission } from "@/lib/scheduling/payroll";
 import { sendSafe } from "@/lib/resend";
 import { TimeOffDecisionEmail } from "@/lib/emails/time-off-decision";
 import {
@@ -17,6 +18,26 @@ import {
 } from "@/server/shared";
 
 const uuid = z.string().uuid();
+
+/**
+ * Validates the request window and enforces the Friday-before cutoff for
+ * *future* weeks: once a week's planning window has closed (its preceding
+ * Friday), reps can't self-request days off for it — they ask the manager
+ * directly. Past/current-week requests stay allowed (flagged "late" for the
+ * admin). Returns an error string, or null if OK.
+ */
+function windowError(startDate: string, endDate: string, today: string): string | null {
+  if (startDate < addDays(today, -7) || startDate > addDays(today, 180)) {
+    return "Choose dates within the next few months.";
+  }
+  if ((Date.parse(endDate) - Date.parse(startDate)) / 86_400_000 > 31) {
+    return "A request can't span more than 31 days.";
+  }
+  if (startDate > today && isLateSubmission(startDate, today)) {
+    return "Day-off requests for that week have closed (the Friday before). Please ask your manager directly.";
+  }
+  return null;
+}
 
 const submitSchema = z
   .object({
@@ -46,20 +67,10 @@ export async function submitTimeOff(input: unknown): Promise<ActionResult> {
     .maybeSingle();
   if (!emp) return { ok: false, error: "This link is no longer valid." };
 
-  // Bound the request to a sane window (public, unauthenticated input).
+  // Bound the request to a sane window + enforce the planning cutoff.
   const today = new Date().toISOString().slice(0, 10);
-  if (
-    parsed.data.start_date < addDays(today, -7) ||
-    parsed.data.start_date > addDays(today, 180)
-  ) {
-    return { ok: false, error: "Choose dates within the next few months." };
-  }
-  const rangeDays =
-    (Date.parse(parsed.data.end_date) - Date.parse(parsed.data.start_date)) /
-    86_400_000;
-  if (rangeDays > 31) {
-    return { ok: false, error: "A request can't span more than 31 days." };
-  }
+  const winErr = windowError(parsed.data.start_date, parsed.data.end_date, today);
+  if (winErr) return { ok: false, error: winErr };
 
   const { error } = await service.from("time_off_requests").insert({
     employee_id: emp.id,
@@ -77,6 +88,42 @@ export async function submitTimeOff(input: unknown): Promise<ActionResult> {
   }
 
   revalidatePath(`/s/${parsed.data.token}`);
+  return { ok: true };
+}
+
+const ownSchema = z
+  .object({
+    start_date: z.string().refine(isValidDateStr, "Invalid start date."),
+    end_date: z.string().refine(isValidDateStr, "Invalid end date."),
+    reason: z.preprocess(emptyToNull, z.string().max(500).nullable()),
+  })
+  .refine((d) => d.end_date >= d.start_date, {
+    message: "End date can't be before the start date.",
+    path: ["end_date"],
+  });
+
+/** Authenticated portal request: the signed-in employee asks for days off. */
+export async function requestOwnTimeOff(input: unknown): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const parsed = ownSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const winErr = windowError(parsed.data.start_date, parsed.data.end_date, today);
+  if (winErr) return { ok: false, error: winErr };
+
+  // RLS self-insert policy checks employee_id = current_employee_id().
+  const supabase = await createServerClient();
+  const { error } = await supabase.from("time_off_requests").insert({
+    employee_id: employee.id,
+    start_date: parsed.data.start_date,
+    end_date: parsed.data.end_date,
+    reason: parsed.data.reason,
+    status: "pending",
+  });
+  if (error) return { ok: false, error: dbError(error) };
+
+  revalidatePath("/portal");
   return { ok: true };
 }
 

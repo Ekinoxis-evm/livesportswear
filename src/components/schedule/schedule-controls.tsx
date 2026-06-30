@@ -2,7 +2,12 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { addDays, currentWeekStart, formatWeekRange } from "@/lib/scheduling/week";
+import {
+  addDays,
+  currentWeekStart,
+  nextWeekStart,
+  formatWeekRange,
+} from "@/lib/scheduling/week";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -71,11 +76,18 @@ export function ScheduleControls({
           <ChevronRight />
         </Button>
         <Button
-          variant="ghost"
+          variant={weekStart === currentWeekStart() ? "secondary" : "ghost"}
           size="sm"
           onClick={() => go({ week: currentWeekStart() })}
         >
           This week
+        </Button>
+        <Button
+          variant={weekStart === nextWeekStart() ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => go({ week: nextWeekStart() })}
+        >
+          Next week
         </Button>
       </div>
     </div>

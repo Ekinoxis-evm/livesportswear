@@ -109,6 +109,23 @@ export default async function SchedulesPage({
           .eq("status", "approved")
       : { data: [] };
 
+  // Pending day-off requests overlapping the displayed week — what the admin
+  // needs to see when building this week (and especially next week).
+  const weekEnd = days[days.length - 1];
+  const nameById = new Map(empList.map((e) => [e.id, e.name]));
+  const { data: pendingOff } =
+    empIds.length > 0
+      ? await supabase
+          .from("time_off_requests")
+          .select("id, employee_id, start_date, end_date, reason")
+          .in("employee_id", empIds)
+          .eq("status", "pending")
+          .lte("start_date", weekEnd)
+          .gte("end_date", weekStart)
+          .order("start_date")
+      : { data: [] };
+  const pending = pendingOff ?? [];
+
   // Weekly hours per employee (for the grid).
   const hoursByEmployee: Record<string, number> = {};
   for (const s of shiftRows) {
@@ -174,6 +191,31 @@ export default async function SchedulesPage({
         locationId={locationId}
         weekStart={weekStart}
       />
+
+      {pending.length > 0 && (
+        <Alert>
+          <AlertTitle>
+            {pending.length} day-off request{pending.length > 1 ? "s" : ""} for this
+            week
+          </AlertTitle>
+          <AlertDescription>
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {pending.map((r) => (
+                <li key={r.id} className="text-sm tabular-nums">
+                  <span className="font-medium">
+                    {nameById.get(r.employee_id) ?? "—"}
+                  </span>{" "}
+                  · {r.start_date === r.end_date ? r.start_date : `${r.start_date} → ${r.end_date}`}
+                  {r.reason ? ` · ${r.reason}` : ""}
+                </li>
+              ))}
+            </ul>
+            <a href="/admin/time-off" className="text-primary mt-2 inline-block text-sm underline">
+              Review in Time off →
+            </a>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {schedule && <ViolationsBanner violations={violations} />}
 
