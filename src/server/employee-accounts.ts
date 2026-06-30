@@ -61,6 +61,7 @@ export async function inviteEmployee(employeeId: string): Promise<ActionResult> 
     react: InviteEmail({
       employeeName: emp.name,
       actionUrl: link.properties.action_link,
+      appUrl,
       locationName: emp.locations?.name,
     }),
   });

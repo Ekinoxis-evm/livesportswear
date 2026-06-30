@@ -89,7 +89,12 @@ export async function inviteAdmin(input: unknown): Promise<ActionResult> {
   const sent = await sendSafe({
     to: email,
     subject: "You're invited as a Live store admin",
-    react: InviteEmail({ employeeName: "there", actionUrl: link.properties.action_link }),
+    react: InviteEmail({
+      employeeName: "there",
+      actionUrl: link.properties.action_link,
+      appUrl,
+      role: "admin",
+    }),
   });
   if (!sent.ok) {
     return { ok: false, error: `Admin created, but the email failed: ${sent.error}` };

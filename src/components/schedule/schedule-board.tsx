@@ -6,6 +6,12 @@ import { toast } from "sonner";
 import { Plus, X, CalendarOff } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
+import {
+  SHIFT_SLOTS,
+  templateForSlot,
+  shiftMatchesSlot,
+  slotCreatePayload,
+} from "@/lib/shift-slots";
 import { cn } from "@/lib/utils";
 import { ensureSchedule, copyFromLastWeek } from "@/server/schedules";
 import { createShift, deleteShift } from "@/server/shifts";
@@ -18,6 +24,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const hhmm = (t: string) => t.slice(0, 5);
+
+const SLOT_COLOR: Record<string, string> = {
+  morning: "#22c55e",
+  evening: "#a855f7",
+};
 
 type Shift = {
   id: string;
@@ -67,16 +78,6 @@ export function ScheduleBoard({
     if (o.status === "approved" || !offByCell.has(key)) offByCell.set(key, o.status);
   }
 
-  // shifts indexed by template + day, and the per-day off list.
-  const bySlot = new Map<string, Shift[]>(); // `${templateId|custom}|${date}`
-  for (const s of shifts) {
-    const key = `${s.shift_template_id ?? "custom"}|${s.date}`;
-    const arr = bySlot.get(key) ?? [];
-    arr.push(s);
-    bySlot.set(key, arr);
-  }
-  const hasCustom = shifts.some((s) => !s.shift_template_id);
-
   async function run(action: Promise<{ ok: boolean; error?: string }>, ok: string) {
     setBusy(true);
     const res = await action;
@@ -87,19 +88,6 @@ export function ScheduleBoard({
     }
     toast.success(ok);
     router.refresh();
-  }
-
-  function add(employeeId: string, date: string, templateId: string) {
-    if (!scheduleId) return;
-    run(
-      createShift({
-        schedule_id: scheduleId,
-        employee_id: employeeId,
-        date,
-        shift_template_id: templateId,
-      }),
-      "Shift added.",
-    );
   }
 
   if (!scheduleId) {
@@ -127,11 +115,23 @@ export function ScheduleBoard({
     );
   }
 
-  const slots: { id: string; label: string; tpl: Template }[] = templates.map((t) => ({
-    id: t.id,
-    label: t.name,
-    tpl: t,
-  }));
+  const slots = SHIFT_SLOTS.map((slot) => ({ slot, tpl: templateForSlot(slot, templates) }));
+  const inAnySlot = (s: Shift) =>
+    slots.some(({ slot, tpl }) => shiftMatchesSlot(s, slot, tpl));
+  const otherShifts = shifts.filter((s) => !inAnySlot(s));
+
+  function add(employeeId: string, date: string, slotIndex: number) {
+    if (!scheduleId) return;
+    run(
+      createShift({
+        schedule_id: scheduleId,
+        employee_id: employeeId,
+        date,
+        ...slotCreatePayload(SHIFT_SLOTS[slotIndex], templates),
+      }),
+      "Shift added.",
+    );
+  }
 
   return (
     <div className="overflow-x-auto rounded-lg border">
@@ -173,112 +173,114 @@ export function ScheduleBoard({
           </tr>
         </thead>
         <tbody>
-          {slots.map((slot) => (
-            <tr key={slot.id} className="border-t align-top">
-              <td className="bg-background sticky left-0 z-10 p-2">
-                <span className="flex items-center gap-2 font-medium">
-                  <span
-                    aria-hidden
-                    className="h-4 w-1 rounded"
-                    style={{ backgroundColor: slot.tpl.color ?? "var(--color-primary)" }}
-                  />
-                  <span className="flex flex-col">
-                    {slot.label}
-                    <span className="text-muted-foreground text-xs tabular-nums">
-                      {hhmm(slot.tpl.start_time)}–{hhmm(slot.tpl.end_time)}
+          {slots.map(({ slot, tpl }, slotIndex) => {
+            const color = tpl?.color ?? SLOT_COLOR[slot.key] ?? "var(--color-primary)";
+            const headcount = tpl?.default_headcount ?? 0;
+            return (
+              <tr key={slot.key} className="border-t align-top">
+                <td className="bg-background sticky left-0 z-10 p-2">
+                  <span className="flex items-center gap-2 font-medium">
+                    <span aria-hidden className="h-4 w-1 rounded" style={{ backgroundColor: color }} />
+                    <span className="flex flex-col">
+                      {slot.label}
+                      <span className="text-muted-foreground text-xs tabular-nums">
+                        {slot.start}–{slot.end}
+                      </span>
                     </span>
                   </span>
-                </span>
-              </td>
-              {days.map((d) => {
-                const assigned = bySlot.get(`${slot.id}|${d}`) ?? [];
-                const assignedIds = new Set(assigned.map((s) => s.employee_id));
-                const under = assigned.length < slot.tpl.default_headcount;
-                const available = employees.filter((e) => !assignedIds.has(e.id));
-                return (
-                  <td key={d} className="border-l p-1.5 align-top">
-                    <div className="flex flex-col gap-1">
-                      {assigned.map((s) => {
-                        const off = offByCell.get(`${s.employee_id}|${d}`);
-                        return (
-                          <span
-                            key={s.id}
-                            className={cn(
-                              "flex items-center justify-between gap-1 rounded-md px-2 py-1 text-xs",
-                              off ? "bg-destructive/15 text-destructive" : "bg-muted",
-                            )}
-                          >
-                            <span className="truncate">{nameOf.get(s.employee_id)}</span>
-                            <button
-                              type="button"
-                              aria-label="Remove"
-                              disabled={busy}
-                              onClick={() => run(deleteShift(s.id), "Shift removed.")}
-                              className="shrink-0 opacity-60 hover:opacity-100"
-                            >
-                              <X className="size-3" />
-                            </button>
-                          </span>
-                        );
-                      })}
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <button
-                              type="button"
-                              disabled={busy || available.length === 0}
+                </td>
+                {days.map((d) => {
+                  const assigned = shifts.filter(
+                    (s) => s.date === d && shiftMatchesSlot(s, slot, tpl),
+                  );
+                  const assignedIds = new Set(assigned.map((s) => s.employee_id));
+                  const available = employees.filter((e) => !assignedIds.has(e.id));
+                  const under = headcount > 0 && assigned.length < headcount;
+                  return (
+                    <td key={d} className="border-l p-1.5 align-top">
+                      <div className="flex flex-col gap-1">
+                        {assigned.map((s) => {
+                          const off = offByCell.get(`${s.employee_id}|${d}`);
+                          return (
+                            <span
+                              key={s.id}
                               className={cn(
-                                "flex items-center justify-center gap-1 rounded-md border border-dashed py-1 text-xs transition-colors",
-                                under
-                                  ? "border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
-                                  : "text-muted-foreground hover:bg-muted",
+                                "flex items-center justify-between gap-1 rounded-md px-2 py-1 text-xs",
+                                off ? "bg-destructive/15 text-destructive" : "bg-muted",
                               )}
                             >
-                              <Plus className="size-3" /> Add
-                            </button>
-                          }
-                        />
-                        <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
-                          {available.map((e) => {
-                            const off = offByCell.get(`${e.id}|${d}`);
-                            return (
-                              <DropdownMenuItem
-                                key={e.id}
-                                onClick={() => add(e.id, d, slot.id)}
-                                className={off ? "text-destructive" : ""}
+                              <span className="truncate">{nameOf.get(s.employee_id)}</span>
+                              <button
+                                type="button"
+                                aria-label="Remove"
+                                disabled={busy}
+                                onClick={() => run(deleteShift(s.id), "Shift removed.")}
+                                className="shrink-0 opacity-60 hover:opacity-100"
                               >
-                                {e.name}
-                                {off ? (
-                                  <span className="ml-auto text-[10px]">
-                                    {off === "approved" ? "off" : "off req."}
-                                  </span>
-                                ) : null}
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                                <X className="size-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
 
-                      {under && assigned.length > 0 && (
-                        <span className="text-[10px] text-amber-600">
-                          {assigned.length}/{slot.tpl.default_headcount}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <button
+                                type="button"
+                                disabled={busy || available.length === 0}
+                                className={cn(
+                                  "flex items-center justify-center gap-1 rounded-md border border-dashed py-1 text-xs transition-colors disabled:opacity-50",
+                                  under
+                                    ? "border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+                                    : "text-muted-foreground hover:bg-muted",
+                                )}
+                              >
+                                <Plus className="size-3" /> Add
+                              </button>
+                            }
+                          />
+                          <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+                            {available.map((e) => {
+                              const off = offByCell.get(`${e.id}|${d}`);
+                              return (
+                                <DropdownMenuItem
+                                  key={e.id}
+                                  onClick={() => add(e.id, d, slotIndex)}
+                                  className={off ? "text-destructive" : ""}
+                                >
+                                  {e.name}
+                                  {off ? (
+                                    <span className="ml-auto text-[10px]">
+                                      {off === "approved" ? "off" : "off req."}
+                                    </span>
+                                  ) : null}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
 
-          {hasCustom && (
+                        {under && assigned.length > 0 && (
+                          <span className="text-[10px] text-amber-600">
+                            {assigned.length}/{headcount}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+
+          {otherShifts.length > 0 && (
             <tr className="border-t align-top">
               <td className="bg-background text-muted-foreground sticky left-0 z-10 p-2 text-xs">
                 Other shifts
               </td>
               {days.map((d) => {
-                const custom = bySlot.get(`custom|${d}`) ?? [];
+                const custom = otherShifts.filter((s) => s.date === d);
                 return (
                   <td key={d} className="border-l p-1.5 align-top">
                     <div className="flex flex-col gap-1">
