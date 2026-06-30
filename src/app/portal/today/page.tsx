@@ -1,15 +1,15 @@
+import { formatInTimeZone } from "date-fns-tz";
 import { requireEmployee } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson } from "@/lib/conversion";
-import { ClientSwipe } from "@/components/portal/client-swipe";
+import { orderFloor, type FloorMember } from "@/lib/floor-queue";
+import { FloorBoard, type BoardRow } from "@/components/portal/floor-board";
 import {
   ConversionStats,
   type PersonRow,
 } from "@/components/portal/conversion-stats";
 import { CloseDayButton } from "@/components/portal/close-day-button";
-
-const hhmm = (t: string) => t.slice(0, 5);
 
 type EventRow = {
   employee_id: string;
@@ -18,9 +18,20 @@ type EventRow = {
   employees: { name: string } | null;
 };
 
+type CheckinRow = {
+  employee_id: string;
+  arrived_at: string;
+  left_at: string | null;
+  status: string;
+  rotation_count: number;
+  employees: { name: string } | null;
+};
+
 export default async function TodayPage() {
   const { employee } = await requireEmployee();
   const service = createServiceClient();
+  const isLead =
+    employee.role === "shift_lead" || employee.role === "store_manager";
 
   const { data: loc } = await service
     .from("locations")
@@ -31,49 +42,72 @@ export default async function TodayPage() {
   const locName = loc?.name ?? "Store";
   const bd = businessDate(tz);
 
-  // Who's working today (published shifts at this location), deduped per person.
-  const { data: rosterRows } = await service
-    .from("shifts")
-    .select(
-      "employee_id, start_time, end_time, employees!inner(name), schedules!inner(status, location_id)",
-    )
-    .eq("date", bd)
-    .eq("schedules.status", "published")
-    .eq("schedules.location_id", employee.location_id)
-    .order("start_time");
-  const roster = new Map<string, { name: string; start: string; end: string }>();
-  for (const r of rosterRows ?? []) {
-    const name = (r.employees as { name: string } | null)?.name ?? "—";
-    if (!roster.has(r.employee_id)) {
-      roster.set(r.employee_id, { name, start: r.start_time, end: r.end_time });
-    }
-  }
+  const [{ data: dayRow }, { data: checkinRows }, { data: roster }, { data: eventRows }, { data: closeRow }] =
+    await Promise.all([
+      service
+        .from("floor_days")
+        .select("opened_at")
+        .eq("location_id", employee.location_id)
+        .eq("business_date", bd)
+        .maybeSingle(),
+      service
+        .from("floor_checkins")
+        .select("employee_id, arrived_at, left_at, status, rotation_count, employees(name)")
+        .eq("location_id", employee.location_id)
+        .eq("business_date", bd),
+      service
+        .from("employees")
+        .select("id, name")
+        .eq("location_id", employee.location_id)
+        .eq("active", true)
+        .order("name"),
+      service
+        .from("client_events")
+        .select("employee_id, sold, got_contact, employees(name)")
+        .eq("location_id", employee.location_id)
+        .eq("business_date", bd),
+      service
+        .from("store_day_closes")
+        .select("id")
+        .eq("location_id", employee.location_id)
+        .eq("business_date", bd)
+        .maybeSingle(),
+    ]);
 
-  // Today's conversion events for the whole location.
-  const { data: eventRows } = await service
-    .from("client_events")
-    .select("employee_id, sold, got_contact, employees(name)")
-    .eq("location_id", employee.location_id)
-    .eq("business_date", bd);
+  const checkins = (checkinRows ?? []) as CheckinRow[];
+  const members: FloorMember[] = checkins.map((c) => ({
+    employeeId: c.employee_id,
+    name: c.employees?.name ?? "—",
+    arrivedAt: c.arrived_at,
+    leftAt: c.left_at,
+    status: c.status === "attending" ? "attending" : "available",
+    rotationCount: c.rotation_count,
+  }));
+  const rows: BoardRow[] = orderFloor(members).map((r) => ({
+    employeeId: r.employeeId,
+    name: r.name,
+    state: r.state,
+    turn: r.turn,
+    arrivedLabel: formatInTimeZone(new Date(r.arrivedAt), tz, "HH:mm"),
+  }));
+
+  const onFloor = new Set(
+    checkins.filter((c) => !c.left_at).map((c) => c.employee_id),
+  );
+  const rosterOptions = (roster ?? []).filter((e) => !onFloor.has(e.id));
+
+  // Conversion stats for the day.
   const events = (eventRows ?? []) as EventRow[];
-
   const store = totals(events);
   const mine = totals(events.filter((e) => e.employee_id === employee.id));
   const nameOf = new Map<string, string>();
   for (const e of events) if (e.employees?.name) nameOf.set(e.employee_id, e.employees.name);
-  for (const [id, r] of roster) if (!nameOf.has(id)) nameOf.set(id, r.name);
+  for (const c of checkins) if (c.employees?.name) nameOf.set(c.employee_id, c.employees.name);
   const people: PersonRow[] = byPerson(events).map((p) => ({
     ...p,
     name: nameOf.get(p.employeeId) ?? "Unknown",
     isMe: p.employeeId === employee.id,
   }));
-
-  const { data: closeRow } = await service
-    .from("store_day_closes")
-    .select("id")
-    .eq("location_id", employee.location_id)
-    .eq("business_date", bd)
-    .maybeSingle();
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,20 +116,13 @@ export default async function TodayPage() {
         <p className="text-muted-foreground text-sm tabular-nums">{bd}</p>
       </div>
 
-      {roster.size > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {[...roster.values()].map((r) => (
-            <span
-              key={r.name + r.start}
-              className="bg-muted rounded-full px-3 py-1 text-xs"
-            >
-              {r.name} · {hhmm(r.start)}–{hhmm(r.end)}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <ClientSwipe />
+      <FloorBoard
+        meId={employee.id}
+        isLead={isLead}
+        open={Boolean(dayRow)}
+        rows={rows}
+        roster={rosterOptions}
+      />
 
       <ConversionStats store={store} mine={mine} people={people} />
 
