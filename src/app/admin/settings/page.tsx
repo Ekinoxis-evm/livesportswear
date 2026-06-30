@@ -1,4 +1,7 @@
 import { createServerClient } from "@/lib/supabase/server";
+import { getSessionUser, isMasterAdmin } from "@/lib/auth";
+import { listAdmins } from "@/server/admins";
+import { AdminsPanel } from "@/components/settings/admins-panel";
 import { getPayPeriod } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
 import {
@@ -63,6 +66,9 @@ export default async function SettingsPage() {
     (goalsByLocation[g.location_id] ??= {})[g.month] = Number(g.goal_amount);
   }
 
+  const master = isMasterAdmin(await getSessionUser());
+  const admins = master ? await listAdmins() : [];
+
   const today = new Date().toISOString().slice(0, 10);
   const { anchor, cap } = await getPayPeriod();
   const sprint = sprintRange(anchor, today);
@@ -88,6 +94,21 @@ export default async function SettingsPage() {
           <CurrencyForm currency={currency} />
         </CardContent>
       </Card>
+
+      {master && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Admins</CardTitle>
+            <CardDescription>
+              Invite store admins scoped to their location(s). You are the master
+              admin with access to every store.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdminsPanel admins={admins} locations={goalLocations} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

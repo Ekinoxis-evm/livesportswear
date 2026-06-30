@@ -1,4 +1,5 @@
 import { createServerClient } from "@/lib/supabase/server";
+import { accessibleLocationIds } from "@/lib/auth";
 import {
   normalizeWeekStart,
   currentWeekStart,
@@ -30,8 +31,9 @@ export default async function SchedulesPage({
     .from("locations")
     .select("id, name, active")
     .order("name");
+  const access = await accessibleLocationIds();
   const activeLocations = (locationRows ?? [])
-    .filter((l) => l.active)
+    .filter((l) => l.active && (access === "all" || access.includes(l.id)))
     .map((l) => ({ id: l.id, name: l.name }));
 
   if (activeLocations.length === 0) {
