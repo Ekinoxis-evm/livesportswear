@@ -130,6 +130,9 @@ the admin dashboard.
 - `location_id uuid fk -> locations`
 - `year int not null`, `month int not null check (1..12)`
 - `goal_amount numeric(12,2) not null default 0`, `currency text`
+- `tiers jsonb` (added 0012) — per store/month commission tiers
+  `[{min_sales, rate}]`; when null, commission falls back to the global
+  `commission_config.tiers`. Set via `setStoreMonth` (goal + tiers together).
 - `created_at, updated_at`
 - `primary key (location_id, year, month)`
 

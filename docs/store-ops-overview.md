@@ -59,25 +59,36 @@ went from a scheduling tool to a full store-operations app for **Lincoln Road** 
 
 ## Data model (new)
 `client_events` (conversion), `store_day_closes` (Close-Day snapshot), `store_goals`
-(monthly targets), `admin_locations` (+ `is_master_admin`/`admin_can_access_location`),
-`floor_days` + `floor_checkins` (the rotation queue). Migrations **0009, 0010, 0011 —
-all applied to the live database.**
+(monthly targets + per-store/month `tiers`), `admin_locations`
+(+ `is_master_admin`/`admin_can_access_location`), `floor_days` + `floor_checkins`
+(the rotation queue), plus structured location address columns. Migrations
+**0009–0013 — all applied to the live database.**
 
-## What's live vs pending
-- **In production** (`livesportswear.vercel.app`, PR #21 merged): portal calendar,
-  AM/PM board + red day-off, goals + dashboard metrics, per-location admins, Resend
-  auth, nav cleanup, conversion stats + Close day.
-- **Pending merge (PR #22)**: the **shop-floor rotation queue** + its server-side
-  authorization hardening. On the preview now; one explicit merge from production.
+## Status — all live in production (`livesportswear.vercel.app`)
+PRs #21–#27 merged. Beyond the phases above, later additions all shipped:
+- Shop-floor **rotation queue** (up-system) with lead/self authorization.
+- **Per-store, per-month** commission tiers (fallback to global) + combined
+  goal+tiers "Store setup"; Settings reorg (pay/rates under Employees).
+- Portal split into **Dashboard / Schedule / Today**; multi-day off requests (1–7).
+- **Inline** day-off approve/reject on the schedule board (separate Time-off page
+  removed); manager crown + AM/PM shift labels; **drafts** panel.
+- **Timezone alignment** — all "today"/week math is store-local
+  (`businessDate(tz)`); both stores on `America/New_York`.
+- **Structured location address** (street/city/state/country/zip) + timezone.
+
+## Email (important)
+Auth (invite + reset) uses **Supabase Auth's built-in email**; admins can also
+**Set password** directly (email-free). **Resend** is for notifications only
+(schedule published / daily report / time-off decision) and needs a **verified
+domain** sender — see `ready-for-keys.md`.
 
 ## Provisioned
 - **Master admin**: `ekinoxis.evm@gmail.com` (all stores).
-- **Lincoln Road admin**: `live.lincolnrd@gmail.com` (scoped). Needs to set a password
-  via `/forgot-password` once Resend is live.
+- **Lincoln Road admin**: `live.lincolnrd@gmail.com` (scoped).
+- Stores: **Miami Lincoln Road** + **International Mall** (both `America/New_York`).
 
-## To finish go-live (your side)
-1. Merge **PR #22** → ships the floor queue to production.
-2. Vercel **Production** env: `RESEND_API_KEY` + **`RESEND_DRY_RUN=false`** (else
-   invites/resets/reports don't send). Shopify POS + Meta keys when ready
-   (`docs/ready-for-keys.md`).
-3. Add **International Mall** under Admin → Locations; scope an admin to it.
+## Remaining (your side, in-app — no code)
+1. Fill in both stores' full **addresses** (Admin → Locations).
+2. Set **International Mall** monthly goals/tiers (Sales & Commission).
+3. Onboard staff via **Set password**.
+4. When ready: connect **Shopify POS** + **Meta** keys (`docs/ready-for-keys.md`).
