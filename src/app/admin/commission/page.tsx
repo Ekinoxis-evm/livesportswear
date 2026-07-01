@@ -1,4 +1,6 @@
 import { createServerClient } from "@/lib/supabase/server";
+import { businessDate } from "@/lib/business-date";
+import { primaryTimezone } from "@/lib/business-tz";
 import {
   commissionFor,
   formatMoney,
@@ -29,7 +31,7 @@ import { StoreMonthForm } from "@/components/commission/store-month-form";
 
 export default async function CommissionPage() {
   const supabase = await createServerClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessDate(await primaryTimezone());
   const month = today.slice(0, 7);
   const year = Number(today.slice(0, 4));
   const monthNum = Number(today.slice(5, 7));

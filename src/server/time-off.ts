@@ -7,6 +7,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin, requireEmployee } from "@/lib/auth";
 import { isValidDateStr, addDays } from "@/lib/scheduling/week";
+import { businessDate } from "@/lib/business-date";
 import { isLateSubmission } from "@/lib/scheduling/payroll";
 import { sendSafe } from "@/lib/resend";
 import { TimeOffDecisionEmail } from "@/lib/emails/time-off-decision";
@@ -39,6 +40,16 @@ function windowError(startDate: string, endDate: string, today: string): string 
   return null;
 }
 
+/** The store-local "today" for a location (cutoffs are day-granular). */
+async function locationToday(locationId: string): Promise<string> {
+  const { data } = await createServiceClient()
+    .from("locations")
+    .select("timezone")
+    .eq("id", locationId)
+    .maybeSingle();
+  return businessDate(data?.timezone ?? "UTC");
+}
+
 const submitSchema = z
   .object({
     token: z.string().min(1),
@@ -62,13 +73,15 @@ export async function submitTimeOff(input: unknown): Promise<ActionResult> {
   const service = createServiceClient();
   const { data: emp } = await service
     .from("employees")
-    .select("id")
+    .select("id, locations(timezone)")
     .eq("magic_token", parsed.data.token)
     .maybeSingle();
   if (!emp) return { ok: false, error: "This link is no longer valid." };
 
-  // Bound the request to a sane window + enforce the planning cutoff.
-  const today = new Date().toISOString().slice(0, 10);
+  // Bound the request to a sane window + enforce the planning cutoff (store-local).
+  const today = businessDate(
+    (emp.locations as { timezone: string } | null)?.timezone ?? "UTC",
+  );
   const winErr = windowError(parsed.data.start_date, parsed.data.end_date, today);
   if (winErr) return { ok: false, error: winErr };
 
@@ -108,7 +121,7 @@ export async function requestOwnTimeOff(input: unknown): Promise<ActionResult> {
   const parsed = ownSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await locationToday(employee.location_id);
   const winErr = windowError(parsed.data.start_date, parsed.data.end_date, today);
   if (winErr) return { ok: false, error: winErr };
 
@@ -138,7 +151,7 @@ export async function requestOwnDaysOff(input: unknown): Promise<ActionResult> {
   const parsed = daysSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await locationToday(employee.location_id);
   const dates = [...new Set(parsed.data.dates)].sort();
   for (const d of dates) {
     const err = windowError(d, d, today);

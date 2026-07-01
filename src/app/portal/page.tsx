@@ -2,6 +2,7 @@ import { requireEmployee } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { weekStart, weekDays, addDays } from "@/lib/scheduling/week";
+import { businessDate } from "@/lib/business-date";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
 import {
   commissionFor,
@@ -31,16 +32,16 @@ export default async function PortalPage() {
   const { employee } = await requireEmployee();
   const supabase = await createServerClient();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const thisWeek = new Set(weekDays(weekStart(today)));
-  const month = today.slice(0, 7);
-
   const { data: location } = await supabase
     .from("locations")
-    .select("name")
+    .select("name, timezone")
     .eq("id", employee.location_id)
     .maybeSingle();
   const locName = location?.name ?? "Live Active Wear";
+  // "Today" in the store's timezone, not the server's UTC.
+  const today = businessDate(location?.timezone ?? "UTC");
+  const thisWeek = new Set(weekDays(weekStart(today)));
+  const month = today.slice(0, 7);
 
   // Hours (published shifts around now).
   const { data: shiftData } = await supabase

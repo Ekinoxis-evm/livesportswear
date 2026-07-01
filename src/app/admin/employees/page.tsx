@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
+import { businessDate } from "@/lib/business-date";
+import { primaryTimezone } from "@/lib/business-tz";
 import { getPayPeriod } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -48,8 +50,8 @@ export default async function EmployeesPage() {
     .select("*, location:locations(name)")
     .order("name");
 
-  // Pay + rates (moved here from Settings).
-  const today = new Date().toISOString().slice(0, 10);
+  // Pay + rates (moved here from Settings). Sprint dates in the store's timezone.
+  const today = businessDate(await primaryTimezone());
   const { anchor, cap } = await getPayPeriod();
   const sprint = sprintRange(anchor, today);
   const nextPayday = payday(anchor, today);

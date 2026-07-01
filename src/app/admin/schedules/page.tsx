@@ -3,11 +3,11 @@ import { accessibleLocationIds } from "@/lib/auth";
 import Link from "next/link";
 import {
   normalizeWeekStart,
-  currentWeekStart,
   weekDays,
   addDays,
   formatWeekRange,
 } from "@/lib/scheduling/week";
+import { businessDate } from "@/lib/business-date";
 import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
 import { validateSchedule, biweeklyHourWarnings } from "@/lib/scheduling/rules";
@@ -31,7 +31,7 @@ export default async function SchedulesPage({
 
   const { data: locationRows } = await supabase
     .from("locations")
-    .select("id, name, active")
+    .select("id, name, active, timezone")
     .order("name");
   const access = await accessibleLocationIds();
   const activeLocations = (locationRows ?? [])
@@ -56,7 +56,12 @@ export default async function SchedulesPage({
   const locationId =
     activeLocations.find((l) => l.id === sp.location)?.id ??
     activeLocations[0].id;
-  const weekStart = normalizeWeekStart(sp.week, currentWeekStart());
+  // Current week anchored to the selected store's timezone, not the server's UTC.
+  const locTz =
+    (locationRows ?? []).find((l) => l.id === locationId)?.timezone ?? "UTC";
+  const thisWeekStart = weekDays(businessDate(locTz))[0];
+  const nextWeekStart = addDays(thisWeekStart, 7);
+  const weekStart = normalizeWeekStart(sp.week, thisWeekStart);
   const days = weekDays(weekStart);
 
   const { data: schedule } = await supabase
@@ -235,6 +240,8 @@ export default async function SchedulesPage({
         locations={activeLocations}
         locationId={locationId}
         weekStart={weekStart}
+        thisWeek={thisWeekStart}
+        nextWeek={nextWeekStart}
       />
 
       {drafts.length > 0 && (
