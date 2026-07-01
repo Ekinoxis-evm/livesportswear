@@ -24,6 +24,10 @@ const locationSchema = z.object({
       "Slug must be lowercase letters, numbers, and hyphens.",
     ),
   address: z.preprocess(emptyToNull, z.string().trim().max(300).nullable()),
+  city: z.preprocess(emptyToNull, z.string().trim().max(120).nullable()),
+  state: z.preprocess(emptyToNull, z.string().trim().max(120).nullable()),
+  country: z.preprocess(emptyToNull, z.string().trim().max(120).nullable()),
+  postal_code: z.preprocess(emptyToNull, z.string().trim().max(20).nullable()),
   timezone: z.string().refine(isValidTimezone, "Unknown timezone."),
   color: z.preprocess(
     emptyToNull,

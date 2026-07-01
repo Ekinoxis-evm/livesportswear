@@ -374,33 +374,45 @@ export type Database = {
         Row: {
           active: boolean
           address: string | null
+          city: string | null
           color: string | null
+          country: string | null
           created_at: string
           id: string
           name: string
+          postal_code: string | null
           slug: string
+          state: string | null
           timezone: string
           updated_at: string
         }
         Insert: {
           active?: boolean
           address?: string | null
+          city?: string | null
           color?: string | null
+          country?: string | null
           created_at?: string
           id?: string
           name: string
+          postal_code?: string | null
           slug: string
+          state?: string | null
           timezone: string
           updated_at?: string
         }
         Update: {
           active?: boolean
           address?: string | null
+          city?: string | null
           color?: string | null
+          country?: string | null
           created_at?: string
           id?: string
           name?: string
+          postal_code?: string | null
           slug?: string
+          state?: string | null
           timezone?: string
           updated_at?: string
         }

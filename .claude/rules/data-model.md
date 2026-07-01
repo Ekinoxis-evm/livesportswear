@@ -7,10 +7,12 @@
 ### `locations`
 A physical store.
 - `id uuid pk`
-- `name text not null` — display name, e.g. "Bogotá Andino"
+- `name text not null` — display name, e.g. "Miami Lincoln Road"
 - `slug text not null unique` — URL-safe
-- `address text`
-- `timezone text not null` — IANA, e.g. `America/Bogota`
+- `address text` — street line
+- `city text`, `state text`, `country text`, `postal_code text` — structured address (0013)
+- `timezone text not null` — IANA, e.g. `America/New_York`. The authoritative
+  reference for all store-local "today"/week math (`businessDate(tz)`).
 - `color text` — hex, used for badges in admin UI
 - `active boolean default true`
 - `created_at, updated_at`
