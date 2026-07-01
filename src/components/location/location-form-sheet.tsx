@@ -41,6 +41,10 @@ const schema = z.object({
       "Lowercase letters, numbers, and hyphens only.",
     ),
   address: z.string().trim().max(300).optional(),
+  city: z.string().trim().max(120).optional(),
+  state: z.string().trim().max(120).optional(),
+  country: z.string().trim().max(120).optional(),
+  postal_code: z.string().trim().max(20).optional(),
   timezone: z.string().min(1, "Pick a timezone."),
   color: z
     .string()
@@ -77,7 +81,11 @@ export function LocationFormSheet({
       name: location?.name ?? "",
       slug: location?.slug ?? "",
       address: location?.address ?? "",
-      timezone: location?.timezone ?? "America/Bogota",
+      city: location?.city ?? "",
+      state: location?.state ?? "",
+      country: location?.country ?? "",
+      postal_code: location?.postal_code ?? "",
+      timezone: location?.timezone ?? "America/New_York",
       color: location?.color ?? "",
     },
   });
@@ -91,6 +99,10 @@ export function LocationFormSheet({
     const payload = {
       ...values,
       address: values.address ?? "",
+      city: values.city ?? "",
+      state: values.state ?? "",
+      country: values.country ?? "",
+      postal_code: values.postal_code ?? "",
       color: values.color ?? "",
       active: location?.active ?? true,
     };
@@ -186,13 +198,32 @@ export function LocationFormSheet({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="address">Address</Label>
-            <Input id="address" {...register("address")} />
+            <Label htmlFor="address">Street address</Label>
+            <Input id="address" {...register("address")} placeholder="731 Lincoln Road" />
             {errors.address && (
               <p className="text-destructive text-sm">
                 {errors.address.message}
               </p>
             )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="city">City</Label>
+              <Input id="city" {...register("city")} placeholder="Miami Beach" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="state">State / region</Label>
+              <Input id="state" {...register("state")} placeholder="FL" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="postal_code">ZIP / postal code</Label>
+              <Input id="postal_code" {...register("postal_code")} placeholder="33139" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="country">Country</Label>
+              <Input id="country" {...register("country")} placeholder="USA" />
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
