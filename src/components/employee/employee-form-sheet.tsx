@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { Employee } from "@/types/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import {
   Sheet,
@@ -62,15 +63,18 @@ const schema = z.object({
   weekly_days_off: z.coerce.number().int().min(0).max(6),
   preferred_days_off: z.array(z.string()),
   hire_date: z.string().optional().or(z.literal("")),
+  hourly_rate: z.string().optional().or(z.literal("")),
 });
 type FormValues = z.input<typeof schema>;
 
 export function EmployeeFormSheet({
   employee,
+  hourlyRate,
   locations,
   children,
 }: {
   employee?: Employee;
+  hourlyRate?: number | null;
   locations: { id: string; name: string }[];
   children: React.ReactElement;
 }) {
@@ -102,6 +106,7 @@ export function EmployeeFormSheet({
       weekly_days_off: employee?.weekly_days_off ?? 2,
       preferred_days_off: employee?.preferred_days_off ?? [],
       hire_date: employee?.hire_date ?? "",
+      hourly_rate: hourlyRate != null ? String(hourlyRate) : "",
     },
   });
 
@@ -302,6 +307,22 @@ export function EmployeeFormSheet({
               })}
             </div>
           </div>
+
+          <Field
+            label="Hourly rate (private)"
+            error={errors.hourly_rate?.message}
+            htmlFor="hourly_rate"
+          >
+            <MoneyInput
+              id="hourly_rate"
+              placeholder="0.00"
+              value={watch("hourly_rate") ?? ""}
+              onValueChange={(v) =>
+                setValue("hourly_rate", v, { shouldValidate: true })
+              }
+              className="w-40"
+            />
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field

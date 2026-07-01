@@ -41,3 +41,24 @@ export function formatMoney(amount: number, currency = "USD"): string {
     return amount.toLocaleString();
   }
 }
+
+/** Coerce a jsonb value into a tier array (invalid entries dropped). */
+export function asTiers(value: unknown): CommissionTier[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (t): t is CommissionTier =>
+      typeof t === "object" &&
+      t !== null &&
+      typeof (t as CommissionTier).min_sales === "number" &&
+      typeof (t as CommissionTier).rate === "number",
+  );
+}
+
+/** A store/month's own tiers if set, else the global fallback. */
+export function resolveTiers(
+  storeTiers: unknown,
+  globalTiers: CommissionTier[],
+): CommissionTier[] {
+  const own = asTiers(storeTiers);
+  return own.length > 0 ? own : globalTiers;
+}

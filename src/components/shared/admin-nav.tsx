@@ -27,7 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/admin/schedules", label: "Schedules", icon: CalendarDays, primary: true },
   { href: "/admin/employees", label: "Employees", icon: Users, primary: true },
   { href: "/admin/time-off", label: "Time off", icon: CalendarOff, primary: true },
-  { href: "/admin/commission", label: "Commission", icon: Percent, primary: false },
+  { href: "/admin/commission", label: "Sales & Commission", icon: Percent, primary: false },
   { href: "/admin/marketing", label: "Marketing", icon: Megaphone, primary: false },
   { href: "/admin/locations", label: "Locations", icon: MapPin, primary: false },
   { href: "/admin/settings", label: "Settings", icon: Settings, primary: false },

@@ -127,6 +127,41 @@ export async function requestOwnTimeOff(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+const daysSchema = z.object({
+  dates: z.array(z.string().refine(isValidDateStr, "Invalid date.")).min(1).max(7),
+  reason: z.preprocess(emptyToNull, z.string().max(500).nullable()),
+});
+
+/** Authenticated portal request for specific individual days off (1–7). */
+export async function requestOwnDaysOff(input: unknown): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const parsed = daysSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dates = [...new Set(parsed.data.dates)].sort();
+  for (const d of dates) {
+    const err = windowError(d, d, today);
+    if (err) return { ok: false, error: `${d}: ${err}` };
+  }
+
+  // RLS self-insert policy checks employee_id = current_employee_id().
+  const supabase = await createServerClient();
+  const { error } = await supabase.from("time_off_requests").insert(
+    dates.map((d) => ({
+      employee_id: employee.id,
+      start_date: d,
+      end_date: d,
+      reason: parsed.data.reason,
+      status: "pending",
+    })),
+  );
+  if (error) return { ok: false, error: dbError(error) };
+
+  revalidatePath("/portal");
+  return { ok: true };
+}
+
 const decisionSchema = z.object({
   status: z.enum(["approved", "rejected"]),
   note: z.preprocess(emptyToNull, z.string().max(500).nullable()),

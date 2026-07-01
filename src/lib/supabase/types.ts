@@ -657,6 +657,7 @@ export type Database = {
           goal_amount: number
           location_id: string
           month: number
+          tiers: Json | null
           updated_at: string
           year: number
         }
@@ -666,6 +667,7 @@ export type Database = {
           goal_amount?: number
           location_id: string
           month: number
+          tiers?: Json | null
           updated_at?: string
           year: number
         }
@@ -675,6 +677,7 @@ export type Database = {
           goal_amount?: number
           location_id?: string
           month?: number
+          tiers?: Json | null
           updated_at?: string
           year?: number
         }

@@ -1,10 +1,12 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { accessibleLocationIds } from "@/lib/auth";
+import Link from "next/link";
 import {
   normalizeWeekStart,
   currentWeekStart,
   weekDays,
   addDays,
+  formatWeekRange,
 } from "@/lib/scheduling/week";
 import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
@@ -67,7 +69,7 @@ export default async function SchedulesPage({
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, name, avatar_color, weekly_hour_target, max_days_per_week, weekly_days_off, preferred_days_off",
+      "id, name, role, avatar_color, weekly_hour_target, max_days_per_week, weekly_days_off, preferred_days_off",
     )
     .eq("location_id", locationId)
     .eq("active", true)
@@ -147,6 +149,24 @@ export default async function SchedulesPage({
   for (const r of timeOff ?? []) addOff(r.employee_id, r.start_date, r.end_date, "approved");
   for (const r of pending) addOff(r.employee_id, r.start_date, r.end_date, "pending");
 
+  // Draft schedules in progress (so work-in-progress is easy to find & resume).
+  const locNameById = new Map((locationRows ?? []).map((l) => [l.id, l.name]));
+  const { data: draftRows } = await supabase
+    .from("schedules")
+    .select("location_id, week_start, shifts(count)")
+    .eq("status", "draft");
+  const drafts = (draftRows ?? [])
+    .map((d) => ({
+      location_id: d.location_id,
+      week_start: d.week_start,
+      count: (d.shifts as { count: number }[] | null)?.[0]?.count ?? 0,
+    }))
+    .filter(
+      (d) =>
+        d.count > 0 && (access === "all" || access.includes(d.location_id)),
+    )
+    .sort((a, b) => b.week_start.localeCompare(a.week_start));
+
   // Weekly hours per employee (for the grid).
   const hoursByEmployee: Record<string, number> = {};
   for (const s of shiftRows) {
@@ -212,6 +232,38 @@ export default async function SchedulesPage({
         locationId={locationId}
         weekStart={weekStart}
       />
+
+      {drafts.length > 0 && (
+        <div className="bg-muted/40 flex flex-col gap-2 rounded-lg border p-3">
+          <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            Drafts in progress
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {drafts.map((d) => {
+              const isCurrent =
+                d.location_id === locationId && d.week_start === weekStart;
+              return (
+                <Link
+                  key={`${d.location_id}-${d.week_start}`}
+                  href={`/admin/schedules?location=${d.location_id}&week=${d.week_start}`}
+                  className={
+                    "rounded-md border px-2.5 py-1 text-xs transition-colors " +
+                    (isCurrent
+                      ? "border-primary bg-primary/10"
+                      : "hover:bg-muted bg-background")
+                  }
+                >
+                  <span className="font-medium">{locNameById.get(d.location_id) ?? "—"}</span>{" "}
+                  <span className="text-muted-foreground tabular-nums">
+                    {formatWeekRange(d.week_start)} · {d.count} shift
+                    {d.count === 1 ? "" : "s"}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {pending.length > 0 && (
         <Alert>

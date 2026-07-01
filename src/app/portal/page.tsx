@@ -1,23 +1,14 @@
 import { requireEmployee } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import {
-  weekStart,
-  weekDays,
-  addDays,
-  isoWeekday,
-  formatWeekRange,
-} from "@/lib/scheduling/week";
-import { SHORT_WEEKDAYS } from "@/lib/weekdays";
+import { weekStart, weekDays, addDays } from "@/lib/scheduling/week";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
 import {
   commissionFor,
   formatMoney,
-  type CommissionTier,
+  asTiers,
+  resolveTiers,
 } from "@/lib/commission";
-import { googleCalendarUrl, webcalUrl } from "@/lib/calendar-links";
-import { ScheduleView, type DayCell } from "@/components/portal/schedule-view";
-import { RequestDayOff } from "@/components/portal/request-day-off";
 import {
   Card,
   CardContent,
@@ -25,11 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
 import { PhotoUpload } from "@/components/portal/photo-upload";
-import { CopyButton } from "@/components/shared/copy-button";
-
-const hhmm = (t: string) => t.slice(0, 5);
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -47,31 +34,25 @@ export default async function PortalPage() {
   const today = new Date().toISOString().slice(0, 10);
   const thisWeek = new Set(weekDays(weekStart(today)));
   const month = today.slice(0, 7);
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   const { data: location } = await supabase
     .from("locations")
-    .select("name, address, timezone")
+    .select("name")
     .eq("id", employee.location_id)
     .maybeSingle();
-  const tz = location?.timezone ?? "UTC";
   const locName = location?.name ?? "Live Active Wear";
 
+  // Hours (published shifts around now).
   const { data: shiftData } = await supabase
     .from("shifts")
     .select(
-      "id, employee_id, date, start_time, end_time, shift_template_id, template:shift_templates(name), schedules!inner(status)",
+      "id, employee_id, date, start_time, end_time, shift_template_id, schedules!inner(status)",
     )
     .eq("employee_id", employee.id)
     .eq("schedules.status", "published")
     .gte("date", addDays(today, -35))
-    .lte("date", addDays(today, 40))
-    .order("date");
-  const shifts = (shiftData ?? []) as (StatShift & {
-    id: string;
-    template: { name: string } | null;
-  })[];
-
+    .lte("date", addDays(today, 40));
+  const shifts = (shiftData ?? []) as StatShift[];
   const weekStats = employeeStats(
     shifts.filter((s) => thisWeek.has(s.date)),
     employee.id,
@@ -81,14 +62,21 @@ export default async function PortalPage() {
     employee.id,
   );
 
-  // Commission
+  // Sales & commission (uses the employee's store/month tiers).
   const { data: cfg } = await supabase
     .from("commission_config")
     .select("currency, tiers")
     .eq("id", 1)
     .maybeSingle();
   const currency = cfg?.currency ?? "USD";
-  const tiers = (cfg?.tiers ?? []) as unknown as CommissionTier[];
+  const { data: storeGoal } = await supabase
+    .from("store_goals")
+    .select("tiers")
+    .eq("location_id", employee.location_id)
+    .eq("year", Number(month.slice(0, 4)))
+    .eq("month", Number(month.slice(5, 7)))
+    .maybeSingle();
+  const tiers = resolveTiers(storeGoal?.tiers, asTiers(cfg?.tiers));
   const { data: compRow } = await supabase
     .from("employee_compensation")
     .select("hourly_rate")
@@ -112,62 +100,8 @@ export default async function PortalPage() {
   const rank =
     (peerSales ?? []).filter((s) => Number(s.amount) > mySales).length + 1;
 
-  // Weekly calendar (current week): my shifts + the store roster, per day.
-  const weekDates = weekDays(weekStart(today));
-  const myByDate = new Map<string, typeof shifts>();
-  for (const s of shifts.filter((s) => thisWeek.has(s.date))) {
-    const arr = myByDate.get(s.date) ?? [];
-    arr.push(s);
-    myByDate.set(s.date, arr);
-  }
-
-  const { data: storeShiftRows } = await service
-    .from("shifts")
-    .select(
-      "date, start_time, end_time, employee_id, employees!inner(name), schedules!inner(status, location_id, week_start)",
-    )
-    .eq("schedules.location_id", employee.location_id)
-    .eq("schedules.status", "published")
-    .eq("schedules.week_start", weekStart(today))
-    .order("start_time");
-
-  const scheduleDays: DayCell[] = weekDates.map((d) => ({
-    date: d,
-    weekday: SHORT_WEEKDAYS[isoWeekday(d) - 1],
-    dayNum: d.slice(8, 10),
-    isToday: d === today,
-    mine: (myByDate.get(d) ?? [])
-      .sort((a, b) => a.start_time.localeCompare(b.start_time))
-      .map((s) => {
-        const name = s.template?.name ?? "Shift";
-        return {
-          time: `${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
-          title: name,
-          gcal: googleCalendarUrl({
-            title: `${name} · ${locName}`,
-            date: s.date,
-            start: s.start_time,
-            end: s.end_time,
-            tz,
-            location: location?.address ?? locName,
-          }),
-        };
-      }),
-    store: (storeShiftRows ?? [])
-      .filter((r) => r.date === d)
-      .map((r) => ({
-        name: (r.employees as { name: string } | null)?.name ?? "—",
-        time: `${hhmm(r.start_time)}–${hhmm(r.end_time)}`,
-        isMe: r.employee_id === employee.id,
-      })),
-  }));
-  const weekLabel = formatWeekRange(weekStart(today));
-
-  const icsUrl = `${appUrl}/s/${employee.magic_token}/calendar.ics`;
-
   return (
     <div className="flex flex-col gap-6">
-      {/* Profile */}
       <Card>
         <CardContent className="flex flex-col gap-3 pt-6">
           <div className="flex items-center justify-between gap-4">
@@ -185,30 +119,6 @@ export default async function PortalPage() {
         </CardContent>
       </Card>
 
-      {/* Schedule + calendar */}
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle className="text-base">Schedule</CardTitle>
-            <CardDescription>This week — yours and the store.</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <RequestDayOff />
-            <a href={webcalUrl(icsUrl)} className={buttonVariants({ size: "sm" })}>
-              Subscribe
-            </a>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <ScheduleView days={scheduleDays} weekLabel={weekLabel} />
-          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
-            <span>Google Calendar (whole schedule): add this URL under “From URL”.</span>
-            <CopyButton value={icsUrl} label="Copy feed URL" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Hours */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
@@ -231,7 +141,6 @@ export default async function PortalPage() {
         </Card>
       </div>
 
-      {/* Commission */}
       {tiers.length > 0 && (
         <Card>
           <CardHeader>
@@ -242,16 +151,13 @@ export default async function PortalPage() {
             <div className="flex flex-wrap gap-8">
               <Stat label="Sales" value={formatMoney(mySales, currency)} />
               <Stat label="Rate" value={`${(commission.rate * 100).toFixed(1)}%`} />
-              <Stat
-                label="Commission"
-                value={formatMoney(commission.earned, currency)}
-              />
+              <Stat label="Commission" value={formatMoney(commission.earned, currency)} />
               <Stat label="Rank" value={`#${rank}`} />
             </div>
             {commission.nextTier ? (
               <p className="text-muted-foreground text-sm">
-                {formatMoney(commission.nextTier.remaining, currency)} more in
-                sales to reach {(commission.nextTier.rate * 100).toFixed(1)}%.
+                {formatMoney(commission.nextTier.remaining, currency)} more in sales to
+                reach {(commission.nextTier.rate * 100).toFixed(1)}%.
               </p>
             ) : (
               <p className="text-muted-foreground text-sm">
