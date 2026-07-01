@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Zap } from "lucide-react";
+import { Home, CalendarDays, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/portal", label: "Home", icon: Home },
+  { href: "/portal/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/portal/today", label: "Today", icon: Zap },
 ];
 
