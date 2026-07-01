@@ -27,7 +27,12 @@ type Employee = {
   role: string;
   avatar_color: string | null;
 };
-type DayOff = { employee_id: string; date: string; status: "approved" | "pending" };
+type DayOff = {
+  id: string;
+  employee_id: string;
+  date: string;
+  status: "approved" | "pending";
+};
 
 export function ScheduleWorkspace(props: {
   scheduleId: string | null;

@@ -33,7 +33,12 @@ export async function sendSafe(args: SendArgs): Promise<SendResult> {
   }
 
   if (!from) {
+    console.error("[email] SENDER_EMAIL_ADDRESS is not configured");
     return { ok: false, error: "SENDER_EMAIL_ADDRESS is not configured" };
+  }
+  if (!process.env.RESEND_API_KEY) {
+    console.error("[email] RESEND_API_KEY is not configured");
+    return { ok: false, error: "RESEND_API_KEY is not configured" };
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY);
@@ -48,8 +53,13 @@ export async function sendSafe(args: SendArgs): Promise<SendResult> {
   });
 
   if (error) {
+    // Surface the reason (masked recipient) so delivery issues are debuggable.
+    console.error(
+      `[email] send failed to=${maskEmail(to)} from=${from} subject="${subject}": ${error.message}`,
+    );
     return { ok: false, error: error.message };
   }
 
+  console.log(`[email] sent id=${data?.id ?? "?"} to=${maskEmail(to)} from=${from}`);
   return { ok: true, id: data?.id };
 }

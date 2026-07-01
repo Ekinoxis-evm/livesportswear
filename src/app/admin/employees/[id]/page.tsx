@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmployeeAccessActions } from "@/components/employee/account-actions";
 import { AdminRoleActions } from "@/components/employee/admin-role-actions";
+import { SetPasswordButton } from "@/components/employee/set-password-button";
 import { getEmployeeAuthRole } from "@/server/employee-accounts";
 import { formatMoney } from "@/lib/commission";
 
@@ -196,10 +197,13 @@ export default async function EmployeeDetailPage({
                   : "Invite to give them an email + password login."}
               </span>
             </div>
-            <EmployeeAccessActions
-              id={emp.id}
-              linked={Boolean(emp.auth_user_id)}
-            />
+            <div className="flex items-center gap-2">
+              <SetPasswordButton id={emp.id} name={emp.name} />
+              <EmployeeAccessActions
+                id={emp.id}
+                linked={Boolean(emp.auth_user_id)}
+              />
+            </div>
           </div>
           {emp.auth_user_id && (
             <div className="flex items-center justify-between gap-2">

@@ -5,11 +5,18 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/auth";
-import { sendSafe } from "@/lib/resend";
-import { InviteEmail } from "@/lib/emails/invite";
+import { randomBytes } from "node:crypto";
 import { type ActionResult, dbError } from "@/server/shared";
 
 const uuid = z.string().uuid();
+
+/** A readable, strong temporary password (no ambiguous characters). */
+function tempPassword(): string {
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  let out = "";
+  for (const b of randomBytes(10)) out += chars[b % chars.length];
+  return `Live-${out}`;
+}
 
 /** Invite an employee to the portal: create their auth user (role=employee) and link it. */
 export async function inviteEmployee(employeeId: string): Promise<ActionResult> {
@@ -21,7 +28,7 @@ export async function inviteEmployee(employeeId: string): Promise<ActionResult> 
   const supabase = await createServerClient();
   const { data: emp, error } = await supabase
     .from("employees")
-    .select("id, name, email, auth_user_id, locations(name)")
+    .select("id, email, auth_user_id")
     .eq("id", employeeId)
     .single();
   if (error || !emp) return { ok: false, error: "Employee not found." };
@@ -32,18 +39,16 @@ export async function inviteEmployee(employeeId: string): Promise<ActionResult> 
   const service = createServiceClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
-  // Generate the invite link ourselves (instead of inviteUserByEmail) so we can
-  // deliver it through Resend rather than Supabase's built-in SMTP.
-  const { data: link, error: linkErr } = await service.auth.admin.generateLink({
-    type: "invite",
-    email: emp.email,
-    options: { redirectTo: `${appUrl}/reset-password` },
+  // Supabase Auth sends the invite email (its built-in service). The employee
+  // sets their password via the link; no custom-domain sender required.
+  const invited = await service.auth.admin.inviteUserByEmail(emp.email, {
+    redirectTo: `${appUrl}/reset-password`,
   });
-  if (linkErr || !link.user || !link.properties) {
-    return { ok: false, error: linkErr?.message ?? "Couldn't create the invite." };
+  if (invited.error || !invited.data.user) {
+    return { ok: false, error: invited.error?.message ?? "Couldn't invite." };
   }
 
-  const userId = link.user.id;
+  const userId = invited.data.user.id;
   const claimed = await service.auth.admin.updateUserById(userId, {
     app_metadata: { role: "employee", employee_id: emp.id },
   });
@@ -55,23 +60,57 @@ export async function inviteEmployee(employeeId: string): Promise<ActionResult> 
     .eq("id", emp.id);
   if (linked.error) return { ok: false, error: dbError(linked.error) };
 
-  const sent = await sendSafe({
-    to: emp.email,
-    subject: "Set up your Live team portal access",
-    react: InviteEmail({
-      employeeName: emp.name,
-      actionUrl: link.properties.action_link,
-      appUrl,
-      locationName: emp.locations?.name,
-    }),
-  });
-  if (!sent.ok) {
-    // Account exists now; surface a soft error so the admin can resend.
-    return { ok: false, error: `Account created, but the email failed: ${sent.error}` };
+  revalidatePath(`/admin/employees/${emp.id}`);
+  return { ok: true };
+}
+
+/**
+ * Set (or reset) an employee's portal password directly — no email needed.
+ * Creates their account if they don't have one yet. Returns the generated
+ * password once for the admin to hand over; the employee can change it after
+ * signing in. Admin-only.
+ */
+export async function setEmployeePassword(
+  employeeId: string,
+): Promise<ActionResult<{ password: string; email: string }>> {
+  await requireAdmin();
+  if (!uuid.safeParse(employeeId).success) {
+    return { ok: false, error: "Invalid employee id." };
+  }
+
+  const supabase = await createServerClient();
+  const { data: emp } = await supabase
+    .from("employees")
+    .select("id, email, auth_user_id")
+    .eq("id", employeeId)
+    .maybeSingle();
+  if (!emp) return { ok: false, error: "Employee not found." };
+
+  const service = createServiceClient();
+  const password = tempPassword();
+
+  if (emp.auth_user_id) {
+    const upd = await service.auth.admin.updateUserById(emp.auth_user_id, { password });
+    if (upd.error) return { ok: false, error: upd.error.message };
+  } else {
+    const created = await service.auth.admin.createUser({
+      email: emp.email,
+      password,
+      email_confirm: true,
+      app_metadata: { role: "employee", employee_id: emp.id },
+    });
+    if (created.error || !created.data.user) {
+      return { ok: false, error: created.error?.message ?? "Couldn't create the account." };
+    }
+    const linked = await service
+      .from("employees")
+      .update({ auth_user_id: created.data.user.id })
+      .eq("id", emp.id);
+    if (linked.error) return { ok: false, error: dbError(linked.error) };
   }
 
   revalidatePath(`/admin/employees/${emp.id}`);
-  return { ok: true };
+  return { ok: true, data: { password, email: emp.email } };
 }
 
 /** Revoke portal access: delete the auth user and unlink. */
