@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/shared/copy-button";
 import { EmployeeAccessActions } from "@/components/employee/account-actions";
 import { AdminRoleActions } from "@/components/employee/admin-role-actions";
-import { HourlyRateForm } from "@/components/employee/hourly-rate-form";
 import { getEmployeeAuthRole } from "@/server/employee-accounts";
 import { formatMoney } from "@/lib/commission";
 
@@ -215,11 +214,15 @@ export default async function EmployeeDetailPage({
               <AdminRoleActions id={emp.id} isAdmin={authRole === "admin"} />
             </div>
           )}
-          <HourlyRateForm
-            employeeId={emp.id}
-            rate={hourlyRate}
-            currency={currency}
-          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm">Hourly rate</span>
+            <span className="text-sm tabular-nums">
+              {hourlyRate != null ? `${formatMoney(hourlyRate, currency)} / h` : "—"}
+              <span className="text-muted-foreground ml-2 text-xs">
+                edit via the employee list
+              </span>
+            </span>
+          </div>
           {monthLaborCost != null && (
             <p className="text-muted-foreground text-sm tabular-nums">
               Est. labor cost this month: {formatMoney(monthLaborCost, currency)}{" "}

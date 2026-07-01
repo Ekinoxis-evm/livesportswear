@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/table";
 import { EmployeeFormSheet } from "@/components/employee/employee-form-sheet";
 import { EmployeeRowActions } from "@/components/employee/employee-actions";
-import { RatesTable } from "@/components/settings/rates-table";
 import { PayPeriodForm } from "@/components/settings/pay-period-form";
+import { formatMoney } from "@/lib/commission";
 
 const ROLE_LABELS: Record<string, string> = {
   sales_rep: "Sales rep",
@@ -64,9 +64,6 @@ export default async function EmployeesPage() {
     .from("employee_compensation")
     .select("employee_id, hourly_rate");
   const rateBy = new Map((comp ?? []).map((c) => [c.employee_id, c.hourly_rate]));
-  const rates = (employees ?? [])
-    .filter((e) => e.active)
-    .map((e) => ({ id: e.id, name: e.name, rate: rateBy.get(e.id) ?? null }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -111,22 +108,6 @@ export default async function EmployeesPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Hourly rates</CardTitle>
-          <CardDescription>
-            Private — used for labor-cost estimates. Never shown to employees.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {rates.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No active employees.</p>
-          ) : (
-            <RatesTable employees={rates} currency={currency} />
-          )}
-        </CardContent>
-      </Card>
-
       {activeLocations.length === 0 ? (
         <Alert>
           <AlertTitle>Add a location first</AlertTitle>
@@ -153,6 +134,7 @@ export default async function EmployeesPage() {
               <TableHead>Role</TableHead>
               <TableHead className="hidden md:table-cell">Location</TableHead>
               <TableHead className="hidden md:table-cell">Rules</TableHead>
+              <TableHead className="hidden tabular-nums sm:table-cell">Rate</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -194,6 +176,11 @@ export default async function EmployeesPage() {
                   {emp.weekly_hour_target}h · ≤{emp.max_days_per_week}d · ≥
                   {emp.weekly_days_off} off
                 </TableCell>
+                <TableCell className="hidden tabular-nums sm:table-cell">
+                  {rateBy.get(emp.id) != null
+                    ? `${formatMoney(Number(rateBy.get(emp.id)), currency)}/h`
+                    : "—"}
+                </TableCell>
                 <TableCell>
                   <Badge variant={emp.active ? "default" : "secondary"}>
                     {emp.active ? "Active" : "Inactive"}
@@ -203,6 +190,7 @@ export default async function EmployeesPage() {
                   <div className="flex justify-end gap-1">
                     <EmployeeFormSheet
                       employee={emp}
+                      hourlyRate={rateBy.get(emp.id) ?? null}
                       locations={activeLocations}
                     >
                       <Button variant="ghost" size="sm">

@@ -44,12 +44,19 @@ const employeeSchema = z.object({
   active: z.boolean(),
 });
 
+const hourlyRate = z.preprocess(
+  emptyToNull,
+  z.coerce.number().min(0).max(100000).nullable(),
+);
+
 const withAccessSchema = employeeSchema.extend({
-  hourly_rate: z.preprocess(
-    emptyToNull,
-    z.coerce.number().min(0).max(100000).nullable(),
-  ),
+  hourly_rate: hourlyRate,
   invite: z.boolean().default(false),
+});
+
+// Edit form carries the (optional) hourly rate alongside the core fields.
+const editSchema = employeeSchema.extend({
+  hourly_rate: hourlyRate.optional(),
 });
 
 const uuid = z.string().uuid();
@@ -81,8 +88,9 @@ export async function updateEmployee(
   if (!uuid.safeParse(id).success) {
     return { ok: false, error: "Invalid employee id." };
   }
-  const parsed = employeeSchema.safeParse(input);
+  const parsed = editSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { hourly_rate, ...employee } = parsed.data;
 
   const supabase = await createServerClient();
 
@@ -94,19 +102,28 @@ export async function updateEmployee(
     .single();
   if (readError) return { ok: false, error: dbError(readError) };
 
-  const rotate =
-    current.email.toLowerCase() !== parsed.data.email.toLowerCase();
+  const rotate = current.email.toLowerCase() !== employee.email.toLowerCase();
 
   const { error } = await supabase
     .from("employees")
     .update({
-      ...parsed.data,
+      ...employee,
       ...(rotate ? { magic_token: generateMagicToken() } : {}),
     })
     .eq("id", id);
 
   if (error) return { ok: false, error: dbError(error, EMAIL_TAKEN) };
+
+  // Hourly rate (private, employee_compensation) is edited here too.
+  if (hourly_rate !== undefined) {
+    const { error: compErr } = await supabase
+      .from("employee_compensation")
+      .upsert({ employee_id: id, hourly_rate }, { onConflict: "employee_id" });
+    if (compErr) return { ok: false, error: dbError(compErr) };
+  }
+
   revalidatePath("/admin/employees");
+  revalidatePath(`/admin/employees/${id}`);
   return { ok: true };
 }
 

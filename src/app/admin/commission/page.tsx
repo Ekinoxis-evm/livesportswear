@@ -24,11 +24,8 @@ import {
 } from "@/components/ui/table";
 import { CommissionConfigForm } from "@/components/commission/config-form";
 import { SalesEntry } from "@/components/commission/sales-entry";
-import {
-  StoreGoalsForm,
-  type GoalsByLocation,
-} from "@/components/settings/store-goals-form";
-import { StoreTiersForm } from "@/components/commission/store-tiers-form";
+import type { GoalsByLocation } from "@/components/settings/store-goals-form";
+import { StoreMonthForm } from "@/components/commission/store-month-form";
 
 export default async function CommissionPage() {
   const supabase = await createServerClient();
@@ -109,52 +106,36 @@ export default async function CommissionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Monthly sales goals</CardTitle>
-          <CardDescription>Target per store, per month ({year}).</CardDescription>
+          <CardTitle className="text-base">Store setup — goal &amp; commission</CardTitle>
+          <CardDescription>
+            Pick a store and month, then set that month&apos;s sales goal and its
+            commission tiers together. Tiers fall back to the global default below.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <StoreGoalsForm
+          <StoreMonthForm
             locations={locations}
             year={year}
+            month={monthNum}
             goalsByLocation={goalsByLocation}
+            tiersByKey={tiersByKey}
+            globalTiers={globalTiers}
             currency={currency}
           />
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Commission tiers — per store &amp; month</CardTitle>
-            <CardDescription>
-              Set a store&apos;s rates for a specific month. Falls back to the global
-              default below when not set.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <StoreTiersForm
-              locations={locations}
-              year={year}
-              month={monthNum}
-              tiersByKey={tiersByKey}
-              globalTiers={globalTiers}
-              currency={currency}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Global default tiers</CardTitle>
-            <CardDescription>
-              Used for any store/month without its own tiers.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CommissionConfigForm tiers={globalTiers} currency={currency} />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Global default tiers</CardTitle>
+          <CardDescription>
+            Used for any store/month without its own tiers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <CommissionConfigForm tiers={globalTiers} currency={currency} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
