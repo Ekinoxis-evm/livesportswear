@@ -4,8 +4,6 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireMasterAdmin } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { sendSafe } from "@/lib/resend";
-import { InviteEmail } from "@/lib/emails/invite";
 import { type ActionResult, dbError } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -65,16 +63,15 @@ export async function inviteAdmin(input: unknown): Promise<ActionResult> {
 
   const service = createServiceClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const { data: link, error: linkErr } = await service.auth.admin.generateLink({
-    type: "invite",
-    email,
-    options: { redirectTo: `${appUrl}/reset-password` },
+  // Supabase Auth sends the invite email (built-in service).
+  const invited = await service.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${appUrl}/reset-password`,
   });
-  if (linkErr || !link.user || !link.properties) {
-    return { ok: false, error: linkErr?.message ?? "Couldn't create the invite." };
+  if (invited.error || !invited.data.user) {
+    return { ok: false, error: invited.error?.message ?? "Couldn't invite." };
   }
 
-  const userId = link.user.id;
+  const userId = invited.data.user.id;
   const upd = await service.auth.admin.updateUserById(userId, {
     app_metadata: { role: "admin", admin_scope: "location" },
   });
@@ -85,20 +82,6 @@ export async function inviteAdmin(input: unknown): Promise<ActionResult> {
     .from("admin_locations")
     .upsert(rows, { onConflict: "admin_user_id,location_id" });
   if (ins.error) return { ok: false, error: dbError(ins.error) };
-
-  const sent = await sendSafe({
-    to: email,
-    subject: "You're invited as a Live store admin",
-    react: InviteEmail({
-      employeeName: "there",
-      actionUrl: link.properties.action_link,
-      appUrl,
-      role: "admin",
-    }),
-  });
-  if (!sent.ok) {
-    return { ok: false, error: `Admin created, but the email failed: ${sent.error}` };
-  }
 
   revalidatePath("/admin/settings");
   return { ok: true };
