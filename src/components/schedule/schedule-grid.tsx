@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, CalendarOff } from "lucide-react";
+import { Plus, CalendarOff, Crown } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import {
@@ -60,8 +60,20 @@ type Template = {
   end_time: string;
   color: string | null;
 };
-type Employee = { id: string; name: string; avatar_color: string | null };
+type Employee = { id: string; name: string; role: string; avatar_color: string | null };
 type DayOff = { employee_id: string; date: string; status: "approved" | "pending" };
+
+/** Canonical AM/PM label for a shift, or the template name / "Custom". */
+function shiftSlotLabel(
+  s: { shift_template_id: string | null; start_time: string; end_time: string },
+  templates: Template[],
+  fallback: string,
+): string {
+  const slot = SHIFT_SLOTS.find((sl) =>
+    shiftMatchesSlot(s, sl, templateForSlot(sl, templates)),
+  );
+  return slot?.label ?? fallback;
+}
 
 type EditorCtx = { employeeId: string; date: string; shift: Shift | null };
 
@@ -280,7 +292,12 @@ export function ScheduleGrid({
                         }}
                       />
                       <span className="flex flex-col">
-                        {emp.name}
+                        <span className="flex items-center gap-1">
+                          {emp.role === "store_manager" && (
+                            <Crown className="size-3 shrink-0 text-amber-500" />
+                          )}
+                          {emp.name}
+                        </span>
                         <span className="text-muted-foreground text-xs tabular-nums">
                           {(hoursByEmployee[emp.id] ?? 0).toFixed(1)}h ·{" "}
                           {daysWorked.get(emp.id)?.size ?? 0}d
@@ -328,7 +345,7 @@ export function ScheduleGrid({
                                 }}
                               >
                                 <span className="font-medium">
-                                  {tpl?.name ?? "Custom"}
+                                  {shiftSlotLabel(s, templates, tpl?.name ?? "Custom")}
                                 </span>
                                 <span className="text-muted-foreground tabular-nums">
                                   {hhmm(s.start_time)}–{hhmm(s.end_time)}

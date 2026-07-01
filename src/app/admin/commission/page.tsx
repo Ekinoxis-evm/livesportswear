@@ -2,6 +2,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import {
   commissionFor,
   formatMoney,
+  asTiers,
+  resolveTiers,
   type CommissionTier,
 } from "@/lib/commission";
 import {
@@ -20,13 +22,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CommissionConfigForm } from "@/components/commission/config-form";
 import { SalesEntry } from "@/components/commission/sales-entry";
+import {
+  StoreGoalsForm,
+  type GoalsByLocation,
+} from "@/components/settings/store-goals-form";
+import { StoreTiersForm } from "@/components/commission/store-tiers-form";
 
 export default async function CommissionPage() {
   const supabase = await createServerClient();
-  const month = new Date().toISOString().slice(0, 7);
+  const today = new Date().toISOString().slice(0, 10);
+  const month = today.slice(0, 7);
+  const year = Number(today.slice(0, 4));
+  const monthNum = Number(today.slice(5, 7));
 
   const { data: config } = await supabase
     .from("commission_config")
@@ -34,87 +43,152 @@ export default async function CommissionPage() {
     .eq("id", 1)
     .maybeSingle();
   const currency = config?.currency ?? "USD";
-  // tiers is jsonb (untyped at the DB layer).
-  const tiers = (config?.tiers ?? []) as unknown as CommissionTier[];
+  const globalTiers = asTiers(config?.tiers);
+
+  const { data: locationRows } = await supabase
+    .from("locations")
+    .select("id, name")
+    .eq("active", true)
+    .order("name");
+  const locations = locationRows ?? [];
+
+  const { data: goalRows } = await supabase
+    .from("store_goals")
+    .select("location_id, month, goal_amount, tiers")
+    .eq("year", year);
+  const goalsByLocation: GoalsByLocation = {};
+  const tiersByKey: Record<string, CommissionTier[]> = {};
+  const monthTiersByLoc: Record<string, CommissionTier[]> = {};
+  for (const g of goalRows ?? []) {
+    (goalsByLocation[g.location_id] ??= {})[g.month] = Number(g.goal_amount);
+    const t = asTiers(g.tiers);
+    if (t.length) tiersByKey[`${g.location_id}-${g.month}`] = t;
+    if (g.month === monthNum) monthTiersByLoc[g.location_id] = resolveTiers(g.tiers, globalTiers);
+  }
 
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, name")
+    .select("id, name, location_id, locations(name)")
     .eq("active", true)
     .order("name");
   const { data: sales } = await supabase
     .from("monthly_sales")
     .select("employee_id, amount")
     .eq("month", month);
-  const salesBy = new Map(
-    (sales ?? []).map((s) => [s.employee_id, Number(s.amount)]),
-  );
+  const salesBy = new Map((sales ?? []).map((s) => [s.employee_id, Number(s.amount)]));
 
-  const emps = (employees ?? []).map((e) => ({
+  const ranking = (employees ?? [])
+    .map((e) => {
+      const amount = salesBy.get(e.id) ?? 0;
+      const tiers = monthTiersByLoc[e.location_id] ?? globalTiers;
+      return {
+        id: e.id,
+        name: e.name,
+        store: (e.locations as { name: string } | null)?.name ?? "—",
+        amount,
+        ...commissionFor(amount, tiers),
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
+
+  const salesEmployees = (employees ?? []).map((e) => ({
     id: e.id,
     name: e.name,
     amount: salesBy.get(e.id) ?? 0,
   }));
-  const ranking = emps
-    .map((e) => ({ ...e, ...commissionFor(e.amount, tiers) }))
-    .sort((a, b) => b.amount - a.amount);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Commission</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sales &amp; commission</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Global tiers and this month&apos;s sales ({month}).
+          Monthly goals and commission tiers per store, and this month&apos;s sales
+          ({month}).
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Monthly sales goals</CardTitle>
+          <CardDescription>Target per store, per month ({year}).</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StoreGoalsForm
+            locations={locations}
+            year={year}
+            goalsByLocation={goalsByLocation}
+            currency={currency}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Tiers</CardTitle>
+            <CardTitle className="text-base">Commission tiers — per store &amp; month</CardTitle>
             <CardDescription>
-              The rate each rep earns once their monthly sales reach a tier.
+              Set a store&apos;s rates for a specific month. Falls back to the global
+              default below when not set.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <CommissionConfigForm tiers={tiers} currency={currency} />
+            <StoreTiersForm
+              locations={locations}
+              year={year}
+              month={monthNum}
+              tiersByKey={tiersByKey}
+              globalTiers={globalTiers}
+              currency={currency}
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Sales this month</CardTitle>
+            <CardTitle className="text-base">Global default tiers</CardTitle>
             <CardDescription>
-              Manual entry for now; Shopify will populate this later.
+              Used for any store/month without its own tiers.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {emps.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No active employees.</p>
-            ) : (
-              <SalesEntry month={month} employees={emps} currency={currency} />
-            )}
+            <CommissionConfigForm tiers={globalTiers} currency={currency} />
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Ranking</CardTitle>
-          <CardDescription>By sales this month.</CardDescription>
+          <CardTitle className="text-base">Sales this month</CardTitle>
+          <CardDescription>
+            Manual entry for now; Shopify POS will populate this later.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {tiers.length === 0 ? (
-            <Alert>
-              <AlertTitle>No tiers configured</AlertTitle>
-              <AlertDescription>Add tiers above to compute rates.</AlertDescription>
-            </Alert>
+          {salesEmployees.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No active employees.</p>
+          ) : (
+            <SalesEntry month={month} employees={salesEmployees} currency={currency} />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Ranking</CardTitle>
+          <CardDescription>
+            By sales this month — rate uses each rep&apos;s store tiers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {ranking.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No active employees.</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
                   <TableHead>Employee</TableHead>
+                  <TableHead className="hidden sm:table-cell">Store</TableHead>
                   <TableHead>Sales</TableHead>
                   <TableHead>Rate</TableHead>
                   <TableHead>Commission</TableHead>
@@ -126,13 +200,14 @@ export default async function CommissionPage() {
                   <TableRow key={r.id}>
                     <TableCell className="tabular-nums">{i + 1}</TableCell>
                     <TableCell className="font-medium">{r.name}</TableCell>
+                    <TableCell className="text-muted-foreground hidden sm:table-cell">
+                      {r.store}
+                    </TableCell>
                     <TableCell className="tabular-nums">
                       {formatMoney(r.amount, currency)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">
-                        {(r.rate * 100).toFixed(1)}%
-                      </Badge>
+                      <Badge variant="secondary">{(r.rate * 100).toFixed(1)}%</Badge>
                     </TableCell>
                     <TableCell className="tabular-nums">
                       {formatMoney(r.earned, currency)}

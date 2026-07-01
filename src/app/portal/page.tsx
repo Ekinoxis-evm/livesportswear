@@ -13,7 +13,8 @@ import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
 import {
   commissionFor,
   formatMoney,
-  type CommissionTier,
+  asTiers,
+  resolveTiers,
 } from "@/lib/commission";
 import { googleCalendarUrl, webcalUrl } from "@/lib/calendar-links";
 import { ScheduleView, type DayCell } from "@/components/portal/schedule-view";
@@ -88,7 +89,14 @@ export default async function PortalPage() {
     .eq("id", 1)
     .maybeSingle();
   const currency = cfg?.currency ?? "USD";
-  const tiers = (cfg?.tiers ?? []) as unknown as CommissionTier[];
+  const { data: storeGoal } = await supabase
+    .from("store_goals")
+    .select("tiers")
+    .eq("location_id", employee.location_id)
+    .eq("year", Number(month.slice(0, 4)))
+    .eq("month", Number(month.slice(5, 7)))
+    .maybeSingle();
+  const tiers = resolveTiers(storeGoal?.tiers, asTiers(cfg?.tiers));
   const { data: compRow } = await supabase
     .from("employee_compensation")
     .select("hourly_rate")

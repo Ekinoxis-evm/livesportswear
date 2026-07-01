@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, X, CalendarOff } from "lucide-react";
+import { Plus, X, CalendarOff, Crown } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import {
@@ -46,7 +46,7 @@ type Template = {
   color: string | null;
   default_headcount: number;
 };
-type Employee = { id: string; name: string; avatar_color: string | null };
+type Employee = { id: string; name: string; role: string; avatar_color: string | null };
 type DayOff = { employee_id: string; date: string; status: "approved" | "pending" };
 
 export function ScheduleBoard({
@@ -72,6 +72,9 @@ export function ScheduleBoard({
   const [busy, setBusy] = useState(false);
 
   const nameOf = new Map(employees.map((e) => [e.id, e.name]));
+  const managerIds = new Set(
+    employees.filter((e) => e.role === "store_manager").map((e) => e.id),
+  );
   const offByCell = new Map<string, "approved" | "pending">();
   for (const o of daysOff) {
     const key = `${o.employee_id}|${o.date}`;
@@ -209,7 +212,12 @@ export function ScheduleBoard({
                                 off ? "bg-destructive/15 text-destructive" : "bg-muted",
                               )}
                             >
-                              <span className="truncate">{nameOf.get(s.employee_id)}</span>
+                              <span className="flex items-center gap-1 truncate">
+                                {managerIds.has(s.employee_id) && (
+                                  <Crown className="size-3 shrink-0 text-amber-500" />
+                                )}
+                                {nameOf.get(s.employee_id)}
+                              </span>
                               <button
                                 type="button"
                                 aria-label="Remove"
