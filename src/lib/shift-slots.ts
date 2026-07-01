@@ -42,6 +42,14 @@ export function shiftMatchesSlot(
   );
 }
 
+/** Canonical AM/PM label for a shift by its exact hours, or null if it matches none. */
+export function slotLabelForHours(startTime: string, endTime: string): string | null {
+  const slot = SHIFT_SLOTS.find(
+    (s) => hhmm(startTime) === s.start && hhmm(endTime) === s.end,
+  );
+  return slot?.label ?? null;
+}
+
 /** createShift payload for adding to a slot — template id if backed, else times. */
 export function slotCreatePayload(
   slot: ShiftSlot,
