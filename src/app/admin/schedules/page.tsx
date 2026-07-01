@@ -287,9 +287,9 @@ export default async function SchedulesPage({
                 </li>
               ))}
             </ul>
-            <a href="/admin/time-off" className="text-primary mt-2 inline-block text-sm underline">
-              Review in Time off →
-            </a>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Approve or reject these on the board below (Next week).
+            </p>
           </AlertDescription>
         </Alert>
       )}

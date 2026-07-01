@@ -227,6 +227,6 @@ export async function decideTimeOff(
     });
   }
 
-  revalidatePath("/admin/time-off");
+  revalidatePath("/admin/schedules");
   return { ok: true };
 }

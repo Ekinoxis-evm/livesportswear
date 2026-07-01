@@ -133,7 +133,7 @@ export default async function DashboardPage() {
             <CardTitle className="text-base tabular-nums">{nextPayday}</CardTitle>
           </CardHeader>
         </Card>
-        <Link href="/admin/time-off" className="block">
+        <Link href="/admin/schedules" className="block">
           <Card className="hover:border-primary h-full transition-colors">
             <CardHeader>
               <CardDescription>Pending time off</CardDescription>
