@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { businessDate } from "@/lib/business-date";
+import { primaryTimezone } from "@/lib/business-tz";
 import { isMetaConfigured } from "@/lib/meta-config";
 import { formatMoney } from "@/lib/commission";
 import {
@@ -34,7 +36,7 @@ export default async function MarketingPage() {
   await requireAdmin();
   const supabase = await createServerClient();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessDate(await primaryTimezone());
   const month = today.slice(0, 7);
 
   const { data: rows } = await supabase

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { addDays, isoWeekday } from "@/lib/scheduling/week";
+import { businessDate } from "@/lib/business-date";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
@@ -25,13 +26,14 @@ export default async function PublicSchedulePage({
 
   const { data: emp } = await supabase
     .from("employees")
-    .select("id, name, location:locations(name)")
+    .select("id, name, location:locations(name, timezone)")
     .eq("magic_token", token)
     .maybeSingle();
 
   if (!emp) notFound();
 
-  const today = new Date().toISOString().slice(0, 10);
+  const location = emp.location as { name: string; timezone: string } | null;
+  const today = businessDate(location?.timezone ?? "UTC");
   const { data: shifts } = await supabase
     .from("shifts")
     .select(
@@ -51,8 +53,7 @@ export default async function PublicSchedulePage({
     .order("submitted_at", { ascending: false })
     .limit(8);
 
-  const locationName =
-    (emp.location as { name: string } | null)?.name ?? "Live Active Wear";
+  const locationName = location?.name ?? "Live Active Wear";
   const rows = shifts ?? [];
   const timeOff = requests ?? [];
 

@@ -9,6 +9,7 @@ import {
   formatWeekRange,
 } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
+import { businessDate } from "@/lib/business-date";
 import { googleCalendarUrl, webcalUrl } from "@/lib/calendar-links";
 import { ScheduleView, type DayCell } from "@/components/portal/schedule-view";
 import { RequestDayOff } from "@/components/portal/request-day-off";
@@ -36,9 +37,6 @@ export default async function SchedulePage() {
   const supabase = await createServerClient();
   const service = createServiceClient();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const ws = weekStart(today);
-  const weekDates = weekDays(ws);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   const { data: location } = await supabase
@@ -48,6 +46,10 @@ export default async function SchedulePage() {
     .maybeSingle();
   const tz = location?.timezone ?? "UTC";
   const locName = location?.name ?? "Live Active Wear";
+  // "Today"/week in the store's timezone, not the server's UTC.
+  const today = businessDate(tz);
+  const ws = weekStart(today);
+  const weekDates = weekDays(ws);
 
   const { data: mineData } = await supabase
     .from("shifts")

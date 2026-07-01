@@ -1,4 +1,5 @@
 import { addDays } from "@/lib/scheduling/week";
+import { businessDate } from "@/lib/business-date";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildEmployeeFeed } from "@/lib/ical";
 
@@ -25,7 +26,7 @@ export async function GET(
     return new Response("Not found", { status: 404 });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessDate(location.timezone);
   const { data: shifts } = await supabase
     .from("shifts")
     .select(

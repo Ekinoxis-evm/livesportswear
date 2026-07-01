@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
+import { businessDate } from "@/lib/business-date";
+import { primaryTimezone } from "@/lib/business-tz";
 import { getPayPeriod } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
 import { weekStart, weekDays } from "@/lib/scheduling/week";
@@ -22,7 +24,7 @@ import { formatPct } from "@/lib/conversion";
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessDate(await primaryTimezone());
   const { anchor } = await getPayPeriod();
   const sprint = sprintRange(anchor, today);
   const nextPayday = payday(anchor, today);

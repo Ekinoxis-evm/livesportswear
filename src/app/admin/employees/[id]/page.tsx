@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { weekStart, weekDays, addDays, isoWeekday } from "@/lib/scheduling/week";
+import { businessDate } from "@/lib/business-date";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
 import {
   Card,
@@ -47,13 +48,15 @@ export default async function EmployeeDetailPage({
 
   const { data: emp } = await supabase
     .from("employees")
-    .select("*, location:locations(name)")
+    .select("*, location:locations(name, timezone)")
     .eq("id", id)
     .maybeSingle();
   if (!emp) notFound();
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const today = new Date().toISOString().slice(0, 10);
+  const empTz =
+    (emp.location as { timezone: string } | null)?.timezone ?? "UTC";
+  const today = businessDate(empTz);
   const wkStart = weekStart(today);
   const thisWeek = new Set(weekDays(wkStart));
   const month = today.slice(0, 7);
