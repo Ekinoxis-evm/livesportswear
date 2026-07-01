@@ -8,6 +8,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/auth";
 import { isMonday, addDays, isoWeekday, formatWeekRange } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
+import { slotLabelForHours } from "@/lib/shift-slots";
 import { validateSchedule, hasBlockers } from "@/lib/scheduling/rules";
 import { buildEmployeeFeed } from "@/lib/ical";
 import { sendSafe } from "@/lib/resend";
@@ -276,7 +277,7 @@ export async function publishSchedule(
         end_time: s.end_time,
         templateName: s.shift_template_id
           ? (templateName.get(s.shift_template_id) ?? null)
-          : null,
+          : slotLabelForHours(s.start_time, s.end_time),
       })),
     });
 
@@ -292,7 +293,7 @@ export async function publishSchedule(
           date: `${SHORT_WEEKDAYS[isoWeekday(s.date) - 1]} ${s.date.slice(8, 10)}`,
           label: s.shift_template_id
             ? (templateName.get(s.shift_template_id) ?? "Shift")
-            : "Custom",
+            : (slotLabelForHours(s.start_time, s.end_time) ?? "Custom"),
           time: `${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
         })),
       }),
