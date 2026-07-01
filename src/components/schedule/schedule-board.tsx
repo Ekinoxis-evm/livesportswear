@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, X, CalendarOff, Crown } from "lucide-react";
+import { Plus, X, CalendarOff, Crown, Check } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import {
@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ensureSchedule, copyFromLastWeek } from "@/server/schedules";
 import { createShift, deleteShift } from "@/server/shifts";
+import { decideTimeOff } from "@/server/time-off";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,7 +48,12 @@ type Template = {
   default_headcount: number;
 };
 type Employee = { id: string; name: string; role: string; avatar_color: string | null };
-type DayOff = { employee_id: string; date: string; status: "approved" | "pending" };
+type DayOff = {
+  id: string;
+  employee_id: string;
+  date: string;
+  status: "approved" | "pending";
+};
 
 export function ScheduleBoard({
   scheduleId,
@@ -123,6 +129,13 @@ export function ScheduleBoard({
     slots.some(({ slot, tpl }) => shiftMatchesSlot(s, slot, tpl));
   const otherShifts = shifts.filter((s) => !inAnySlot(s));
 
+  function decide(id: string, status: "approved" | "rejected") {
+    run(
+      decideTimeOff(id, { status, note: "" }),
+      status === "approved" ? "Day off approved." : "Request rejected.",
+    );
+  }
+
   function add(employeeId: string, date: string, slotIndex: number) {
     if (!scheduleId) return;
     run(
@@ -156,17 +169,46 @@ export function ScheduleBoard({
                       <span className="tabular-nums">{d.slice(8, 10)}</span>
                     </span>
                     {offToday.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {offToday.map((o) => (
-                          <span
-                            key={o.employee_id}
-                            className="bg-destructive/15 text-destructive inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-normal"
-                            title={o.status === "approved" ? "Off (approved)" : "Off requested"}
-                          >
-                            <CalendarOff className="size-2.5" />
-                            {nameOf.get(o.employee_id) ?? "—"}
-                          </span>
-                        ))}
+                      <div className="flex flex-wrap gap-1 font-normal">
+                        {offToday.map((o) =>
+                          o.status === "approved" ? (
+                            <span
+                              key={o.id}
+                              className="bg-destructive/15 text-destructive inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px]"
+                              title="Off (approved)"
+                            >
+                              <CalendarOff className="size-2.5" />
+                              {nameOf.get(o.employee_id) ?? "—"}
+                            </span>
+                          ) : (
+                            <DropdownMenu key={o.id}>
+                              <DropdownMenuTrigger
+                                render={
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    className="inline-flex items-center gap-0.5 rounded border border-amber-500/40 bg-amber-500/10 px-1 py-0.5 text-[10px] text-amber-600 hover:bg-amber-500/20"
+                                    title="Day-off requested — approve or reject"
+                                  >
+                                    <CalendarOff className="size-2.5" />
+                                    {nameOf.get(o.employee_id) ?? "—"}?
+                                  </button>
+                                }
+                              />
+                              <DropdownMenuContent align="start">
+                                <DropdownMenuItem onClick={() => decide(o.id, "approved")}>
+                                  <Check className="size-4" /> Approve day off
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => decide(o.id, "rejected")}
+                                >
+                                  <X className="size-4" /> Reject
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ),
+                        )}
                       </div>
                     )}
                   </div>

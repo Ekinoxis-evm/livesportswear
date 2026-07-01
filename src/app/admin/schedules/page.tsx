@@ -108,7 +108,7 @@ export default async function SchedulesPage({
     empIds.length > 0
       ? await supabase
           .from("time_off_requests")
-          .select("employee_id, start_date, end_date, status")
+          .select("id, employee_id, start_date, end_date, status")
           .in("employee_id", empIds)
           .eq("status", "approved")
       : { data: [] };
@@ -132,22 +132,26 @@ export default async function SchedulesPage({
 
   // Per-day off markers for the grid/board (approved = solid, pending = requested).
   const daysOff: {
+    id: string;
     employee_id: string;
     date: string;
     status: "approved" | "pending";
   }[] = [];
   const addOff = (
+    id: string,
     empId: string,
     start: string,
     end: string,
     status: "approved" | "pending",
   ) => {
     for (const d of days) {
-      if (d >= start && d <= end) daysOff.push({ employee_id: empId, date: d, status });
+      if (d >= start && d <= end) {
+        daysOff.push({ id, employee_id: empId, date: d, status });
+      }
     }
   };
-  for (const r of timeOff ?? []) addOff(r.employee_id, r.start_date, r.end_date, "approved");
-  for (const r of pending) addOff(r.employee_id, r.start_date, r.end_date, "pending");
+  for (const r of timeOff ?? []) addOff(r.id, r.employee_id, r.start_date, r.end_date, "approved");
+  for (const r of pending) addOff(r.id, r.employee_id, r.start_date, r.end_date, "pending");
 
   // Draft schedules in progress (so work-in-progress is easy to find & resume).
   const locNameById = new Map((locationRows ?? []).map((l) => [l.id, l.name]));
