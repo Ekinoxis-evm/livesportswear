@@ -164,9 +164,29 @@ customer increments `rotation_count` (→ back of the line). See
 - `bumped_at timestamptz` (added 0014) — manual "make up next" override by a
   lead; non-null puts the member at the front of the line (latest bump wins),
   cleared when they take a customer or re-check-in
+- `entry_validated_at/by`, `exit_validated_at/by`, `entry_self`, `exit_self`
+  (added 0015) — peer attestation of arrival/departure. A lead checking a
+  coworker in/out validates it; first-in / last-out self-validate flagged
+  (`*_self`); anyone else stays pending behind a QR (`attendance_validations`).
+  Attestation never blocks the queue; hours math is pure in
+  `src/lib/attendance.ts` (`workedHours`, `stampStatus`).
 - `unique (location_id, business_date, employee_id)`
 - RLS: admin location-scoped; any employee at the location can read/write the
   store's floor (shared shop-floor data).
+
+### `attendance_validations` (added 0015)
+One-time QR tokens for entry/exit attestation (audit trail). The employee's
+Today card shows a QR encoding `/portal/validate/{token}`; an active coworker
+at the store opens it and confirms (`validateAttendance`, `src/server/floor.ts`).
+- `id uuid pk`
+- `checkin_id uuid fk -> floor_checkins (on delete cascade)`
+- `kind text` — `entry | exit`
+- `token text not null unique` — 32-byte base64url (`generateMagicToken()`);
+  same handling rules as employee magic tokens (see security.md)
+- `created_at`, `used_at timestamptz`, `validated_by uuid fk -> employees`
+- `unique (checkin_id, kind)` — re-marking rotates the token
+- RLS: select only (admin via location join + same-location employees); all
+  writes via service-client server actions.
 
 > RLS helpers (0009): `is_master_admin()`, `admin_can_access_location(loc)`
 > (`security definer`). New tables are already location-scoped; the existing

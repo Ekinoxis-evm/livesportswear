@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { formatInTimeZone } from "date-fns-tz";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createServerClient } from "@/lib/supabase/server";
 import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
+import { stampStatus, workedHours, type AttendanceStamp } from "@/lib/attendance";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -25,6 +27,19 @@ type EventRow = {
   employee_id: string;
   sold: boolean;
   got_contact: boolean;
+  employees: { name: string } | null;
+};
+
+type HoursRow = {
+  employee_id: string;
+  arrived_at: string;
+  left_at: string | null;
+  entry_validated_at: string | null;
+  entry_validated_by: string | null;
+  entry_self: boolean;
+  exit_validated_at: string | null;
+  exit_validated_by: string | null;
+  exit_self: boolean;
   employees: { name: string } | null;
 };
 
@@ -70,25 +85,63 @@ export default async function PerformancePage({
   const href = (d: string, loc = location.id) =>
     `/admin/performance?location=${loc}&date=${d}`;
 
-  const [{ data: eventRows }, { data: closeRow }] = await Promise.all([
-    supabase
-      .from("client_events")
-      .select("employee_id, sold, got_contact, employees(name)")
-      .eq("location_id", location.id)
-      .eq("business_date", date),
-    supabase
-      .from("store_day_closes")
-      .select("id")
-      .eq("location_id", location.id)
-      .eq("business_date", date)
-      .maybeSingle(),
-  ]);
+  const [{ data: eventRows }, { data: closeRow }, { data: checkinRows }, { data: staffRows }] =
+    await Promise.all([
+      supabase
+        .from("client_events")
+        .select("employee_id, sold, got_contact, employees(name)")
+        .eq("location_id", location.id)
+        .eq("business_date", date),
+      supabase
+        .from("store_day_closes")
+        .select("id")
+        .eq("location_id", location.id)
+        .eq("business_date", date)
+        .maybeSingle(),
+      supabase
+        .from("floor_checkins")
+        .select(
+          "employee_id, arrived_at, left_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, employees(name)",
+        )
+        .eq("location_id", location.id)
+        .eq("business_date", date)
+        .order("arrived_at"),
+      supabase.from("employees").select("id, name").eq("location_id", location.id),
+    ]);
 
   const events = (eventRows ?? []) as EventRow[];
   const store = totals(events);
   const nameOf = new Map<string, string>();
   for (const e of events) if (e.employees?.name) nameOf.set(e.employee_id, e.employees.name);
   const people = byPerson(events);
+
+  const checkins = (checkinRows ?? []) as HoursRow[];
+  const staffName = new Map((staffRows ?? []).map((s) => [s.id, s.name]));
+  const tz = location.timezone;
+  const hhmm = (iso: string) => formatInTimeZone(new Date(iso), tz, "HH:mm");
+  const stampBadge = (stamp: AttendanceStamp, validatedBy: string | null, kind: "entry" | "exit") => {
+    const status = stampStatus(stamp);
+    if (status === "none") return null;
+    if (status === "validated") {
+      return (
+        <span className="text-emerald-600">
+          ✓ {staffName.get(validatedBy ?? "") ?? "validated"}
+        </span>
+      );
+    }
+    if (status === "self") {
+      return (
+        <span className="text-amber-600">
+          ⚑ {kind === "entry" ? "first in" : "last out"}
+        </span>
+      );
+    }
+    return <span className="text-muted-foreground">⏳ pending</span>;
+  };
+  const totalHours = checkins.reduce(
+    (sum, c) => sum + (workedHours(c.arrived_at, c.left_at) ?? 0),
+    0,
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -205,6 +258,85 @@ export default async function PerformancePage({
               ))}
             </TableBody>
           </Table>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Hours worked</CardTitle>
+          <CardDescription>
+            Entry / exit as validated on the floor · {location.name} · {date}
+          </CardDescription>
+        </CardHeader>
+        {checkins.length === 0 ? (
+          <p className="text-muted-foreground px-6 pb-6 text-sm">
+            Nobody checked in this day.
+          </p>
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Entry</TableHead>
+                  <TableHead>Exit</TableHead>
+                  <TableHead className="text-right">Hours</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {checkins.map((c) => {
+                  const hours = workedHours(c.arrived_at, c.left_at);
+                  return (
+                    <TableRow key={c.employee_id}>
+                      <TableCell className="font-medium">
+                        {c.employees?.name ?? staffName.get(c.employee_id) ?? "Unknown"}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {hhmm(c.arrived_at)}{" "}
+                        <span className="text-xs">
+                          {stampBadge(
+                            {
+                              at: c.arrived_at,
+                              validatedAt: c.entry_validated_at,
+                              self: c.entry_self,
+                            },
+                            c.entry_validated_by,
+                            "entry",
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {c.left_at ? (
+                          <>
+                            {hhmm(c.left_at)}{" "}
+                            <span className="text-xs">
+                              {stampBadge(
+                                {
+                                  at: c.left_at,
+                                  validatedAt: c.exit_validated_at,
+                                  self: c.exit_self,
+                                },
+                                c.exit_validated_by,
+                                "exit",
+                              )}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">on floor</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {hours != null ? hours.toFixed(1) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+            <p className="text-muted-foreground px-6 pb-4 text-right text-sm tabular-nums">
+              Day total: <span className="font-semibold">{totalHours.toFixed(1)}h</span>
+            </p>
+          </>
         )}
       </Card>
     </div>
