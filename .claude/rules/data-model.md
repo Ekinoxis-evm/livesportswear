@@ -130,6 +130,9 @@ the admin dashboard.
 - `location_id uuid fk -> locations`
 - `year int not null`, `month int not null check (1..12)`
 - `goal_amount numeric(12,2) not null default 0`, `currency text`
+- `tiers jsonb` (added 0012) — per store/month commission tiers
+  `[{min_sales, rate}]`; when null, commission falls back to the global
+  `commission_config.tiers`. Set via `setStoreMonth` (goal + tiers together).
 - `created_at, updated_at`
 - `primary key (location_id, year, month)`
 
@@ -158,6 +161,9 @@ customer increments `rotation_count` (→ back of the line). See
 - `left_at timestamptz` (null = on the floor)
 - `status text` — `available | attending`
 - `rotation_count int not null default 0`
+- `bumped_at timestamptz` (added 0014) — manual "make up next" override by a
+  lead; non-null puts the member at the front of the line (latest bump wins),
+  cleared when they take a customer or re-check-in
 - `unique (location_id, business_date, employee_id)`
 - RLS: admin location-scoped; any employee at the location can read/write the
   store's floor (shared shop-floor data).

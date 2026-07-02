@@ -39,18 +39,29 @@ where email = 'owner@liveactivewear.com';
 Then invite per-store admins from **Settings → Admins** (they get
 `admin_scope=location` + an `admin_locations` row and are isolated by RLS).
 
-## 3. Resend (auth + reports) — required
+## 3. Email
+
+**Auth emails (invite + password reset) use Supabase Auth's built-in email** — no
+Resend needed, works out of the box. Admins can also **Set password** on an
+employee (email-free onboarding/reset), so staff can be onboarded even with no
+email configured.
+
+**Resend is for app notifications only** — schedule published, daily Close-Day
+report, time-off decision.
 
 | Var | Purpose |
 | --- | --- |
-| `RESEND_API_KEY` | invite, password-reset, schedule, time-off, daily report emails |
-| `SENDER_EMAIL_ADDRESS` | verified sender on your domain |
+| `RESEND_API_KEY` | notification emails (schedule / report / time-off decision) |
+| `SENDER_EMAIL_ADDRESS` | **must be an address on a verified Resend domain** |
 | `REPLY_TO_EMAIL_ADDRESSES` | reply-to |
 | `RESEND_DRY_RUN` | **set `false` in production** (true everywhere else) |
 | `STORE_REPORT_EMAIL` | fallback for the daily Close-Day report before admins exist |
 
-Invite + password-reset links are generated server-side (`generateLink`) and sent
-through Resend — Supabase's built-in SMTP is **not** used.
+> **Verified-domain sender is required for delivery.** The default
+> `onboarding@resend.dev` only delivers to the Resend account owner; verify a
+> domain at resend.com/domains and point `SENDER_EMAIL_ADDRESS` at it (e.g.
+> `noreply@yourdomain.com`). `sendSafe` logs the masked send outcome, so failures
+> are visible in the runtime logs.
 
 ## 4. Shopify POS (sales / commission / day-report money) — when ready
 

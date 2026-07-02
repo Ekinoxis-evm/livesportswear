@@ -63,11 +63,21 @@
   bare `is_admin()` to `admin_can_access_location()` in migration `0010`. Back-compat:
   the original single admin (no `admin_scope` claim) is treated as master, so access
   never narrows by accident.
-- **Auth emails go through Resend (0009-era).** Invite (set-password link) and
-  password-reset links are generated server-side via
-  `service.auth.admin.generateLink()` and delivered with Resend on the verified
-  domain — not Supabase's built-in SMTP. Never log the action link. No self-signup;
-  accounts are admin-created only.
+- **Auth emails use Supabase Auth's built-in email.** Invite
+  (`inviteUserByEmail`, `src/server/employee-accounts.ts` + admin invite in
+  `admins.ts`) and password reset (`resetPasswordForEmail`, the forgot-password
+  page) go through Supabase's own email service. (An earlier iteration routed
+  these through Resend `generateLink`, but Resend needs a verified sending domain
+  and couldn't deliver to staff on the default sender, so they were reverted.)
+- **Admin-set passwords (email-free).** `setEmployeePassword` (admin-only,
+  `employee-accounts.ts`) generates a temporary password (creating the account if
+  needed) shown once to the admin to hand over — no email required. The employee
+  changes it after signing in. No self-signup; accounts are admin-created only.
+- **Resend is for app notifications only** — schedule published, daily Close-Day
+  report, time-off decision (`src/lib/resend.ts` `sendSafe`, dry-run aware).
+  Delivery to arbitrary recipients requires a **verified domain** sender
+  (`SENDER_EMAIL_ADDRESS`); the default `onboarding@resend.dev` only reaches the
+  Resend account owner. `sendSafe` logs the masked send outcome.
 
 ## Known v1 limitations (harden before changing these assumptions)
 - **Public endpoints are not rate-limited.** `submitTimeOff` and the `/s/[token]` routes rely on the 32-byte token's unguessability and bounded date ranges. Add a Vercel Firewall / token-bucket rule before exposing widely.

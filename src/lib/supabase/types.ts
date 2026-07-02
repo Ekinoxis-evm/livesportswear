@@ -293,6 +293,7 @@ export type Database = {
       floor_checkins: {
         Row: {
           arrived_at: string
+          bumped_at: string | null
           business_date: string
           created_at: string
           employee_id: string
@@ -304,6 +305,7 @@ export type Database = {
         }
         Insert: {
           arrived_at?: string
+          bumped_at?: string | null
           business_date: string
           created_at?: string
           employee_id: string
@@ -315,6 +317,7 @@ export type Database = {
         }
         Update: {
           arrived_at?: string
+          bumped_at?: string | null
           business_date?: string
           created_at?: string
           employee_id?: string

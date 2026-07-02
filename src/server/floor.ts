@@ -71,6 +71,7 @@ export async function checkIn(employeeId: string): Promise<ActionResult> {
       arrived_at: new Date().toISOString(),
       left_at: null,
       status: "available",
+      bumped_at: null,
     },
     { onConflict: "location_id,business_date,employee_id" },
   );
@@ -101,7 +102,14 @@ async function updateCheckin(
 
 /** Mark an employee as attending a customer (out of the rotation for now). */
 export async function markAttending(employeeId: string): Promise<ActionResult> {
-  return updateCheckin(employeeId, { status: "attending" });
+  return updateCheckin(employeeId, { status: "attending", bumped_at: null });
+}
+
+/** Move an employee to the front of the line (manual reorder). Leads only. */
+export async function makeUpNext(employeeId: string): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  if (!isLead(employee.role)) return NOT_ALLOWED;
+  return updateCheckin(employeeId, { bumped_at: new Date().toISOString() });
 }
 
 /** Cancel an attending state without recording a customer. */
@@ -152,7 +160,11 @@ export async function finishCustomer(
     .maybeSingle();
   const { error } = await service
     .from("floor_checkins")
-    .update({ status: "available", rotation_count: (cur?.rotation_count ?? 0) + 1 })
+    .update({
+      status: "available",
+      rotation_count: (cur?.rotation_count ?? 0) + 1,
+      bumped_at: null,
+    })
     .eq("location_id", employee.location_id)
     .eq("business_date", bd)
     .eq("employee_id", employeeId);
