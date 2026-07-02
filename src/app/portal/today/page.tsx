@@ -13,6 +13,7 @@ import { CloseDayButton } from "@/components/portal/close-day-button";
 
 type EventRow = {
   employee_id: string;
+  attended_at: string;
   sold: boolean;
   got_contact: boolean;
   employees: { name: string } | null;
@@ -24,6 +25,7 @@ type CheckinRow = {
   left_at: string | null;
   status: string;
   rotation_count: number;
+  bumped_at: string | null;
   employees: { name: string } | null;
 };
 
@@ -52,7 +54,9 @@ export default async function TodayPage() {
         .maybeSingle(),
       service
         .from("floor_checkins")
-        .select("employee_id, arrived_at, left_at, status, rotation_count, employees(name)")
+        .select(
+          "employee_id, arrived_at, left_at, status, rotation_count, bumped_at, employees(name)",
+        )
         .eq("location_id", employee.location_id)
         .eq("business_date", bd),
       service
@@ -63,7 +67,7 @@ export default async function TodayPage() {
         .order("name"),
       service
         .from("client_events")
-        .select("employee_id, sold, got_contact, employees(name)")
+        .select("employee_id, attended_at, sold, got_contact, employees(name)")
         .eq("location_id", employee.location_id)
         .eq("business_date", bd),
       service
@@ -82,6 +86,7 @@ export default async function TodayPage() {
     leftAt: c.left_at,
     status: c.status === "attending" ? "attending" : "available",
     rotationCount: c.rotation_count,
+    bumpedAt: c.bumped_at,
   }));
   const rows: BoardRow[] = orderFloor(members).map((r) => ({
     employeeId: r.employeeId,
@@ -109,6 +114,14 @@ export default async function TodayPage() {
     isMe: p.employeeId === employee.id,
   }));
 
+  const lastEvent = events.reduce<EventRow | null>(
+    (last, e) => (!last || e.attended_at > last.attended_at ? e : last),
+    null,
+  );
+  const lastAttendedName = lastEvent
+    ? (nameOf.get(lastEvent.employee_id) ?? lastEvent.employees?.name ?? null)
+    : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -122,6 +135,7 @@ export default async function TodayPage() {
         open={Boolean(dayRow)}
         rows={rows}
         roster={rosterOptions}
+        lastAttendedName={lastAttendedName}
       />
 
       <ConversionStats store={store} mine={mine} people={people} />
