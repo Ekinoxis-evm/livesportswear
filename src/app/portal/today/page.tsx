@@ -5,8 +5,14 @@ import { businessDate } from "@/lib/business-date";
 import { totals, byPerson } from "@/lib/conversion";
 import { orderFloor, type FloorMember } from "@/lib/floor-queue";
 import { slotLabelForHours } from "@/lib/shift-slots";
+import { stampStatus, workedHours } from "@/lib/attendance";
 import { FloorBoard, type BoardRow } from "@/components/portal/floor-board";
-import { ShiftToday, type ShiftTodayInfo } from "@/components/portal/shift-today";
+import {
+  ShiftToday,
+  type ShiftTodayInfo,
+  type CheckinView,
+  type StampView,
+} from "@/components/portal/shift-today";
 import {
   ConversionStats,
   type PersonRow,
@@ -22,12 +28,19 @@ type EventRow = {
 };
 
 type CheckinRow = {
+  id: string;
   employee_id: string;
   arrived_at: string;
   left_at: string | null;
   status: string;
   rotation_count: number;
   bumped_at: string | null;
+  entry_validated_at: string | null;
+  entry_validated_by: string | null;
+  entry_self: boolean;
+  exit_validated_at: string | null;
+  exit_validated_by: string | null;
+  exit_self: boolean;
   employees: { name: string } | null;
 };
 
@@ -63,7 +76,7 @@ export default async function TodayPage() {
       service
         .from("floor_checkins")
         .select(
-          "employee_id, arrived_at, left_at, status, rotation_count, bumped_at, employees(name)",
+          "id, employee_id, arrived_at, left_at, status, rotation_count, bumped_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, employees(name)",
         )
         .eq("location_id", employee.location_id)
         .eq("business_date", bd),
@@ -139,7 +152,7 @@ export default async function TodayPage() {
     ? (nameOf.get(lastEvent.employee_id) ?? lastEvent.employees?.name ?? null)
     : null;
 
-  // My shift today + entry state, shown before any floor-queue dynamics.
+  // My shift today + entry/exit attestation state, shown before the queue.
   const hhmm = (t: string) => t.slice(0, 5);
   const myShift: ShiftTodayInfo | null = shiftRow
     ? {
@@ -151,10 +164,53 @@ export default async function TodayPage() {
         end: hhmm(shiftRow.end_time),
       }
     : null;
+
   const myCheckin = checkins.find((c) => c.employee_id === employee.id);
-  const checkedInAtLabel = myCheckin
-    ? formatInTimeZone(new Date(myCheckin.arrived_at), tz, "HH:mm")
-    : null;
+  let myCheckinView: CheckinView | null = null;
+  if (myCheckin) {
+    const { data: tokenRows } = await service
+      .from("attendance_validations")
+      .select("kind, token")
+      .eq("checkin_id", myCheckin.id)
+      .is("used_at", null);
+    const tokenFor = (kind: string) =>
+      (tokenRows ?? []).find((t) => t.kind === kind)?.token ?? null;
+    const validatorName = (id: string | null) =>
+      (id && (roster ?? []).find((e) => e.id === id)?.name) || null;
+    const timeLabel = (iso: string) => formatInTimeZone(new Date(iso), tz, "HH:mm");
+
+    const entryStatus = stampStatus({
+      at: myCheckin.arrived_at,
+      validatedAt: myCheckin.entry_validated_at,
+      self: myCheckin.entry_self,
+    });
+    const entry: StampView = {
+      timeLabel: timeLabel(myCheckin.arrived_at),
+      status: entryStatus === "none" ? "pending" : entryStatus,
+      validatorName: validatorName(myCheckin.entry_validated_by),
+      token: tokenFor("entry"),
+    };
+    let exit: StampView | null = null;
+    if (myCheckin.left_at) {
+      const exitStatus = stampStatus({
+        at: myCheckin.left_at,
+        validatedAt: myCheckin.exit_validated_at,
+        self: myCheckin.exit_self,
+      });
+      exit = {
+        timeLabel: timeLabel(myCheckin.left_at),
+        status: exitStatus === "none" ? "pending" : exitStatus,
+        validatorName: validatorName(myCheckin.exit_validated_by),
+        token: tokenFor("exit"),
+      };
+    }
+    const hours = workedHours(myCheckin.arrived_at, myCheckin.left_at);
+    myCheckinView = {
+      entry,
+      exit,
+      workedLabel: hours != null ? `${hours.toFixed(1)}h` : null,
+    };
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -163,12 +219,7 @@ export default async function TodayPage() {
         <p className="text-muted-foreground text-sm tabular-nums">{bd}</p>
       </div>
 
-      <ShiftToday
-        meId={employee.id}
-        shift={myShift}
-        checkedInAtLabel={checkedInAtLabel}
-        leftFloor={Boolean(myCheckin?.left_at)}
-      />
+      <ShiftToday meId={employee.id} shift={myShift} checkin={myCheckinView} />
 
       <FloorBoard
         meId={employee.id}

@@ -15,6 +15,15 @@
   1. Constant-time compare via the DB query (don't fetch all + compare in app code).
   2. Return `404`, not `401`, on miss (no token enumeration).
 
+## Attendance validation tokens (0015)
+- `attendance_validations.token` follows the same rules as employee magic
+  tokens: 32-byte base64url, never logged, never echoed in errors (`validateAttendance`
+  returns a generic "no longer valid" message — no token enumeration).
+- Scoped tighter than magic tokens: single-use (`used_at`), bound to one
+  check-in + kind, only meaningful to a signed-in employee at the same store on
+  the same business date, and rotated every time the employee re-marks
+  entry/exit.
+
 ## Row-Level Security
 - **Every table has RLS enabled. Default deny.**
 - **Role-aware** (migration `0003`). Role comes from the JWT claim `app_metadata.role` (`admin` | `employee`), read by `public.is_admin()`. Helpers `public.current_employee_id()` / `public.current_location_id()` are `security definer` (bypass RLS to avoid policy recursion).
