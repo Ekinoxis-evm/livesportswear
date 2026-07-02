@@ -4,7 +4,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson } from "@/lib/conversion";
 import { orderFloor, type FloorMember } from "@/lib/floor-queue";
+import { slotLabelForHours } from "@/lib/shift-slots";
 import { FloorBoard, type BoardRow } from "@/components/portal/floor-board";
+import { ShiftToday, type ShiftTodayInfo } from "@/components/portal/shift-today";
 import {
   ConversionStats,
   type PersonRow,
@@ -44,8 +46,14 @@ export default async function TodayPage() {
   const locName = loc?.name ?? "Store";
   const bd = businessDate(tz);
 
-  const [{ data: dayRow }, { data: checkinRows }, { data: roster }, { data: eventRows }, { data: closeRow }] =
-    await Promise.all([
+  const [
+    { data: dayRow },
+    { data: checkinRows },
+    { data: roster },
+    { data: eventRows },
+    { data: closeRow },
+    { data: shiftRow },
+  ] = await Promise.all([
       service
         .from("floor_days")
         .select("opened_at")
@@ -75,6 +83,15 @@ export default async function TodayPage() {
         .select("id")
         .eq("location_id", employee.location_id)
         .eq("business_date", bd)
+        .maybeSingle(),
+      service
+        .from("shifts")
+        .select("start_time, end_time, shift_templates(name), schedules!inner(status)")
+        .eq("employee_id", employee.id)
+        .eq("date", bd)
+        .eq("schedules.status", "published")
+        .order("start_time")
+        .limit(1)
         .maybeSingle(),
     ]);
 
@@ -122,12 +139,36 @@ export default async function TodayPage() {
     ? (nameOf.get(lastEvent.employee_id) ?? lastEvent.employees?.name ?? null)
     : null;
 
+  // My shift today + entry state, shown before any floor-queue dynamics.
+  const hhmm = (t: string) => t.slice(0, 5);
+  const myShift: ShiftTodayInfo | null = shiftRow
+    ? {
+        label:
+          slotLabelForHours(shiftRow.start_time, shiftRow.end_time) ??
+          (shiftRow.shift_templates as { name: string } | null)?.name ??
+          "Shift",
+        start: hhmm(shiftRow.start_time),
+        end: hhmm(shiftRow.end_time),
+      }
+    : null;
+  const myCheckin = checkins.find((c) => c.employee_id === employee.id);
+  const checkedInAtLabel = myCheckin
+    ? formatInTimeZone(new Date(myCheckin.arrived_at), tz, "HH:mm")
+    : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold">Today · {locName}</h1>
         <p className="text-muted-foreground text-sm tabular-nums">{bd}</p>
       </div>
+
+      <ShiftToday
+        meId={employee.id}
+        shift={myShift}
+        checkedInAtLabel={checkedInAtLabel}
+        leftFloor={Boolean(myCheckin?.left_at)}
+      />
 
       <FloorBoard
         meId={employee.id}
