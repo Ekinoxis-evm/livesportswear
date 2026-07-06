@@ -72,16 +72,22 @@
   bare `is_admin()` to `admin_can_access_location()` in migration `0010`. Back-compat:
   the original single admin (no `admin_scope` claim) is treated as master, so access
   never narrows by accident.
-- **Auth emails use Supabase Auth's built-in email.** Invite
-  (`inviteUserByEmail`, `src/server/employee-accounts.ts` + admin invite in
-  `admins.ts`) and password reset (`resetPasswordForEmail`, the forgot-password
-  page) go through Supabase's own email service. (An earlier iteration routed
-  these through Resend `generateLink`, but Resend needs a verified sending domain
-  and couldn't deliver to staff on the default sender, so they were reverted.)
-- **Admin-set passwords (email-free).** `setEmployeePassword` (admin-only,
-  `employee-accounts.ts`) generates a temporary password (creating the account if
-  needed) shown once to the admin to hand over — no email required. The employee
-  changes it after signing in. No self-signup; accounts are admin-created only.
+- **Onboarding is password-based (0016).** Invites (employee
+  `inviteEmployee` / admin `inviteAdmin`) and `setEmployeePassword` all create
+  the account with a generated temporary password (`src/lib/temp-password.ts`),
+  email it via Resend (`CredentialsEmail`), and show it to the admin. Supabase's
+  `inviteUserByEmail` was dropped (unreliable delivery, empty-looking template).
+  Password reset (`resetPasswordForEmail`, forgot-password page) still uses
+  Supabase's built-in email as a self-serve fallback.
+- **Stored temp credentials.** The generated password is kept in
+  `employee_credentials` (default-deny RLS, service-role only) and shown on the
+  admin employee page until the employee changes it — `changeOwnPassword`
+  (portal) or the reset-password page deletes the row. Only the *temporary*
+  password is ever stored; a self-chosen password never is.
+- **Credential email delivery caveat:** Resend on the default
+  `onboarding@resend.dev` sender only delivers to the Resend account owner.
+  Verify the company domain in Resend and point `SENDER_EMAIL_ADDRESS` at it for
+  staff-wide delivery; until then the admin hands the password over from the UI.
 - **Resend is for app notifications only** — schedule published, daily Close-Day
   report, time-off decision (`src/lib/resend.ts` `sendSafe`, dry-run aware).
   Delivery to arbitrary recipients requires a **verified domain** sender

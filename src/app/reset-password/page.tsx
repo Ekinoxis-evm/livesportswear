@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createBrowserClient } from "@/lib/supabase/browser";
+import { clearMyStoredCredential } from "@/server/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +49,8 @@ export default function ResetPasswordPage() {
       toast.error(error.message);
       return;
     }
+    // Employees: drop the admin-stored temp credential (no-op for admins).
+    await clearMyStoredCredential().catch(() => undefined);
     toast.success("Password updated.");
     router.replace("/");
     router.refresh();

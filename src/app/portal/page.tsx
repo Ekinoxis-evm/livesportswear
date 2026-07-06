@@ -18,6 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PhotoUpload } from "@/components/portal/photo-upload";
+import { ChangePasswordCard } from "@/components/portal/change-password";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -168,6 +169,8 @@ export default async function PortalPage() {
           </CardContent>
         </Card>
       )}
+
+      <ChangePasswordCard />
     </div>
   );
 }

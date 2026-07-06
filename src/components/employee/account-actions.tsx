@@ -6,9 +6,20 @@ import { toast } from "sonner";
 import {
   inviteEmployee,
   revokeEmployeeAccess,
+  type IssuedCredentials,
 } from "@/server/employee-accounts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/shared/copy-button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function EmployeeAccessActions({
   id,
@@ -19,19 +30,29 @@ export function EmployeeAccessActions({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [issued, setIssued] = useState<IssuedCredentials | null>(null);
 
-  async function run(
-    action: Promise<{ ok: boolean; error?: string }>,
-    okMsg: string,
-  ) {
+  async function revoke() {
     setPending(true);
-    const res = await action;
+    const res = await revokeEmployeeAccess(id);
     setPending(false);
     if (!res.ok) {
       toast.error(res.error ?? "Something went wrong.");
       return;
     }
-    toast.success(okMsg);
+    toast.success("Access revoked.");
+    router.refresh();
+  }
+
+  async function invite() {
+    setPending(true);
+    const res = await inviteEmployee(id);
+    setPending(false);
+    if (!res.ok) {
+      toast.error(res.error ?? "Something went wrong.");
+      return;
+    }
+    setIssued(res.data ?? null);
     router.refresh();
   }
 
@@ -44,7 +65,7 @@ export function EmployeeAccessActions({
           size="sm"
           className="text-destructive"
           disabled={pending}
-          onClick={() => run(revokeEmployeeAccess(id), "Access revoked.")}
+          onClick={revoke}
         >
           Revoke
         </Button>
@@ -53,12 +74,33 @@ export function EmployeeAccessActions({
   }
 
   return (
-    <Button
-      size="sm"
-      disabled={pending}
-      onClick={() => run(inviteEmployee(id), "Invite email sent.")}
-    >
-      Invite to portal
-    </Button>
+    <>
+      <Button size="sm" disabled={pending} onClick={invite}>
+        Invite to portal
+      </Button>
+      <Dialog open={Boolean(issued)} onOpenChange={(o) => !o && setIssued(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Portal access created</DialogTitle>
+            <DialogDescription>
+              {issued?.emailed
+                ? `The credentials were emailed to ${issued.email}. You can also hand them over directly:`
+                : `The email couldn't be sent — hand these over directly (also kept on this page until they change it):`}
+            </DialogDescription>
+          </DialogHeader>
+          {issued && (
+            <div className="bg-muted flex items-center justify-between gap-2 rounded-md border p-3">
+              <code className="text-base font-semibold tracking-wide">
+                {issued.password}
+              </code>
+              <CopyButton value={issued.password} label="Copy" />
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button>Done</Button>} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

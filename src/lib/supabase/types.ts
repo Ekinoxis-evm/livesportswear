@@ -261,6 +261,35 @@ export type Database = {
           },
         ]
       }
+      employee_credentials: {
+        Row: {
+          employee_id: string
+          set_at: string
+          set_by: string | null
+          temp_password: string
+        }
+        Insert: {
+          employee_id: string
+          set_at?: string
+          set_by?: string | null
+          temp_password: string
+        }
+        Update: {
+          employee_id?: string
+          set_at?: string
+          set_by?: string | null
+          temp_password?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_credentials_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           active: boolean

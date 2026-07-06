@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -10,6 +11,7 @@ import {
   Flag,
   LogIn,
   LogOut,
+  ScanLine,
 } from "lucide-react";
 import { checkIn, checkOut } from "@/server/floor";
 import { Button } from "@/components/ui/button";
@@ -51,21 +53,28 @@ function StampLine({ kind, stamp }: { kind: "Entry" | "Exit"; stamp: StampView }
     );
   }
   return (
-    <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-600">
-      {stamp.status === "self" ? (
-        <Flag className="size-4" />
-      ) : (
-        <CheckCircle2 className="size-4" />
+    <div className="flex flex-col gap-0.5">
+      <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+        {stamp.status === "self" ? (
+          <Flag className="size-4" />
+        ) : (
+          <CheckCircle2 className="size-4" />
+        )}
+        {kind} at {stamp.timeLabel}
+        {stamp.status === "self"
+          ? kind === "Entry"
+            ? " · first in"
+            : " · last out"
+          : stamp.validatorName
+            ? ` · validated by ${stamp.validatorName}`
+            : " · validated"}
+      </p>
+      {stamp.status === "self" && (
+        <p className="text-muted-foreground text-xs">
+          Nobody was here to validate — recorded and flagged for the admin.
+        </p>
       )}
-      {kind} at {stamp.timeLabel}
-      {stamp.status === "self"
-        ? kind === "Entry"
-          ? " · first in"
-          : " · last out"
-        : stamp.validatorName
-          ? ` · validated by ${stamp.validatorName}`
-          : " · validated"}
-    </p>
+    </div>
   );
 }
 
@@ -151,6 +160,12 @@ export function ShiftToday({
               Shift complete · {checkin.workedLabel} worked
             </p>
           )}
+          <Link
+            href="/portal/scan"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm underline-offset-4 hover:underline"
+          >
+            <ScanLine className="size-4" /> Scan a coworker&apos;s QR to validate them
+          </Link>
         </>
       )}
     </div>

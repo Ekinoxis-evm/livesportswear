@@ -4,6 +4,9 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireMasterAdmin } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { tempPassword } from "@/lib/temp-password";
+import { sendSafe } from "@/lib/resend";
+import { CredentialsEmail } from "@/lib/emails/credentials";
 import { type ActionResult, dbError } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -52,8 +55,15 @@ const inviteSchema = z.object({
   locationIds: z.array(uuid).min(1),
 });
 
-/** Invite a location-scoped admin and assign their store(s). */
-export async function inviteAdmin(input: unknown): Promise<ActionResult> {
+/**
+ * Invite a location-scoped admin and assign their store(s). Creates the
+ * account with a temporary password (Supabase's invite email was unreliable),
+ * emails the credentials, and returns the password once so the master admin
+ * can hand it over directly.
+ */
+export async function inviteAdmin(
+  input: unknown,
+): Promise<ActionResult<{ password: string; email: string; emailed: boolean }>> {
   await requireMasterAdmin();
   const parsed = inviteSchema.safeParse(input);
   if (!parsed.success) {
@@ -63,19 +73,17 @@ export async function inviteAdmin(input: unknown): Promise<ActionResult> {
 
   const service = createServiceClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  // Supabase Auth sends the invite email (built-in service).
-  const invited = await service.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${appUrl}/reset-password`,
-  });
-  if (invited.error || !invited.data.user) {
-    return { ok: false, error: invited.error?.message ?? "Couldn't invite." };
-  }
-
-  const userId = invited.data.user.id;
-  const upd = await service.auth.admin.updateUserById(userId, {
+  const password = tempPassword();
+  const created = await service.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
     app_metadata: { role: "admin", admin_scope: "location" },
   });
-  if (upd.error) return { ok: false, error: upd.error.message };
+  if (created.error || !created.data.user) {
+    return { ok: false, error: created.error?.message ?? "Couldn't create the account." };
+  }
+  const userId = created.data.user.id;
 
   const rows = locationIds.map((location_id) => ({ admin_user_id: userId, location_id }));
   const ins = await service
@@ -83,8 +91,20 @@ export async function inviteAdmin(input: unknown): Promise<ActionResult> {
     .upsert(rows, { onConflict: "admin_user_id,location_id" });
   if (ins.error) return { ok: false, error: dbError(ins.error) };
 
+  const sent = await sendSafe({
+    to: email,
+    subject: "Your Live admin access — temporary password inside",
+    react: CredentialsEmail({
+      name: email.split("@")[0],
+      email,
+      password,
+      loginUrl: `${appUrl}/login`,
+      isAdmin: true,
+    }),
+  });
+
   revalidatePath("/admin/settings");
-  return { ok: true };
+  return { ok: true, data: { password, email, emailed: sent.ok } };
 }
 
 const setLocsSchema = z.object({

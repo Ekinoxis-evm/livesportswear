@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireEmployee } from "@/lib/auth";
@@ -49,5 +50,40 @@ export async function updateOwnPhoto(formData: FormData): Promise<ActionResult> 
   if (updated.error) return { ok: false, error: "Couldn't save your photo." };
 
   revalidatePath("/portal");
+  return { ok: true };
+}
+
+const passwordSchema = z.string().min(8).max(128);
+
+/**
+ * Employee changes their own password. Clears the admin-stored temporary
+ * credential — from then on nobody but the employee knows it.
+ */
+export async function changeOwnPassword(input: unknown): Promise<ActionResult> {
+  const { user, employee } = await requireEmployee();
+  const parsed = passwordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Use at least 8 characters." };
+  }
+
+  const service = createServiceClient();
+  const upd = await service.auth.admin.updateUserById(user.id, {
+    password: parsed.data,
+  });
+  if (upd.error) return { ok: false, error: upd.error.message };
+
+  await service.from("employee_credentials").delete().eq("employee_id", employee.id);
+  return { ok: true };
+}
+
+/**
+ * After a password change that didn't go through changeOwnPassword (the
+ * recovery-link page updates via the browser client), drop the stored temp
+ * credential so the admin page stops showing a stale password.
+ */
+export async function clearMyStoredCredential(): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const service = createServiceClient();
+  await service.from("employee_credentials").delete().eq("employee_id", employee.id);
   return { ok: true };
 }
