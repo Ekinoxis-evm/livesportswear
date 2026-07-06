@@ -19,6 +19,7 @@ import { ScheduleControls } from "@/components/schedule/schedule-controls";
 import { ScheduleWorkspace } from "@/components/schedule/schedule-workspace";
 import { ViolationsBanner } from "@/components/schedule/violations-banner";
 import { PublishButton } from "@/components/schedule/publish-button";
+import { ResendEmailMenu } from "@/components/schedule/resend-email-menu";
 
 export default async function SchedulesPage({
   searchParams,
@@ -227,6 +228,15 @@ export default async function SchedulesPage({
             >
               {schedule.status === "published" ? "Published" : "Draft"}
             </Badge>
+            {schedule.status === "published" && (
+              <ResendEmailMenu
+                scheduleId={schedule.id}
+                recipients={empList
+                  .filter((e) => shiftRows.some((s) => s.employee_id === e.id))
+                  .map((e) => ({ id: e.id, name: e.name }))
+                  .sort((a, b) => a.name.localeCompare(b.name))}
+              />
+            )}
             <PublishButton
               scheduleId={schedule.id}
               blockers={violations.filter((v) => v.level === "block").length}
