@@ -9,6 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/shared/copy-button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Location = { id: string; name: string };
 
@@ -23,6 +33,11 @@ export function AdminsPanel({
   const [pending, start] = useTransition();
   const [email, setEmail] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
+  const [issued, setIssued] = useState<{
+    password: string;
+    email: string;
+    emailed: boolean;
+  } | null>(null);
   const nameOf = new Map(locations.map((l) => [l.id, l.name]));
 
   function toggle(id: string) {
@@ -36,7 +51,7 @@ export function AdminsPanel({
         toast.error(res.error ?? "Couldn't invite admin.");
         return;
       }
-      toast.success("Admin invited.");
+      setIssued(res.data ?? null);
       setEmail("");
       setPicked([]);
       router.refresh();
@@ -87,10 +102,34 @@ export function AdminsPanel({
             disabled={pending || !email || picked.length === 0}
             onClick={invite}
           >
-            {pending ? "Inviting…" : "Send admin invite"}
+            {pending ? "Inviting…" : "Create admin access"}
           </Button>
         </div>
       </div>
+
+      <Dialog open={Boolean(issued)} onOpenChange={(o) => !o && setIssued(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Admin access created</DialogTitle>
+            <DialogDescription>
+              {issued?.emailed
+                ? `The credentials were emailed to ${issued.email}. You can also hand them over directly — this won't be shown again:`
+                : `The email couldn't be sent — hand these over directly; this won't be shown again:`}
+            </DialogDescription>
+          </DialogHeader>
+          {issued && (
+            <div className="bg-muted flex items-center justify-between gap-2 rounded-md border p-3">
+              <code className="text-base font-semibold tracking-wide">
+                {issued.password}
+              </code>
+              <CopyButton value={issued.password} label="Copy" />
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button>Done</Button>} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ul className="flex flex-col divide-y border-t">
         {admins.map((a) => (

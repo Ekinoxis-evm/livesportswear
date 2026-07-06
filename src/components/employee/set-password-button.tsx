@@ -55,8 +55,8 @@ export function SetPasswordButton({ id, name }: { id: string; name: string }) {
         <DialogHeader>
           <DialogTitle>Set {name}&apos;s password</DialogTitle>
           <DialogDescription>
-            Generates a temporary password you can hand to them (no email needed).
-            They can change it after signing in. This won&apos;t be shown again.
+            Generates a temporary password, emails it to them, and keeps it
+            visible on this page until they change it after signing in.
           </DialogDescription>
         </DialogHeader>
 
@@ -67,8 +67,9 @@ export function SetPasswordButton({ id, name }: { id: string; name: string }) {
               <CopyButton value={password} label="Copy" />
             </div>
             <p className="text-muted-foreground text-xs">
-              Give this to {name} along with their email. They sign in at the login
-              page and can change it under their profile.
+              Give this to {name} along with their email, or let them use the
+              email they just received. It stays visible on this page until they
+              change it.
             </p>
           </div>
         ) : (

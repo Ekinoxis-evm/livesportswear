@@ -129,6 +129,14 @@ export async function checkIn(employeeId: string): Promise<ActionResult> {
   if (!target || target.location_id !== employee.location_id) {
     return { ok: false, error: "That employee isn't at this store." };
   }
+  // First arrival opens the store day — reps aren't leads, and waiting for a
+  // lead to press "Open day" left the queue invisible after check-in.
+  const opened = await service.from("floor_days").upsert(
+    { location_id: employee.location_id, business_date: bd, opened_by: employee.id },
+    { onConflict: "location_id,business_date", ignoreDuplicates: true },
+  );
+  if (opened.error) return { ok: false, error: opened.error.message };
+
   // Entry attestation: a lead adding a coworker counts as the validation (the
   // lead is present); the first person of the day self-validates flagged;
   // anyone else stays pending until a coworker scans their QR.

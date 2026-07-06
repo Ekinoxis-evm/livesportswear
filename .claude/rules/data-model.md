@@ -174,6 +174,18 @@ customer increments `rotation_count` (→ back of the line). See
 - RLS: admin location-scoped; any employee at the location can read/write the
   store's floor (shared shop-floor data).
 
+### `employee_credentials` (added 0016)
+Admin-issued temporary password, retrievable on the employee page until the
+employee changes it (then the row is deleted — see `changeOwnPassword` /
+`clearMyStoredCredential` in `src/server/profile.ts`). Deliberate plaintext for
+a *temporary* credential; see security.md.
+- `employee_id uuid pk fk -> employees (on delete cascade)`
+- `temp_password text not null`
+- `set_by uuid` — admin user id
+- `set_at timestamptz default now()`
+- RLS: enabled with **no policies** (default deny) — read/written only by
+  admin-gated server code via the service client.
+
 ### `attendance_validations` (added 0015)
 One-time QR tokens for entry/exit attestation (audit trail). The employee's
 Today card shows a QR encoding `/portal/validate/{token}`; an active coworker

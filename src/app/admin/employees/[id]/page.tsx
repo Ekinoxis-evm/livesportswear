@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { weekStart, weekDays, addDays, isoWeekday } from "@/lib/scheduling/week";
 import { businessDate } from "@/lib/business-date";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
@@ -17,8 +18,10 @@ import { CopyButton } from "@/components/shared/copy-button";
 import { EmployeeAccessActions } from "@/components/employee/account-actions";
 import { AdminRoleActions } from "@/components/employee/admin-role-actions";
 import { SetPasswordButton } from "@/components/employee/set-password-button";
+import { EmployeeFormSheet } from "@/components/employee/employee-form-sheet";
 import { getEmployeeAuthRole } from "@/server/employee-accounts";
 import { formatMoney } from "@/lib/commission";
+import { shortWeekday, isWeekday } from "@/lib/weekdays";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hhmm = (t: string) => t.slice(0, 5);
@@ -100,6 +103,19 @@ export default async function EmployeeDetailPage({
 
   const authRole = emp.auth_user_id ? await getEmployeeAuthRole(emp.id) : null;
 
+  const { data: locationRows } = await supabase
+    .from("locations")
+    .select("id, name")
+    .eq("active", true)
+    .order("name");
+
+  // Admin-only, default-deny table — reachable only via the service client.
+  const { data: credential } = await createServiceClient()
+    .from("employee_credentials")
+    .select("temp_password, set_at")
+    .eq("employee_id", emp.id)
+    .maybeSingle();
+
   const scheduleUrl = `${appUrl}/s/${emp.magic_token}`;
   const icsUrl = `${scheduleUrl}/calendar.ics`;
 
@@ -125,6 +141,65 @@ export default async function EmployeeDetailPage({
           {emp.active ? "Active" : "Inactive"}
         </Badge>
       </div>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between">
+          <div className="flex flex-col gap-1.5">
+            <CardTitle className="text-base">Profile</CardTitle>
+            <CardDescription>
+              Contact details and the rules that drive schedule validation.
+            </CardDescription>
+          </div>
+          <EmployeeFormSheet
+            employee={emp}
+            hourlyRate={hourlyRate}
+            locations={locationRows ?? []}
+          >
+            <Button variant="outline" size="sm">
+              Edit profile
+            </Button>
+          </EmployeeFormSheet>
+        </CardHeader>
+        <CardContent className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Email</span>
+            <span>{emp.email}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Phone</span>
+            <span>{emp.phone ?? "—"}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Store</span>
+            <span>{(emp.location as { name: string } | null)?.name ?? "—"}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Role</span>
+            <span>{ROLE_LABELS[emp.role] ?? emp.role}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Hire date</span>
+            <span className="tabular-nums">{emp.hire_date ?? "—"}</span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground">Weekly rules</span>
+            <span className="tabular-nums">
+              {emp.weekly_hour_target}h · ≤{emp.max_days_per_week} days · ≥
+              {emp.weekly_days_off} off
+            </span>
+          </div>
+          <div className="flex justify-between gap-2 sm:col-span-2">
+            <span className="text-muted-foreground">Preferred days off</span>
+            <span>
+              {emp.preferred_days_off.length
+                ? emp.preferred_days_off
+                    .map((d: string) => (isWeekday(d) ? shortWeekday(d) : d))
+                    .join(", ")
+                : "—"}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
@@ -208,6 +283,23 @@ export default async function EmployeeDetailPage({
               />
             </div>
           </div>
+          {credential && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <span className="text-sm">Temporary password</span>
+                <span className="text-muted-foreground text-xs">
+                  Set {credential.set_at.slice(0, 10)} — visible until {emp.name}{" "}
+                  changes it.
+                </span>
+              </div>
+              <div className="bg-muted flex items-center gap-2 rounded-md border px-3 py-1.5">
+                <code className="text-sm font-semibold tracking-wide">
+                  {credential.temp_password}
+                </code>
+                <CopyButton value={credential.temp_password} label="Copy" />
+              </div>
+            </div>
+          )}
           {emp.auth_user_id && (
             <div className="flex items-center justify-between gap-2">
               <div className="flex flex-col">

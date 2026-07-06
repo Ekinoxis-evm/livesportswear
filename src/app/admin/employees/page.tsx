@@ -22,7 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { EmployeeFormSheet } from "@/components/employee/employee-form-sheet";
 import { EmployeeRowActions } from "@/components/employee/employee-actions";
 import { PayPeriodForm } from "@/components/settings/pay-period-form";
 import { formatMoney } from "@/lib/commission";
@@ -190,15 +189,11 @@ export default async function EmployeesPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <EmployeeFormSheet
-                      employee={emp}
-                      hourlyRate={rateBy.get(emp.id) ?? null}
-                      locations={activeLocations}
-                    >
+                    <Link href={`/admin/employees/${emp.id}`}>
                       <Button variant="ghost" size="sm">
                         Edit
                       </Button>
-                    </EmployeeFormSheet>
+                    </Link>
                     <EmployeeRowActions
                       id={emp.id}
                       active={emp.active}
