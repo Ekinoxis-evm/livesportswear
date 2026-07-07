@@ -37,6 +37,9 @@ A worker. Always belongs to one location in v1 (no multi-location reps yet).
 - `magic_token text not null unique`                — see security.md
 - `auth_user_id uuid unique fk -> auth.users`       — set when invited to the portal (0003)
 - `avatar_url text`                                 — profile photo (Supabase Storage `avatars` bucket)
+- `kiosk_pin_hash text` (added 0019)                — sha256(employee_id:pin); confirms
+  identity for entry/exit taps on the shared store screen (see security.md "Store
+  screen accounts"). Set via `setOwnKioskPin` (portal) / `setEmployeeKioskPin` (admin).
 - `created_at, updated_at`
 
 ### `employee_compensation` (added 0003)

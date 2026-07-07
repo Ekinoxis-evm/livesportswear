@@ -5,75 +5,15 @@ import { revalidatePath } from "next/cache";
 import { requireEmployee } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
-import { generateMagicToken } from "@/lib/magic-token";
-import type { TablesUpdate } from "@/types/db";
+import {
+  activeOthers,
+  doOpenDay,
+  doCheckIn,
+  doCheckOut,
+  patchCheckin,
+  doFinishCustomer,
+} from "@/server/floor-core";
 import type { ActionResult } from "@/server/shared";
-
-type Service = ReturnType<typeof createServiceClient>;
-
-/** Ids of employees currently on the floor (today, not left), minus `except`. */
-async function activeOthers(
-  service: Service,
-  locationId: string,
-  bd: string,
-  except: string,
-): Promise<number> {
-  const { count } = await service
-    .from("floor_checkins")
-    .select("id", { count: "exact", head: true })
-    .eq("location_id", locationId)
-    .eq("business_date", bd)
-    .is("left_at", null)
-    .neq("employee_id", except);
-  return count ?? 0;
-}
-
-async function checkinId(
-  service: Service,
-  locationId: string,
-  bd: string,
-  employeeId: string,
-): Promise<string | null> {
-  const { data } = await service
-    .from("floor_checkins")
-    .select("id")
-    .eq("location_id", locationId)
-    .eq("business_date", bd)
-    .eq("employee_id", employeeId)
-    .maybeSingle();
-  return data?.id ?? null;
-}
-
-/** Issue (or rotate) the one-time QR token for a pending entry/exit attestation. */
-async function issueValidationToken(
-  service: Service,
-  checkin: string,
-  kind: "entry" | "exit",
-): Promise<string | null> {
-  const { error } = await service.from("attendance_validations").upsert(
-    {
-      checkin_id: checkin,
-      kind,
-      token: generateMagicToken(),
-      used_at: null,
-      validated_by: null,
-    },
-    { onConflict: "checkin_id,kind" },
-  );
-  return error ? error.message : null;
-}
-
-async function clearValidationToken(
-  service: Service,
-  checkin: string,
-  kind: "entry" | "exit",
-): Promise<void> {
-  await service
-    .from("attendance_validations")
-    .delete()
-    .eq("checkin_id", checkin)
-    .eq("kind", kind);
-}
 
 const uuid = z.string().uuid();
 const resultSchema = z.object({ sold: z.boolean(), got_contact: z.boolean() });
@@ -104,13 +44,9 @@ export async function openDay(): Promise<ActionResult> {
   if (!isLead(employee.role)) {
     return { ok: false, error: "Only a shift lead can open the day." };
   }
-  const { error } = await service.from("floor_days").upsert(
-    { location_id: employee.location_id, business_date: bd, opened_by: employee.id },
-    { onConflict: "location_id,business_date" },
-  );
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/portal/today");
-  return { ok: true };
+  const res = await doOpenDay(service, employee.location_id, bd, employee.id);
+  if (res.ok) revalidatePath("/portal/today");
+  return res;
 }
 
 /** Check an employee onto the floor (records their arrival time, back of line). */
@@ -129,13 +65,6 @@ export async function checkIn(employeeId: string): Promise<ActionResult> {
   if (!target || target.location_id !== employee.location_id) {
     return { ok: false, error: "That employee isn't at this store." };
   }
-  // First arrival opens the store day — reps aren't leads, and waiting for a
-  // lead to press "Open day" left the queue invisible after check-in.
-  const opened = await service.from("floor_days").upsert(
-    { location_id: employee.location_id, business_date: bd, opened_by: employee.id },
-    { onConflict: "location_id,business_date", ignoreDuplicates: true },
-  );
-  if (opened.error) return { ok: false, error: opened.error.message };
 
   // Entry attestation: a lead adding a coworker counts as the validation (the
   // lead is present); the first person of the day self-validates flagged;
@@ -149,57 +78,23 @@ export async function checkIn(employeeId: string): Promise<ActionResult> {
       ? { entry_validated_at: now, entry_validated_by: null, entry_self: true }
       : { entry_validated_at: null, entry_validated_by: null, entry_self: false };
 
-  // rotation_count omitted so a returning employee keeps their place in line.
-  const { error } = await service.from("floor_checkins").upsert(
-    {
-      location_id: employee.location_id,
-      business_date: bd,
-      employee_id: employeeId,
-      arrived_at: now,
-      left_at: null,
-      status: "available",
-      bumped_at: null,
-      ...entry,
-      exit_validated_at: null,
-      exit_validated_by: null,
-      exit_self: false,
-    },
-    { onConflict: "location_id,business_date,employee_id" },
-  );
-  if (error) return { ok: false, error: error.message };
-
-  const cid = await checkinId(service, employee.location_id, bd, employeeId);
-  if (cid) {
-    await clearValidationToken(service, cid, "exit");
-    if (entry.entry_validated_at) {
-      await clearValidationToken(service, cid, "entry");
-    } else {
-      const tokenErr = await issueValidationToken(service, cid, "entry");
-      if (tokenErr) return { ok: false, error: tokenErr };
-    }
-  }
-  revalidatePath("/portal/today");
-  return { ok: true };
+  const res = await doCheckIn(service, employee.location_id, bd, employeeId, now, entry);
+  if (res.ok) revalidatePath("/portal/today");
+  return res;
 }
 
 async function updateCheckin(
   employeeId: string,
-  patch: TablesUpdate<"floor_checkins">,
+  patch: Parameters<typeof patchCheckin>[4],
 ): Promise<ActionResult> {
   const { employee, service, bd } = await floorCtx();
   if (!uuid.safeParse(employeeId).success) {
     return { ok: false, error: "Invalid employee." };
   }
   if (employeeId !== employee.id && !isLead(employee.role)) return NOT_ALLOWED;
-  const { error } = await service
-    .from("floor_checkins")
-    .update(patch)
-    .eq("location_id", employee.location_id)
-    .eq("business_date", bd)
-    .eq("employee_id", employeeId);
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/portal/today");
-  return { ok: true };
+  const res = await patchCheckin(service, employee.location_id, bd, employeeId, patch);
+  if (res.ok) revalidatePath("/portal/today");
+  return res;
 }
 
 /** Mark an employee as attending a customer (out of the rotation for now). */
@@ -240,25 +135,9 @@ export async function checkOut(employeeId: string): Promise<ActionResult> {
       ? { exit_validated_at: now, exit_validated_by: null, exit_self: true }
       : { exit_validated_at: null, exit_validated_by: null, exit_self: false };
 
-  const { error } = await service
-    .from("floor_checkins")
-    .update({ left_at: now, status: "available", ...exit })
-    .eq("location_id", employee.location_id)
-    .eq("business_date", bd)
-    .eq("employee_id", employeeId);
-  if (error) return { ok: false, error: error.message };
-
-  const cid = await checkinId(service, employee.location_id, bd, employeeId);
-  if (cid) {
-    if (exit.exit_validated_at) {
-      await clearValidationToken(service, cid, "exit");
-    } else {
-      const tokenErr = await issueValidationToken(service, cid, "exit");
-      if (tokenErr) return { ok: false, error: tokenErr };
-    }
-  }
-  revalidatePath("/portal/today");
-  return { ok: true };
+  const res = await doCheckOut(service, employee.location_id, bd, employeeId, now, exit);
+  if (res.ok) revalidatePath("/portal/today");
+  return res;
 }
 
 const tokenSchema = z.string().min(20).max(128);
@@ -337,34 +216,13 @@ export async function finishCustomer(
   const parsed = resultSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
 
-  const ins = await service.from("client_events").insert({
-    location_id: employee.location_id,
-    employee_id: employeeId,
-    business_date: bd,
-    sold: parsed.data.sold,
-    got_contact: parsed.data.got_contact,
-  });
-  if (ins.error) return { ok: false, error: ins.error.message };
-
-  const { data: cur } = await service
-    .from("floor_checkins")
-    .select("rotation_count")
-    .eq("location_id", employee.location_id)
-    .eq("business_date", bd)
-    .eq("employee_id", employeeId)
-    .maybeSingle();
-  const { error } = await service
-    .from("floor_checkins")
-    .update({
-      status: "available",
-      rotation_count: (cur?.rotation_count ?? 0) + 1,
-      bumped_at: null,
-    })
-    .eq("location_id", employee.location_id)
-    .eq("business_date", bd)
-    .eq("employee_id", employeeId);
-  if (error) return { ok: false, error: error.message };
-
-  revalidatePath("/portal/today");
-  return { ok: true };
+  const res = await doFinishCustomer(
+    service,
+    employee.location_id,
+    bd,
+    employeeId,
+    parsed.data,
+  );
+  if (res.ok) revalidatePath("/portal/today");
+  return res;
 }

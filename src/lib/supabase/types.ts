@@ -300,6 +300,7 @@ export type Database = {
           email: string
           hire_date: string | null
           id: string
+          kiosk_pin_hash: string | null
           location_id: string
           magic_token: string
           max_days_per_week: number
@@ -320,6 +321,7 @@ export type Database = {
           email: string
           hire_date?: string | null
           id?: string
+          kiosk_pin_hash?: string | null
           location_id: string
           magic_token: string
           max_days_per_week?: number
@@ -340,6 +342,7 @@ export type Database = {
           email?: string
           hire_date?: string | null
           id?: string
+          kiosk_pin_hash?: string | null
           location_id?: string
           magic_token?: string
           max_days_per_week?: number

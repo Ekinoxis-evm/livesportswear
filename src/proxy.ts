@@ -43,9 +43,14 @@ export async function proxy(request: NextRequest) {
 
   const isAdminPath = pathname.startsWith("/admin");
   const isPortalPath = pathname.startsWith("/portal");
+  const isStorePath = pathname.startsWith("/store");
 
-  if (!user && (isAdminPath || isPortalPath)) return redirectTo("/login");
-  if (isAdminPath && role !== "admin") return redirectTo("/portal");
+  if (!user && (isAdminPath || isPortalPath || isStorePath)) {
+    return redirectTo("/login");
+  }
+  if (isAdminPath && role !== "admin") return redirectTo("/");
+  if (isStorePath && role !== "store") return redirectTo("/");
+  if (isPortalPath && role === "store") return redirectTo("/store");
   // "/" and "/login" route by role (see app/page.tsx); send signed-in users there.
   if (user && pathname === "/login") return redirectTo("/");
 

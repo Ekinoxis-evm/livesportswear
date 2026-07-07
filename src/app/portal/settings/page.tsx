@@ -13,6 +13,7 @@ import { PhotoUpload } from "@/components/portal/photo-upload";
 import { PhoneForm } from "@/components/portal/phone-form";
 import { EmailForm } from "@/components/portal/email-form";
 import { ChangePasswordCard } from "@/components/portal/change-password";
+import { KioskPinForm } from "@/components/portal/kiosk-pin-form";
 import { shortDate } from "@/lib/format-date";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -94,6 +95,8 @@ export default async function SettingsPage() {
       </Card>
 
       <EmailForm email={employee.email} />
+
+      <KioskPinForm hasPin={Boolean(employee.kiosk_pin_hash)} />
 
       <ChangePasswordCard />
 
