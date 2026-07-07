@@ -53,6 +53,29 @@ export async function updateOwnPhoto(formData: FormData): Promise<ActionResult> 
   return { ok: true };
 }
 
+const phoneSchema = z
+  .string()
+  .trim()
+  .max(25)
+  .regex(/^[+0-9 ()-]*$/, "Digits, spaces, and + ( ) - only.");
+
+/** Employee updates their own phone — the only self-editable contact field. */
+export async function updateOwnPhone(input: unknown): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const parsed = phoneSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a valid phone number." };
+
+  const service = createServiceClient();
+  const { error } = await service
+    .from("employees")
+    .update({ phone: parsed.data || null })
+    .eq("id", employee.id);
+  if (error) return { ok: false, error: "Couldn't save your phone." };
+
+  revalidatePath("/portal/settings");
+  return { ok: true };
+}
+
 const passwordSchema = z.string().min(8).max(128);
 
 /**

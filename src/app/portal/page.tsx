@@ -17,8 +17,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PhotoUpload } from "@/components/portal/photo-upload";
-import { ChangePasswordCard } from "@/components/portal/change-password";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -79,12 +77,6 @@ export default async function PortalPage() {
     .eq("month", Number(month.slice(5, 7)))
     .maybeSingle();
   const tiers = resolveTiers(storeGoal?.tiers, asTiers(cfg?.tiers));
-  const { data: compRow } = await supabase
-    .from("employee_compensation")
-    .select("hourly_rate")
-    .eq("employee_id", employee.id)
-    .maybeSingle();
-  const hourlyRate = compRow?.hourly_rate ?? null;
   const { data: myRow } = await supabase
     .from("monthly_sales")
     .select("amount")
@@ -104,22 +96,12 @@ export default async function PortalPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardContent className="flex flex-col gap-3 pt-6">
-          <div className="flex items-center justify-between gap-4">
-            <PhotoUpload avatarUrl={employee.avatar_url} name={employee.name} />
-            <div className="text-right">
-              <p className="font-semibold">{employee.name}</p>
-              <p className="text-muted-foreground text-sm">{locName}</p>
-            </div>
-          </div>
-          {hourlyRate != null && (
-            <p className="text-muted-foreground text-sm tabular-nums">
-              Hourly rate: {formatMoney(hourlyRate, currency)} / h
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <div>
+        <h1 className="text-xl font-bold">Performance</h1>
+        <p className="text-muted-foreground text-sm">
+          {employee.name} · {locName}
+        </p>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
@@ -169,8 +151,6 @@ export default async function PortalPage() {
           </CardContent>
         </Card>
       )}
-
-      <ChangePasswordCard />
     </div>
   );
 }
