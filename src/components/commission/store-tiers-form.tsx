@@ -141,7 +141,7 @@ export function StoreTiersForm({
         {rows.map((r, i) => (
           <div key={i} className="flex items-end gap-2">
             <div className="flex flex-col gap-1">
-              <Label className="text-xs">Min sales</Label>
+              <Label className="text-xs">Threshold</Label>
               <MoneyInput
                 currency={currency}
                 value={r.min_sales}
