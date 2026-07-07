@@ -11,6 +11,8 @@ import {
 import { CopyButton } from "@/components/shared/copy-button";
 import { PhotoUpload } from "@/components/portal/photo-upload";
 import { PhoneForm } from "@/components/portal/phone-form";
+import { EmailForm } from "@/components/portal/email-form";
+import { DaysOffForm } from "@/components/portal/days-off-form";
 import { ChangePasswordCard } from "@/components/portal/change-password";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -65,10 +67,6 @@ export default async function SettingsPage() {
             </div>
           </div>
           <div className="flex flex-col gap-1.5 text-sm">
-            <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Email</span>
-              <span>{employee.email}</span>
-            </div>
             {employee.hire_date && (
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Hire date</span>
@@ -83,10 +81,21 @@ export default async function SettingsPage() {
                 </span>
               </div>
             )}
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">My setup</span>
+              <span className="tabular-nums">
+                {employee.weekly_hour_target}h · ≤{employee.max_days_per_week} days ·
+                ≥{employee.weekly_days_off} off
+              </span>
+            </div>
           </div>
           <PhoneForm phone={employee.phone} />
         </CardContent>
       </Card>
+
+      <EmailForm email={employee.email} />
+
+      <DaysOffForm preferred={employee.preferred_days_off} />
 
       <ChangePasswordCard />
 
