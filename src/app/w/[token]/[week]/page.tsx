@@ -113,8 +113,9 @@ export default async function StoreWeekPage({
   const today = businessDate(loc.timezone);
   const thisWeek = weekStart(today);
 
-  // Week sales ranking — only for this location's mapped employees; sales by
-  // staff we can't attribute to someone at this store are left out.
+  // Week sales ranking — every mapped, active employee of this store appears,
+  // $0 included (a quiet week must not make anyone vanish from the list).
+  // Sales by staff we can't attribute to someone at this store are left out.
   let weekRanking: { name: string; amount: number }[] = [];
   if (schedule && isShopifyConfigured()) {
     try {
@@ -124,20 +125,16 @@ export default async function StoreWeekPage({
           .from("employees")
           .select("name, shopify_staff_id")
           .eq("location_id", loc.id)
+          .eq("active", true)
           .not("shopify_staff_id", "is", null),
       ]);
-      const nameOf = new Map(
-        (emps ?? []).map((e) => [
-          normalizeStaffId(e.shopify_staff_id as string),
-          e.name,
-        ]),
-      );
-      weekRanking = entries
-        .flatMap(([staffId, amount]) => {
-          const name = nameOf.get(staffId);
-          return name ? [{ name, amount }] : [];
-        })
-        .sort((a, b) => b.amount - a.amount);
+      const byStaff = new Map(entries);
+      weekRanking = (emps ?? [])
+        .map((e) => ({
+          name: e.name,
+          amount: byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ?? 0,
+        }))
+        .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
     } catch {
       // section hidden when Shopify is unreachable
     }
