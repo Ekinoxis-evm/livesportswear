@@ -5,12 +5,11 @@ export const config: VercelConfig = {
   buildCommand: "pnpm build",
   installCommand: "pnpm install --frozen-lockfile",
 
-  // Syncs (each no-ops until its env keys are set). Shopify runs through the
-  // store day — every 3h from 9:30 to 21:30 plus the 22:30 close, Miami time
-  // (EDT, UTC-4): 13:30/16:30/19:30/22:30/01:30/02:30 UTC. Vercel cron is UTC,
-  // so in winter (EST) the local times shift one hour later.
+  // Daily syncs (each no-ops until its env keys are set). The Vercel plan
+  // only allows once-daily crons, so the intraday Shopify runs (every 3h
+  // through the Miami store day) live in .github/workflows/shopify-sync.yml.
   crons: [
-    { path: "/api/cron/shopify-sync", schedule: "30 1,2,13,16,19,22 * * *" },
+    { path: "/api/cron/shopify-sync", schedule: "0 6 * * *" },
     { path: "/api/cron/meta-sync", schedule: "0 6 * * *" },
   ],
 

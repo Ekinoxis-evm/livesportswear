@@ -1,0 +1,20 @@
+# Intraday Shopify sales sync — every 3h from 9:30 to 21:30 plus the 22:30
+# close, Miami time (EDT, UTC-4): 13:30/16:30/19:30/22:30/01:30/02:30 UTC.
+# GitHub cron is UTC, so in winter (EST) the local times shift one hour later.
+# Lives here because the Vercel plan only allows once-daily crons; the daily
+# 06:00 UTC safety-net run stays in vercel.ts.
+name: shopify-sync
+on:
+  schedule:
+    - cron: "30 1,2,13,16,19,22 * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger sync endpoint
+        run: |
+          curl -fsS -m 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://livesportswear.vercel.app/api/cron/shopify-sync"
