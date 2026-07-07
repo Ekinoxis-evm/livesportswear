@@ -476,6 +476,7 @@ export type Database = {
           id: string
           name: string
           postal_code: string | null
+          share_token: string | null
           slug: string
           state: string | null
           timezone: string
@@ -491,6 +492,7 @@ export type Database = {
           id?: string
           name: string
           postal_code?: string | null
+          share_token?: string | null
           slug: string
           state?: string | null
           timezone: string
@@ -506,6 +508,7 @@ export type Database = {
           id?: string
           name?: string
           postal_code?: string | null
+          share_token?: string | null
           slug?: string
           state?: string | null
           timezone?: string

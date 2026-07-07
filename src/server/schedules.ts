@@ -147,6 +147,69 @@ export async function copyFromLastWeek(
 
 const hhmm = (t: string) => t.slice(0, 5);
 
+type EmailShift = {
+  id: string;
+  employee_id: string;
+  date: string;
+  shift_template_id: string | null;
+  start_time: string;
+  end_time: string;
+};
+
+type EmailCtx = {
+  location: { name: string; address: string | null; timezone: string };
+  weekRange: string;
+  templateName: Map<string, string>;
+  appUrl: string;
+};
+
+/** One employee's published-week email (+ .ics) — used by publish and resend. */
+async function sendScheduleEmailTo(
+  emp: { name: string; email: string; magic_token: string },
+  empShifts: EmailShift[],
+  ctx: EmailCtx,
+): Promise<{ ok: boolean; error?: string }> {
+  const label = (s: EmailShift) =>
+    s.shift_template_id
+      ? (ctx.templateName.get(s.shift_template_id) ?? null)
+      : slotLabelForHours(s.start_time, s.end_time);
+
+  const ics = buildEmployeeFeed({
+    employeeName: emp.name,
+    location: ctx.location,
+    shifts: empShifts.map((s) => ({
+      id: s.id,
+      date: s.date,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      templateName: label(s),
+    })),
+  });
+
+  const res = await sendSafe({
+    to: emp.email,
+    subject: `Your schedule for ${ctx.weekRange} is published`,
+    react: React.createElement(SchedulePublishedEmail, {
+      employeeName: emp.name,
+      locationName: ctx.location.name,
+      weekRange: ctx.weekRange,
+      scheduleUrl: `${ctx.appUrl}/s/${emp.magic_token}`,
+      shifts: empShifts.map((s) => ({
+        date: `${SHORT_WEEKDAYS[isoWeekday(s.date) - 1]} ${s.date.slice(8, 10)}`,
+        label: label(s) ?? (s.shift_template_id ? "Shift" : "Custom"),
+        time: `${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
+      })),
+    }),
+    attachments: [{ filename: "schedule.ics", content: ics }],
+  });
+  return res.ok ? { ok: true } : { ok: false, error: res.error };
+}
+
+const sortShifts = (a: EmailShift, b: EmailShift) =>
+  a.date === b.date
+    ? a.start_time.localeCompare(b.start_time)
+    : a.date.localeCompare(b.date);
+
 /**
  * Canonical publish: load -> validate -> block-gate -> mark published + audit
  * -> email each affected employee (dry-run aware) with their ICS. See
@@ -250,58 +313,102 @@ export async function publishSchedule(
     },
   });
 
-  const templateName = new Map(templates.map((t) => [t.id, t.name]));
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const weekRange = formatWeekRange(sched.data.week_start);
+  const ctx: EmailCtx = {
+    location: loc.data,
+    weekRange: formatWeekRange(sched.data.week_start),
+    templateName: new Map(templates.map((t) => [t.id, t.name])),
+    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+  };
 
   let sent = 0;
   let total = 0;
   for (const emp of employees) {
     const empShifts = shifts
       .filter((s) => s.employee_id === emp.id)
-      .sort((a, b) =>
-        a.date === b.date
-          ? a.start_time.localeCompare(b.start_time)
-          : a.date.localeCompare(b.date),
-      );
+      .sort(sortShifts);
     if (empShifts.length === 0) continue;
     total++;
-
-    const ics = buildEmployeeFeed({
-      employeeName: emp.name,
-      location: loc.data,
-      shifts: empShifts.map((s) => ({
-        id: s.id,
-        date: s.date,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        templateName: s.shift_template_id
-          ? (templateName.get(s.shift_template_id) ?? null)
-          : slotLabelForHours(s.start_time, s.end_time),
-      })),
-    });
-
-    const res = await sendSafe({
-      to: emp.email,
-      subject: `Your schedule for ${weekRange} is published`,
-      react: React.createElement(SchedulePublishedEmail, {
-        employeeName: emp.name,
-        locationName: loc.data.name,
-        weekRange,
-        scheduleUrl: `${appUrl}/s/${emp.magic_token}`,
-        shifts: empShifts.map((s) => ({
-          date: `${SHORT_WEEKDAYS[isoWeekday(s.date) - 1]} ${s.date.slice(8, 10)}`,
-          label: s.shift_template_id
-            ? (templateName.get(s.shift_template_id) ?? "Shift")
-            : (slotLabelForHours(s.start_time, s.end_time) ?? "Custom"),
-          time: `${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
-        })),
-      }),
-      attachments: [{ filename: "schedule.ics", content: ics }],
-    });
+    const res = await sendScheduleEmailTo(emp, empShifts, ctx);
     if (res.ok) sent++;
   }
 
   revalidatePath("/admin/schedules");
   return { ok: true, data: { sent, total } };
+}
+
+/**
+ * Re-send one employee their published-week email (same content as publish) —
+ * for a fixed email address, a missed delivery, or a post-publish edit that
+ * only affects them.
+ */
+export async function resendScheduleEmail(
+  scheduleId: string,
+  employeeId: string,
+): Promise<ActionResult<{ email: string }>> {
+  const admin = await requireAdmin();
+  if (!uuid.safeParse(scheduleId).success || !uuid.safeParse(employeeId).success) {
+    return { ok: false, error: "Invalid id." };
+  }
+
+  const supabase = await createServerClient();
+
+  const sched = await supabase
+    .from("schedules")
+    .select("id, location_id, week_start, status")
+    .eq("id", scheduleId)
+    .maybeSingle();
+  if (!sched.data) return { ok: false, error: "Schedule not found." };
+  if (sched.data.status !== "published") {
+    return { ok: false, error: "Publish the schedule first." };
+  }
+
+  const [{ data: loc }, { data: emp }, shiftsRes, templatesRes] = await Promise.all([
+    supabase
+      .from("locations")
+      .select("name, address, timezone")
+      .eq("id", sched.data.location_id)
+      .maybeSingle(),
+    supabase
+      .from("employees")
+      .select("id, name, email, magic_token, location_id, active")
+      .eq("id", employeeId)
+      .maybeSingle(),
+    supabase
+      .from("shifts")
+      .select("id, employee_id, date, shift_template_id, start_time, end_time")
+      .eq("schedule_id", scheduleId)
+      .eq("employee_id", employeeId),
+    supabase
+      .from("shift_templates")
+      .select("id, name")
+      .eq("location_id", sched.data.location_id),
+  ]);
+  if (!loc) return { ok: false, error: "Location not found." };
+  if (!emp || !emp.active || emp.location_id !== sched.data.location_id) {
+    return { ok: false, error: "That employee isn't at this store." };
+  }
+
+  const empShifts = (shiftsRes.data ?? []).sort(sortShifts);
+  if (empShifts.length === 0) {
+    return { ok: false, error: `${emp.name} has no shifts this week.` };
+  }
+
+  const res = await sendScheduleEmailTo(emp, empShifts, {
+    location: loc,
+    weekRange: formatWeekRange(sched.data.week_start),
+    templateName: new Map((templatesRes.data ?? []).map((t) => [t.id, t.name])),
+    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "The email couldn't be sent." };
+
+  const service = createServiceClient();
+  await service.from("audit_log").insert({
+    actor: admin.id,
+    action: "schedule.email_resent",
+    entity: "schedule",
+    entity_id: scheduleId,
+    diff: { employee_id: emp.id, week_start: sched.data.week_start },
+  });
+
+  return { ok: true, data: { email: emp.email } };
 }

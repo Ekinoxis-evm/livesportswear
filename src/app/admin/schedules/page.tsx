@@ -19,6 +19,8 @@ import { ScheduleControls } from "@/components/schedule/schedule-controls";
 import { ScheduleWorkspace } from "@/components/schedule/schedule-workspace";
 import { ViolationsBanner } from "@/components/schedule/violations-banner";
 import { PublishButton } from "@/components/schedule/publish-button";
+import { ResendEmailMenu } from "@/components/schedule/resend-email-menu";
+import { CopyButton } from "@/components/shared/copy-button";
 
 export default async function SchedulesPage({
   searchParams,
@@ -31,7 +33,7 @@ export default async function SchedulesPage({
 
   const { data: locationRows } = await supabase
     .from("locations")
-    .select("id, name, active, timezone")
+    .select("id, name, active, timezone, share_token")
     .order("name");
   const access = await accessibleLocationIds();
   const activeLocations = (locationRows ?? [])
@@ -57,8 +59,9 @@ export default async function SchedulesPage({
     activeLocations.find((l) => l.id === sp.location)?.id ??
     activeLocations[0].id;
   // Current week anchored to the selected store's timezone, not the server's UTC.
-  const locTz =
-    (locationRows ?? []).find((l) => l.id === locationId)?.timezone ?? "UTC";
+  const selectedLocation = (locationRows ?? []).find((l) => l.id === locationId);
+  const locTz = selectedLocation?.timezone ?? "UTC";
+  const shareToken = selectedLocation?.share_token ?? null;
   const thisWeekStart = weekDays(businessDate(locTz))[0];
   const nextWeekStart = addDays(thisWeekStart, 7);
   const weekStart = normalizeWeekStart(sp.week, thisWeekStart);
@@ -227,6 +230,21 @@ export default async function SchedulesPage({
             >
               {schedule.status === "published" ? "Published" : "Draft"}
             </Badge>
+            {schedule.status === "published" && shareToken && (
+              <CopyButton
+                value={`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/w/${shareToken}/${weekStart}`}
+                label="Copy share link"
+              />
+            )}
+            {schedule.status === "published" && (
+              <ResendEmailMenu
+                scheduleId={schedule.id}
+                recipients={empList
+                  .filter((e) => shiftRows.some((s) => s.employee_id === e.id))
+                  .map((e) => ({ id: e.id, name: e.name }))
+                  .sort((a, b) => a.name.localeCompare(b.name))}
+              />
+            )}
             <PublishButton
               scheduleId={schedule.id}
               blockers={violations.filter((v) => v.level === "block").length}

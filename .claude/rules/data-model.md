@@ -14,6 +14,9 @@ A physical store.
 - `timezone text not null` — IANA, e.g. `America/New_York`. The authoritative
   reference for all store-local "today"/week math (`businessDate(tz)`).
 - `color text` — hex, used for badges in admin UI
+- `share_token text unique` (added 0017) — capability token for the public
+  store-week page `/w/{token}/{week}` (all employees' published shifts,
+  read-only). Same handling rules as employee magic tokens.
 - `active boolean default true`
 - `created_at, updated_at`
 

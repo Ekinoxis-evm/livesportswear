@@ -12,6 +12,9 @@ import {
 } from "@/components/ui/table";
 import { LocationFormSheet } from "@/components/location/location-form-sheet";
 import { LocationActiveToggle } from "@/components/location/location-actions";
+import { CopyButton } from "@/components/shared/copy-button";
+import { businessDate } from "@/lib/business-date";
+import { weekStart } from "@/lib/scheduling/week";
 
 export default async function LocationsPage() {
   const supabase = await createServerClient();
@@ -19,6 +22,7 @@ export default async function LocationsPage() {
     .from("locations")
     .select("*")
     .order("name");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   return (
     <div className="flex flex-col gap-6">
@@ -85,6 +89,12 @@ export default async function LocationsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
+                    {loc.share_token && (
+                      <CopyButton
+                        value={`${appUrl}/w/${loc.share_token}/${weekStart(businessDate(loc.timezone))}`}
+                        label="Copy schedule link"
+                      />
+                    )}
                     <LocationFormSheet location={loc}>
                       <Button variant="ghost" size="sm">
                         Edit

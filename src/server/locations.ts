@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { isValidTimezone } from "@/lib/timezones";
+import { generateMagicToken } from "@/lib/magic-token";
 import {
   type ActionResult,
   emptyToNull,
@@ -51,7 +52,7 @@ export async function createLocation(
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("locations")
-    .insert(parsed.data)
+    .insert({ ...parsed.data, share_token: generateMagicToken() })
     .select("id")
     .single();
 
