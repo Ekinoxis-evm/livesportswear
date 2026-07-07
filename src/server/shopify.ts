@@ -6,6 +6,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { listStaffMembers, type ShopifyStaff } from "@/lib/shopify";
+import { businessDate } from "@/lib/business-date";
+import { primaryTimezone } from "@/lib/business-tz";
 import { runShopifySync, type SyncResult } from "@/lib/shopify-sync";
 import { type ActionResult, dbError } from "@/server/shared";
 
@@ -13,7 +15,7 @@ const uuid = z.string().uuid();
 
 export async function syncMonthlySales(month?: string): Promise<SyncResult> {
   await requireAdmin();
-  const m = month ?? new Date().toISOString().slice(0, 10).slice(0, 7);
+  const m = month ?? businessDate(await primaryTimezone()).slice(0, 7);
   return runShopifySync(m);
 }
 

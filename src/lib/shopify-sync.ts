@@ -1,26 +1,19 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { listStaffMembers, fetchSalesByStaff } from "@/lib/shopify";
+import { fetchStaffSales, fetchStaffNames } from "@/lib/shopify";
+import { monthRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
+import { primaryTimezone } from "@/lib/business-tz";
 
 export type SyncResult =
   | { ok: true; updated: number; unmatched: number }
   | { ok: false; error: string };
 
-function monthRange(month: string): { start: string; endExclusive: string } {
-  const [y, m] = month.split("-").map(Number);
-  const ny = m === 12 ? y + 1 : y;
-  const nm = m === 12 ? 1 : m + 1;
-  return {
-    start: `${month}-01`,
-    endExclusive: `${ny}-${String(nm).padStart(2, "0")}-01`,
-  };
-}
-
 /**
- * Pulls one month of sales from Shopify, attributes each order to a Shopify
- * staff member (POS), maps that to an employee (by explicit shopify_staff_id,
- * falling back to matching email), and upserts monthly_sales (source=shopify).
+ * Pulls one month of sales from Shopify, attributes each POS order to its
+ * staff member (order.user_id), maps that to an employee (by explicit
+ * shopify_staff_id, falling back to a case-insensitive name match against the
+ * order timeline's staff name), and upserts monthly_sales (source=shopify).
  * Uses the service client so it works from both an admin action and the cron.
  */
 export async function runShopifySync(month: string): Promise<SyncResult> {
@@ -31,15 +24,14 @@ export async function runShopifySync(month: string): Promise<SyncResult> {
     return { ok: false, error: "Invalid month." };
   }
 
-  const { start, endExclusive } = monthRange(month);
+  const { start, endExclusive } = monthRangeInTz(month, await primaryTimezone());
 
-  let salesByStaff: Map<string, number>;
-  let staff: { id: string; email: string | null }[];
+  let totals: Map<string, number>;
+  let names: Map<string, string>;
   try {
-    [salesByStaff, staff] = await Promise.all([
-      fetchSalesByStaff(start, endExclusive),
-      listStaffMembers(),
-    ]);
+    const sales = await fetchStaffSales(start, endExclusive);
+    totals = sales.totals;
+    names = await fetchStaffNames(sales.sampleOrder);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Shopify error." };
   }
@@ -47,28 +39,27 @@ export async function runShopifySync(month: string): Promise<SyncResult> {
   const supabase = createServiceClient();
   const { data: employees } = await supabase
     .from("employees")
-    .select("id, email, shopify_staff_id");
+    .select("id, name, shopify_staff_id");
 
   const empByStaffId = new Map(
     (employees ?? [])
       .filter((e) => e.shopify_staff_id)
-      .map((e) => [e.shopify_staff_id as string, e.id]),
+      .map((e) => [normalizeStaffId(e.shopify_staff_id as string), e.id]),
   );
-  const empByEmail = new Map(
-    (employees ?? []).map((e) => [e.email.toLowerCase(), e.id]),
+  const empByName = new Map(
+    (employees ?? []).map((e) => [e.name.trim().toLowerCase(), e.id]),
   );
-  const staffEmail = new Map(staff.map((s) => [s.id, s.email?.toLowerCase()]));
 
   const resolve = (staffId: string): string | null => {
     const explicit = empByStaffId.get(staffId);
     if (explicit) return explicit;
-    const email = staffEmail.get(staffId);
-    return email ? (empByEmail.get(email) ?? null) : null;
+    const name = names.get(staffId)?.trim().toLowerCase();
+    return name ? (empByName.get(name) ?? null) : null;
   };
 
   let updated = 0;
   let unmatched = 0;
-  for (const [staffId, amount] of salesByStaff) {
+  for (const [staffId, amount] of totals) {
     const employeeId = resolve(staffId);
     if (!employeeId) {
       unmatched++;
