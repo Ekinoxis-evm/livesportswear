@@ -6,7 +6,11 @@ import {
   SHOPIFY_ADMIN_TOKEN,
   SHOPIFY_API_VERSION,
 } from "@/lib/shopify-config";
-import { ordersSearchQuery } from "@/lib/shopify-range";
+
+// Staff attribution uses the REST orders API: order.user_id and the order
+// timeline's "placed" author come with read_orders alone, while GraphQL's
+// Order.staffMember requires the read_users scope, which Shopify only grants
+// via a support request. Revisit if that scope is ever enabled for the app.
 
 // Client-credentials tokens live 24h; cache per instance and refresh early.
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -43,22 +47,13 @@ async function getAccessToken(): Promise<string> {
   return cachedToken.token;
 }
 
-async function shopifyGraphQL<T>(
-  query: string,
-  variables?: Record<string, unknown>,
-): Promise<T> {
+async function shopifyRest<T>(
+  path: string,
+): Promise<{ body: T; nextPageInfo: string | null }> {
   const call = async (token: string) =>
-    fetch(
-      `https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": token,
-        },
-        body: JSON.stringify({ query, variables }),
-      },
-    );
+    fetch(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}${path}`, {
+      headers: { "X-Shopify-Access-Token": token },
+    });
 
   let res = await call(await getAccessToken());
   if (res.status === 401 && !SHOPIFY_ADMIN_TOKEN) {
@@ -66,82 +61,98 @@ async function shopifyGraphQL<T>(
     res = await call(await getAccessToken());
   }
   if (!res.ok) throw new Error(`Shopify API error ${res.status}`);
-  const json = (await res.json()) as {
-    data?: T;
-    errors?: unknown;
-  };
-  if (json.errors) {
-    throw new Error(`Shopify GraphQL: ${JSON.stringify(json.errors).slice(0, 300)}`);
-  }
-  return json.data as T;
+  const link = res.headers.get("link") ?? "";
+  const next = link.match(/<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+  return { body: (await res.json()) as T, nextPageInfo: next ? next[1] : null };
 }
 
 export type ShopifyStaff = { id: string; name: string; email: string | null };
 
-/** All staff members (for mapping each to an employee). */
-export async function listStaffMembers(): Promise<ShopifyStaff[]> {
-  const data = await shopifyGraphQL<{
-    staffMembers: { nodes: ShopifyStaff[] };
-  }>(`
-    query StaffMembers {
-      staffMembers(first: 100) {
-        nodes { id name email }
-      }
-    }
-  `);
-  return data.staffMembers.nodes;
-}
+type RestOrder = {
+  id: number;
+  user_id: number | null;
+  cancelled_at: string | null;
+  test: boolean;
+  current_total_price: string;
+};
 
-type OrdersPage = {
-  orders: {
-    edges: {
-      node: {
-        staffMember: { id: string } | null;
-        currentTotalPriceSet: { shopMoney: { amount: string } };
-      };
-    }[];
-    pageInfo: { hasNextPage: boolean; endCursor: string | null };
-  };
+const ORDER_FIELDS = "id,user_id,cancelled_at,test,current_total_price";
+
+export type StaffSales = {
+  /** staff user_id (numeric string) → summed current order totals */
+  totals: Map<string, number>;
+  /** staff user_id → one order id, for name lookup via the order timeline */
+  sampleOrder: Map<string, number>;
 };
 
 /**
- * Total sales per Shopify staff member for [start, endExclusive) — UTC ISO
- * instants (callers pass store-local month boundaries). Cancelled orders are
- * excluded; orders are attributed via Order.staffMember (POS staff). Paginates fully.
+ * Per-staff sales totals for [start, endExclusive) — UTC ISO instants (callers
+ * pass store-local month boundaries). Only POS-attributed orders (user_id);
+ * cancelled and test orders are excluded. Paginates fully.
  */
-export async function fetchSalesByStaff(
+export async function fetchStaffSales(
   start: string,
   endExclusive: string,
-): Promise<Map<string, number>> {
+): Promise<StaffSales> {
+  // REST created_at_max is inclusive — step back one second from the bound.
+  const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
   const totals = new Map<string, number>();
-  let after: string | null = null;
+  const sampleOrder = new Map<string, number>();
 
-  do {
-    const data: OrdersPage = await shopifyGraphQL<OrdersPage>(
-      `query Orders($q: String!, $after: String) {
-        orders(first: 250, after: $after, query: $q, sortKey: CREATED_AT) {
-          edges {
-            node {
-              staffMember { id }
-              currentTotalPriceSet { shopMoney { amount } }
-            }
-          }
-          pageInfo { hasNextPage endCursor }
-        }
-      }`,
-      { q: ordersSearchQuery(start, endExclusive), after },
-    );
-
-    for (const edge of data.orders.edges) {
-      const staffId = edge.node.staffMember?.id;
-      if (!staffId) continue; // only attributed (POS) orders
-      const amount = Number(edge.node.currentTotalPriceSet.shopMoney.amount) || 0;
+  let path: string | null =
+    `/orders.json?status=any&limit=250&fields=${ORDER_FIELDS}` +
+    `&created_at_min=${encodeURIComponent(start)}&created_at_max=${encodeURIComponent(max)}`;
+  while (path) {
+    const { body, nextPageInfo }: { body: { orders: RestOrder[] }; nextPageInfo: string | null } =
+      await shopifyRest<{ orders: RestOrder[] }>(path);
+    for (const o of body.orders) {
+      if (!o.user_id || o.cancelled_at || o.test) continue;
+      const staffId = String(o.user_id);
+      const amount = Number(o.current_total_price) || 0;
       totals.set(staffId, (totals.get(staffId) ?? 0) + amount);
+      if (!sampleOrder.has(staffId)) sampleOrder.set(staffId, o.id);
     }
-    after = data.orders.pageInfo.hasNextPage
-      ? data.orders.pageInfo.endCursor
+    path = nextPageInfo
+      ? `/orders.json?limit=250&fields=${ORDER_FIELDS}&page_info=${nextPageInfo}`
       : null;
-  } while (after);
+  }
+  return { totals, sampleOrder };
+}
 
-  return totals;
+type RestEvent = { verb: string; author: string | null };
+
+/**
+ * Staff display names from each staff member's sample order timeline — the
+ * "placed" event's author is the POS staff member who processed the sale.
+ */
+export async function fetchStaffNames(
+  sampleOrder: Map<string, number>,
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  for (const [staffId, orderId] of sampleOrder) {
+    const { body } = await shopifyRest<{ events: RestEvent[] }>(
+      `/orders/${orderId}/events.json?limit=10`,
+    );
+    const placed = body.events.find(
+      (e) => e.verb === "placed" && e.author && e.author !== "Shopify",
+    );
+    if (placed?.author) names.set(staffId, placed.author);
+  }
+  return names;
+}
+
+/**
+ * Staff members seen in the last ~2 months of orders, with names — feeds the
+ * admin mapping panel. Emails aren't exposed on this path.
+ */
+export async function listStaffMembers(): Promise<ShopifyStaff[]> {
+  const since = new Date(Date.now() - 62 * 24 * 3600 * 1000).toISOString();
+  const { totals, sampleOrder } = await fetchStaffSales(
+    since,
+    new Date().toISOString(),
+  );
+  const names = await fetchStaffNames(sampleOrder);
+  return [...totals.keys()]
+    .map((id) => ({ id, name: names.get(id) ?? `Staff ${id}`, email: null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

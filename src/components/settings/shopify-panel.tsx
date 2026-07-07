@@ -38,8 +38,8 @@ export function ShopifyPanel({
         <p>
           Not connected yet. Add <code>SHOPIFY_STORE_DOMAIN</code>,{" "}
           <code>SHOPIFY_CLIENT_ID</code> and <code>SHOPIFY_CLIENT_SECRET</code>{" "}
-          in Vercel (Dev Dashboard app in the store&apos;s organization, Admin
-          API scopes <code>read_orders</code>, <code>read_users</code>), then
+          in Vercel (Dev Dashboard app installed on the store, Admin API scopes{" "}
+          <code>read_orders</code>, <code>read_all_orders</code>), then
           redeploy. Sales then sync automatically each day, and you can map
           staff here.
         </p>
@@ -136,7 +136,8 @@ export function ShopifyPanel({
         </ul>
       )}
       <p className="text-muted-foreground text-xs">
-        Unmapped staff also auto-match by email during sync.
+        Unmapped staff also auto-match by name during sync. The staff list
+        shows anyone who processed a POS order in the last two months.
       </p>
     </div>
   );

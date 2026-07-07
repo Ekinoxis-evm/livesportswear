@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   previousMonth,
   monthRangeInTz,
-  ordersSearchQuery,
+  normalizeStaffId,
 } from "@/lib/shopify-range";
 
 describe("previousMonth", () => {
@@ -33,14 +33,13 @@ describe("monthRangeInTz", () => {
   });
 });
 
-describe("ordersSearchQuery", () => {
-  it("bounds the range and excludes cancelled orders", () => {
-    const q = ordersSearchQuery(
-      "2026-07-01T04:00:00.000Z",
-      "2026-08-01T04:00:00.000Z",
+describe("normalizeStaffId", () => {
+  it("extracts the numeric tail from a StaffMember GID", () => {
+    expect(normalizeStaffId("gid://shopify/StaffMember/91389034721")).toBe(
+      "91389034721",
     );
-    expect(q).toBe(
-      "created_at:>='2026-07-01T04:00:00.000Z' created_at:<'2026-08-01T04:00:00.000Z' -status:cancelled",
-    );
+  });
+  it("passes plain numeric ids through", () => {
+    expect(normalizeStaffId("91389034721")).toBe("91389034721");
   });
 });

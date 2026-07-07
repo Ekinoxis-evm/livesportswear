@@ -28,7 +28,11 @@ export function monthRangeInTz(
   };
 }
 
-/** Orders search filter for [start, endExclusive) ISO instants, excluding cancelled orders. */
-export function ordersSearchQuery(start: string, endExclusive: string): string {
-  return `created_at:>='${start}' created_at:<'${endExclusive}' -status:cancelled`;
+/**
+ * Canonical staff id: the numeric tail. REST gives numeric user_id; GraphQL
+ * gives gid://shopify/StaffMember/<n> — mappings must compare equal either way.
+ */
+export function normalizeStaffId(id: string): string {
+  const tail = id.split("/").pop() ?? id;
+  return tail.trim();
 }

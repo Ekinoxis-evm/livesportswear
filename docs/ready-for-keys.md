@@ -67,8 +67,10 @@ report, time-off decision.
 
 Auth is the **client-credentials grant** from a Dev Dashboard app (admin-created
 custom apps were retired Jan 2026). The app must live in the **same organization**
-as the store, with Admin API scopes `read_orders`, `read_users` (+
-`read_all_orders` for >60d history). Set `SHOPIFY_STORE_DOMAIN`,
+as the store and be installed on it, with Admin API scopes `read_orders` +
+`read_all_orders` (staff attribution uses REST `order.user_id` + the order
+timeline author — GraphQL `staffMember` needs `read_users`, which Shopify only
+grants via support request). Set `SHOPIFY_STORE_DOMAIN`,
 `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` (tokens are minted and cached
 automatically; a legacy `SHOPIFY_ADMIN_TOKEN` still works as a direct override).
 Then in **Settings → Shopify**, map each POS staff member to an employee. The
