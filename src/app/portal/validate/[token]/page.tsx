@@ -42,7 +42,7 @@ export default async function ValidatePage({
   const { data } = await service
     .from("attendance_validations")
     .select(
-      "kind, used_at, floor_checkins!inner(employee_id, location_id, business_date, arrived_at, left_at, employees(name))",
+      "kind, used_at, floor_checkins!inner(employee_id, location_id, business_date, arrived_at, left_at, employees!employee_id(name))",
     )
     .eq("token", token)
     .maybeSingle();

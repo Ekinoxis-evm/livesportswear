@@ -76,7 +76,7 @@ export default async function TodayPage() {
       service
         .from("floor_checkins")
         .select(
-          "id, employee_id, arrived_at, left_at, status, rotation_count, bumped_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, employees(name)",
+          "id, employee_id, arrived_at, left_at, status, rotation_count, bumped_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, employees!employee_id(name)",
         )
         .eq("location_id", employee.location_id)
         .eq("business_date", bd),
