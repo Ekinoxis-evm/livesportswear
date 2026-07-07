@@ -175,7 +175,7 @@ export function StoreMonthForm({
           rows.map((r, i) => (
             <div key={i} className="flex items-end gap-2">
               <div className="flex flex-col gap-1">
-                <span className="text-muted-foreground text-xs">Min sales</span>
+                <span className="text-muted-foreground text-xs">Threshold</span>
                 <MoneyInput
                   currency={currency}
                   value={r.min_sales}

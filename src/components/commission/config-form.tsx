@@ -51,11 +51,14 @@ export function CommissionConfigForm({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <Label>Tiers — sales at or above unlock the rate</Label>
+        <Label>
+          Tiers — each rate applies below its threshold; the top rate continues
+          beyond the last
+        </Label>
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-2">
             <MoneyInput
-              placeholder="Min sales (goal)"
+              placeholder="Threshold"
               value={r.min_sales}
               onValueChange={(v) => update(i, "min_sales", v)}
               currency={currency}
