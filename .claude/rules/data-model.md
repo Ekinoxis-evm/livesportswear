@@ -32,7 +32,6 @@ A worker. Always belongs to one location in v1 (no multi-location reps yet).
 - `weekly_hour_target int not null default 40`
 - `max_days_per_week int not null default 5`        — hard rule
 - `weekly_days_off int not null default 2`          — hard rule
-- `preferred_days_off text[] not null default '{}'` — soft, lowercase weekday names
 - `hire_date date`
 - `active boolean default true`
 - `magic_token text not null unique`                — see security.md
@@ -217,7 +216,6 @@ at the store opens it and confirms (`validateAttendance`, `src/server/floor.ts`)
 | `BELOW_MIN_DAYS_OFF` | block | Days off in the week < `weekly_days_off` |
 | `BELOW_COVERAGE` | warn | A weekday has fewer than `default_headcount` employees for a template |
 | `ABOVE_HOUR_TARGET` | warn | Total hours > `weekly_hour_target` for the week |
-| `PREFERRED_DAY_OFF_USED` | warn | Employee is scheduled on a `preferred_days_off` day |
 | `ABOVE_BIWEEKLY_HOURS` | warn | Employee exceeds the hour cap across a 2-week pay sprint (default 80h) |
 
 ## Pay periods (config, not DB)

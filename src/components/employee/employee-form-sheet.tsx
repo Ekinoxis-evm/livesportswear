@@ -7,14 +7,12 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createEmployee, updateEmployee } from "@/server/employees";
-import { WEEKDAYS, shortWeekday } from "@/lib/weekdays";
 import {
   DIAL_CODES,
   DIAL_CODE_ITEMS,
   splitPhone,
   joinPhone,
 } from "@/lib/dial-codes";
-import { cn } from "@/lib/utils";
 import type { Employee } from "@/types/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +59,6 @@ const schema = z.object({
   weekly_hour_target: z.coerce.number().int().min(0).max(80),
   max_days_per_week: z.coerce.number().int().min(1).max(7),
   weekly_days_off: z.coerce.number().int().min(0).max(6),
-  preferred_days_off: z.array(z.string()),
   hire_date: z.string().optional().or(z.literal("")),
   hourly_rate: z.string().optional().or(z.literal("")),
 });
@@ -104,7 +101,6 @@ export function EmployeeFormSheet({
       weekly_hour_target: employee?.weekly_hour_target ?? 40,
       max_days_per_week: employee?.max_days_per_week ?? 5,
       weekly_days_off: employee?.weekly_days_off ?? 2,
-      preferred_days_off: employee?.preferred_days_off ?? [],
       hire_date: employee?.hire_date ?? "",
       hourly_rate: hourlyRate != null ? String(hourlyRate) : "",
     },
@@ -112,14 +108,6 @@ export function EmployeeFormSheet({
 
   const locationId = watch("location_id");
   const role = watch("role");
-  const preferred = watch("preferred_days_off");
-
-  function toggleDay(day: string) {
-    const next = preferred.includes(day)
-      ? preferred.filter((d) => d !== day)
-      : [...preferred, day];
-    setValue("preferred_days_off", next, { shouldValidate: true });
-  }
 
   async function onSubmit(values: FormValues) {
     setPending(true);
@@ -285,27 +273,6 @@ export function EmployeeFormSheet({
                 {...register("weekly_days_off")}
               />
             </Field>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label>Preferred days off</Label>
-            <div className="flex flex-wrap gap-1">
-              {WEEKDAYS.map((day) => {
-                const on = preferred.includes(day);
-                return (
-                  <Button
-                    key={day}
-                    type="button"
-                    size="sm"
-                    variant={on ? "default" : "outline"}
-                    onClick={() => toggleDay(day)}
-                    className={cn("w-12", on && "font-semibold")}
-                  >
-                    {shortWeekday(day)}
-                  </Button>
-                );
-              })}
-            </div>
           </div>
 
           <Field

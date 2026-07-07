@@ -101,7 +101,6 @@ export function EmployeeWizard({
     const res = await createEmployeeWithAccess({
       ...v,
       phone: joinPhone(dialCode, phoneNumber),
-      preferred_days_off: [],
       hourly_rate: v.hourly_rate ?? "",
       hire_date: v.hire_date ?? "",
       invite,

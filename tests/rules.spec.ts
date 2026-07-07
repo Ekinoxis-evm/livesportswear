@@ -19,7 +19,6 @@ function emp(over: Partial<RuleEmployee> = {}): RuleEmployee {
     weekly_hour_target: 40,
     max_days_per_week: 5,
     weekly_days_off: 2,
-    preferred_days_off: [],
     ...over,
   };
 }
@@ -122,21 +121,6 @@ describe("validateSchedule", () => {
       shifts: [shift({ start_time: "22:00", end_time: "06:00" })],
     });
     expect(codes(out)).toContain("ABOVE_HOUR_TARGET");
-  });
-
-  it("warns once per day when a preferred day off is used", () => {
-    const out = validateSchedule(
-      input({
-        employees: [emp({ preferred_days_off: ["monday"] })],
-        shifts: [
-          shift({ start_time: "09:00", end_time: "12:00" }),
-          shift({ start_time: "13:00", end_time: "17:00" }),
-        ],
-      }),
-    );
-    expect(out.filter((v) => v.code === "PREFERRED_DAY_OFF_USED")).toHaveLength(
-      1,
-    );
   });
 
   it("warns about days below a template's coverage, but not staffed days", () => {

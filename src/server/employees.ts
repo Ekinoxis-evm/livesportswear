@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { generateMagicToken } from "@/lib/magic-token";
-import { isWeekday } from "@/lib/weekdays";
 import { inviteEmployee } from "@/server/employee-accounts";
 import {
   type ActionResult,
@@ -30,10 +29,6 @@ const employeeSchema = z.object({
   weekly_hour_target: z.coerce.number().int().min(0).max(80),
   max_days_per_week: z.coerce.number().int().min(1).max(7),
   weekly_days_off: z.coerce.number().int().min(0).max(6),
-  preferred_days_off: z
-    .array(z.string())
-    .default([])
-    .refine((days) => days.every(isWeekday), "Invalid weekday."),
   hire_date: z.preprocess(
     emptyToNull,
     z

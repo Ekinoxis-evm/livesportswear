@@ -12,7 +12,6 @@ import { CopyButton } from "@/components/shared/copy-button";
 import { PhotoUpload } from "@/components/portal/photo-upload";
 import { PhoneForm } from "@/components/portal/phone-form";
 import { EmailForm } from "@/components/portal/email-form";
-import { DaysOffForm } from "@/components/portal/days-off-form";
 import { ChangePasswordCard } from "@/components/portal/change-password";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -94,8 +93,6 @@ export default async function SettingsPage() {
       </Card>
 
       <EmailForm email={employee.email} />
-
-      <DaysOffForm preferred={employee.preferred_days_off} />
 
       <ChangePasswordCard />
 

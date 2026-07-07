@@ -246,7 +246,7 @@ export async function publishSchedule(
   const employeesRes = await supabase
     .from("employees")
     .select(
-      "id, name, email, magic_token, weekly_hour_target, max_days_per_week, weekly_days_off, preferred_days_off",
+      "id, name, email, magic_token, weekly_hour_target, max_days_per_week, weekly_days_off",
     )
     .eq("location_id", sched.data.location_id)
     .eq("active", true);

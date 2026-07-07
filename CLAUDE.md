@@ -3,7 +3,7 @@
 > This file is loaded into every Claude Code session. Keep it tight; long-form context lives in `.claude/rules/*` and `PLAN.md`.
 
 ## Mission
-Internal scheduling app for **Live Active Wear** (liveactivewear.com). One admin builds weekly schedules (Mon–Sun) across multiple store locations; employees receive emails + a personal ICS calendar feed + a read-only schedule page. Rules engine enforces hard limits (max days/week, conflicts, time-off) and warns on soft ones (preferred days off, hour targets).
+Internal scheduling app for **Live Active Wear** (liveactivewear.com). One admin builds weekly schedules (Mon–Sun) across multiple store locations; employees receive emails + a personal ICS calendar feed + a read-only schedule page. Rules engine enforces hard limits (max days/week, conflicts, time-off) and warns on soft ones (coverage, hour targets).
 
 ## Stack (one-liner)
 Next.js 15 (App Router) · TypeScript · Tailwind v4 + shadcn/ui · Supabase (Postgres + Auth) · Resend · Vercel · pnpm.

@@ -21,7 +21,6 @@ import { SetPasswordButton } from "@/components/employee/set-password-button";
 import { EmployeeFormSheet } from "@/components/employee/employee-form-sheet";
 import { getEmployeeAuthRole } from "@/server/employee-accounts";
 import { formatMoney } from "@/lib/commission";
-import { shortWeekday, isWeekday } from "@/lib/weekdays";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hhmm = (t: string) => t.slice(0, 5);
@@ -186,16 +185,6 @@ export default async function EmployeeDetailPage({
             <span className="tabular-nums">
               {emp.weekly_hour_target}h · ≤{emp.max_days_per_week} days · ≥
               {emp.weekly_days_off} off
-            </span>
-          </div>
-          <div className="flex justify-between gap-2 sm:col-span-2">
-            <span className="text-muted-foreground">Preferred days off</span>
-            <span>
-              {emp.preferred_days_off.length
-                ? emp.preferred_days_off
-                    .map((d: string) => (isWeekday(d) ? shortWeekday(d) : d))
-                    .join(", ")
-                : "—"}
             </span>
           </div>
         </CardContent>

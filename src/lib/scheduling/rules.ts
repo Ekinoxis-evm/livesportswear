@@ -1,6 +1,5 @@
-import { weekDays, isoWeekday } from "@/lib/scheduling/week";
+import { weekDays } from "@/lib/scheduling/week";
 import { overlaps, shiftDurationMinutes } from "@/lib/scheduling/conflicts";
-import { WEEKDAYS } from "@/lib/weekdays";
 import type {
   Violation,
   ValidateScheduleInput,
@@ -99,22 +98,6 @@ export function validateSchedule(input: ValidateScheduleInput): Violation[] {
         employeeId: emp.id,
         message: `${emp.name} is scheduled ${hours.toFixed(1)}h (target ${emp.weekly_hour_target}h).`,
       });
-    }
-
-    // PREFERRED_DAY_OFF_USED — one warning per offending date.
-    const flaggedDays = new Set<string>();
-    for (const s of empShifts) {
-      const weekday = WEEKDAYS[isoWeekday(s.date) - 1];
-      if (emp.preferred_days_off.includes(weekday) && !flaggedDays.has(s.date)) {
-        flaggedDays.add(s.date);
-        violations.push({
-          level: "warn",
-          code: "PREFERRED_DAY_OFF_USED",
-          employeeId: emp.id,
-          date: s.date,
-          message: `${emp.name} works ${weekday}, a preferred day off.`,
-        });
-      }
     }
   }
 

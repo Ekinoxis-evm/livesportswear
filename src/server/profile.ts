@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireEmployee } from "@/lib/auth";
 import { generateMagicToken } from "@/lib/magic-token";
-import { isWeekday } from "@/lib/weekdays";
 import { type ActionResult } from "@/server/shared";
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -111,30 +110,6 @@ export async function changeOwnEmail(input: unknown): Promise<ActionResult> {
     .update({ email, magic_token: generateMagicToken() })
     .eq("id", employee.id);
   if (row.error) return { ok: false, error: "Couldn't save your email." };
-
-  revalidatePath("/portal/settings");
-  return { ok: true };
-}
-
-const daysOffSchema = z.array(z.string()).max(7);
-
-/** Employee sets (or clears) their own preferred days off. */
-export async function updateOwnPreferredDaysOff(
-  input: unknown,
-): Promise<ActionResult> {
-  const { employee } = await requireEmployee();
-  const parsed = daysOffSchema.safeParse(input);
-  if (!parsed.success || !parsed.data.every(isWeekday)) {
-    return { ok: false, error: "Invalid days." };
-  }
-  const days = [...new Set(parsed.data)];
-
-  const service = createServiceClient();
-  const { error } = await service
-    .from("employees")
-    .update({ preferred_days_off: days })
-    .eq("id", employee.id);
-  if (error) return { ok: false, error: "Couldn't save your preferences." };
 
   revalidatePath("/portal/settings");
   return { ok: true };
