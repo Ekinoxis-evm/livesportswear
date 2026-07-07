@@ -93,14 +93,9 @@ export async function storeCheckIn(
   if (bad) return { ok: false, error: bad };
 
   const now = new Date().toISOString();
-  const res = await doCheckIn(service, locationId, bd, emp.id, now, {
-    entry_validated_at: now,
-    entry_validated_by: null,
-    entry_self: false,
-  });
+  const res = await doCheckIn(service, locationId, bd, emp.id, now);
   if (res.ok) {
     revalidatePath("/store");
-    revalidatePath("/portal/today");
   }
   return res;
 }
@@ -117,14 +112,9 @@ export async function storeCheckOut(
   if (bad) return { ok: false, error: bad };
 
   const now = new Date().toISOString();
-  const res = await doCheckOut(service, locationId, bd, emp.id, now, {
-    exit_validated_at: now,
-    exit_validated_by: null,
-    exit_self: false,
-  });
+  const res = await doCheckOut(service, locationId, bd, emp.id, now);
   if (res.ok) {
     revalidatePath("/store");
-    revalidatePath("/portal/today");
   }
   return res;
 }
@@ -139,7 +129,6 @@ async function storePatch(
   const res = await patchCheckin(service, locationId, bd, emp.id, patch);
   if (res.ok) {
     revalidatePath("/store");
-    revalidatePath("/portal/today");
   }
   return res;
 }
@@ -173,14 +162,13 @@ export async function storeFinish(
   const res = await doFinishCustomer(service, locationId, bd, emp.id, parsed.data);
   if (res.ok) {
     revalidatePath("/store");
-    revalidatePath("/portal/today");
   }
   return res;
 }
 
 /**
- * Close the day from the kiosk. Same rule as the portal: the selected closer
- * must be on today's published schedule and checked in.
+ * Close the day from the kiosk — the selected closer must be on today's
+ * published schedule and checked in (the rule predates the kiosk).
  */
 export async function storeCloseDay(closedById: string): Promise<ActionResult> {
   const { locationId, service } = await storeCtx();
@@ -194,7 +182,6 @@ export async function storeCloseDay(closedById: string): Promise<ActionResult> {
   });
   if (res.ok) {
     revalidatePath("/store");
-    revalidatePath("/portal/today");
   }
   return res;
 }

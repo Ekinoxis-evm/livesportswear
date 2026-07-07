@@ -82,7 +82,9 @@
   actions (take client, sold/no-sale) are deliberately one-tap.
 - Kiosk-made entry/exit stamps are recorded **validated** (`*_validated_at`
   set, `*_validated_by` null): the device standing in the store plus the PIN is
-  the attestation. QR peer-validation remains for phone check-ins only.
+  the attestation. The kiosk is the ONLY check-in surface — the employee-portal
+  floor UI and the QR peer-validation flow were removed with it
+  (`attendance_validations` is legacy/read-only history now).
 
 ## Roles & accounts
 - Admins and employees are both Supabase Auth users, distinguished by `app_metadata.role`. The admin claim is set out-of-band (service role). Employees get accounts via the admin "Invite to portal" action (`src/server/employee-accounts.ts`), which creates the auth user with `role=employee` + `employee_id` and links `employees.auth_user_id`.
