@@ -84,27 +84,3 @@ export async function setPayPeriod(input: unknown): Promise<ActionResult> {
   revalidatePath("/admin/dashboard");
   return { ok: true };
 }
-
-const salesSchema = z.object({
-  employee_id: z.string().uuid(),
-  month: z.string().regex(/^\d{4}-\d{2}$/, "Use YYYY-MM."),
-  amount: z.coerce.number().min(0),
-});
-
-export async function setMonthlySales(input: unknown): Promise<ActionResult> {
-  await requireAdmin();
-  const parsed = salesSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-
-  const supabase = await createServerClient();
-  const { error } = await supabase
-    .from("monthly_sales")
-    .upsert(
-      { ...parsed.data, source: "manual" },
-      { onConflict: "employee_id,month" },
-    );
-  if (error) return { ok: false, error: dbError(error) };
-
-  revalidatePath("/admin/commission");
-  return { ok: true };
-}

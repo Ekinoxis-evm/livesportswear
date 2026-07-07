@@ -25,6 +25,7 @@ import {
 import { EmployeeRowActions } from "@/components/employee/employee-actions";
 import { PayPeriodForm } from "@/components/settings/pay-period-form";
 import { formatMoney } from "@/lib/commission";
+import { shortDate, shortDateRange } from "@/lib/format-date";
 
 const ROLE_LABELS: Record<string, string> = {
   sales_rep: "Sales rep",
@@ -94,15 +95,15 @@ export default async function EmployeesPage() {
               <span className="text-muted-foreground text-xs uppercase tracking-wide">
                 Current sprint
               </span>
-              <span className="text-lg font-semibold tabular-nums">
-                {sprint.start} – {sprint.end}
+              <span className="text-lg font-semibold">
+                {shortDateRange(sprint.start, sprint.end)}
               </span>
             </div>
             <div className="border-primary/30 bg-primary/5 flex flex-col gap-1 rounded-lg border p-4">
               <span className="text-muted-foreground text-xs uppercase tracking-wide">
                 Next payday
               </span>
-              <span className="text-lg font-semibold tabular-nums">{nextPayday}</span>
+              <span className="text-lg font-semibold">{shortDate(nextPayday)}</span>
             </div>
           </div>
           <PayPeriodForm anchor={anchor} cap={cap} />

@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { HoursChart } from "@/components/dashboard/hours-chart";
 import { formatMoney } from "@/lib/commission";
 import { formatPct } from "@/lib/conversion";
+import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -91,13 +92,17 @@ export default async function DashboardPage() {
   const nextMonthStart = new Date(Date.UTC(year, monthNum, 1))
     .toISOString()
     .slice(0, 10);
-  const [salesRes, goalsRes, eventsRes, adsRes, cfgRes] = await Promise.all([
-    supabase.from("monthly_sales").select("amount").eq("month", month),
+  const [salesRes, goalsRes, employeesRes, eventsRes, adsRes, cfgRes] = await Promise.all([
+    supabase.from("monthly_sales").select("employee_id, amount").eq("month", month),
     supabase
       .from("store_goals")
-      .select("goal_amount")
+      .select("location_id, goal_amount")
       .eq("year", year)
       .eq("month", monthNum),
+    supabase
+      .from("employees")
+      .select("id, name, location_id")
+      .eq("active", true),
     supabase
       .from("client_events")
       .select("sold")
@@ -111,9 +116,35 @@ export default async function DashboardPage() {
     supabase.from("commission_config").select("currency").eq("id", 1).maybeSingle(),
   ]);
   const currency = cfgRes.data?.currency ?? "USD";
-  const salesMTD = (salesRes.data ?? []).reduce((a, r) => a + Number(r.amount), 0);
-  const goalMTD = (goalsRes.data ?? []).reduce((a, r) => a + Number(r.goal_amount), 0);
-  const goalPct = goalMTD > 0 ? salesMTD / goalMTD : null;
+
+  // Sales roll up per store via each employee's location, so every store's
+  // sales compare against that store's own goal — never a cross-store mix.
+  const monthEmployees = employeesRes.data ?? [];
+  const locOf = new Map(monthEmployees.map((e) => [e.id, e.location_id]));
+  const salesByEmployee = new Map(
+    (salesRes.data ?? []).map((r) => [r.employee_id, Number(r.amount)]),
+  );
+  const goalByLoc = new Map(
+    (goalsRes.data ?? []).map((g) => [g.location_id, Number(g.goal_amount)]),
+  );
+  const storeSales = locations.map((loc) => {
+    const sales = [...salesByEmployee.entries()]
+      .filter(([empId]) => locOf.get(empId) === loc.id)
+      .reduce((a, [, amt]) => a + amt, 0);
+    const goal = goalByLoc.get(loc.id) ?? 0;
+    return {
+      id: loc.id,
+      name: loc.name,
+      sales,
+      goal,
+      pct: goal > 0 ? sales / goal : null,
+    };
+  });
+  const salesRanking = monthEmployees
+    .map((e) => ({ name: e.name, amount: salesByEmployee.get(e.id) ?? 0 }))
+    .sort((a, b) => b.amount - a.amount);
+  const salesTotal = salesRanking.reduce((a, r) => a + r.amount, 0);
+
   const evs = eventsRes.data ?? [];
   const convMTD = evs.length === 0 ? null : evs.filter((e) => e.sold).length / evs.length;
   const spend = (adsRes.data ?? []).reduce((a, r) => a + Number(r.spend), 0);
@@ -128,15 +159,15 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader>
             <CardDescription>Current pay sprint</CardDescription>
-            <CardTitle className="text-base tabular-nums">
-              {sprint.start} – {sprint.end}
+            <CardTitle className="text-base">
+              {shortDateRange(sprint.start, sprint.end)}
             </CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <CardDescription>Next payday</CardDescription>
-            <CardTitle className="text-base tabular-nums">{nextPayday}</CardTitle>
+            <CardTitle className="text-base">{shortDate(nextPayday)}</CardTitle>
           </CardHeader>
         </Card>
         <Link href="/admin/schedules" className="block">
@@ -161,29 +192,35 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {storeSales.map((s) => (
+          <Link key={s.id} href="/admin/commission" className="block">
+            <Card className="hover:border-primary h-full transition-colors">
+              <CardHeader>
+                <CardDescription>
+                  {s.name} · {monthLabel(month)}
+                </CardDescription>
+                <CardTitle className="text-base tabular-nums">
+                  {formatMoney(s.sales, currency)}
+                  {s.goal > 0 && (
+                    <span className="text-muted-foreground text-sm font-normal">
+                      {" "}
+                      / {formatMoney(s.goal, currency)}
+                    </span>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {s.pct != null
+                    ? `${Math.round(s.pct * 100)}% of goal`
+                    : "Set a goal in Sales & Commission"}
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+        ))}
         <Card>
           <CardHeader>
-            <CardDescription>Sales vs goal · {month}</CardDescription>
-            <CardTitle className="text-base tabular-nums">
-              {formatMoney(salesMTD, currency)}
-              {goalMTD > 0 && (
-                <span className="text-muted-foreground text-sm font-normal">
-                  {" "}
-                  / {formatMoney(goalMTD, currency)}
-                </span>
-              )}
-            </CardTitle>
-            <CardDescription>
-              {goalPct != null
-                ? `${Math.round(goalPct * 100)}% of goal`
-                : "Set monthly goals in Settings"}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Conversion · {month}</CardDescription>
+            <CardDescription>Conversion · {monthLabel(month)}</CardDescription>
             <CardTitle className="text-base tabular-nums">
               {convMTD != null ? formatPct(convMTD) : "—"}
             </CardTitle>
@@ -197,7 +234,7 @@ export default async function DashboardPage() {
         <Link href="/admin/marketing" className="block">
           <Card className="hover:border-primary h-full transition-colors">
             <CardHeader>
-              <CardDescription>Ad ROAS · {month}</CardDescription>
+              <CardDescription>Ad ROAS · {monthLabel(month)}</CardDescription>
               <CardTitle className="text-base tabular-nums">
                 {roas != null ? `${roas.toFixed(2)}×` : "—"}
               </CardTitle>
@@ -210,6 +247,44 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Sales by employee · {monthLabel(month)}
+          </CardTitle>
+          <CardDescription>
+            Synced from Shopify POS · store total{" "}
+            <span className="font-semibold tabular-nums">
+              {formatMoney(salesTotal, currency)}
+            </span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {salesRanking.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No employees yet.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {salesRanking.map((r, i) => (
+                <li
+                  key={r.name + i}
+                  className="flex items-center justify-between py-2 text-sm"
+                >
+                  <span>
+                    <span className="text-muted-foreground mr-2 tabular-nums">
+                      {i + 1}.
+                    </span>
+                    {r.name}
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {formatMoney(r.amount, currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

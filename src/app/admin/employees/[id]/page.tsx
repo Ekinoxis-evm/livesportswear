@@ -21,6 +21,7 @@ import { SetPasswordButton } from "@/components/employee/set-password-button";
 import { EmployeeFormSheet } from "@/components/employee/employee-form-sheet";
 import { getEmployeeAuthRole } from "@/server/employee-accounts";
 import { formatMoney } from "@/lib/commission";
+import { shortDate } from "@/lib/format-date";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const hhmm = (t: string) => t.slice(0, 5);
@@ -178,7 +179,7 @@ export default async function EmployeeDetailPage({
           </div>
           <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Hire date</span>
-            <span className="tabular-nums">{emp.hire_date ?? "—"}</span>
+            <span className="tabular-nums">{emp.hire_date ? shortDate(emp.hire_date) : "—"}</span>
           </div>
           <div className="flex justify-between gap-2">
             <span className="text-muted-foreground">Weekly rules</span>

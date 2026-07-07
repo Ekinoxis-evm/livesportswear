@@ -13,6 +13,7 @@ import { PhotoUpload } from "@/components/portal/photo-upload";
 import { PhoneForm } from "@/components/portal/phone-form";
 import { EmailForm } from "@/components/portal/email-form";
 import { ChangePasswordCard } from "@/components/portal/change-password";
+import { shortDate } from "@/lib/format-date";
 
 const ROLE_LABELS: Record<string, string> = {
   sales_rep: "Sales rep",
@@ -69,7 +70,7 @@ export default async function SettingsPage() {
             {employee.hire_date && (
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Hire date</span>
-                <span className="tabular-nums">{employee.hire_date}</span>
+                <span>{shortDate(employee.hire_date)}</span>
               </div>
             )}
             {hourlyRate != null && (
