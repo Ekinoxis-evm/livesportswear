@@ -4,6 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireEmployee } from "@/lib/auth";
+import { generateMagicToken } from "@/lib/magic-token";
+import { isWeekday } from "@/lib/weekdays";
 import { type ActionResult } from "@/server/shared";
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -50,6 +52,91 @@ export async function updateOwnPhoto(formData: FormData): Promise<ActionResult> 
   if (updated.error) return { ok: false, error: "Couldn't save your photo." };
 
   revalidatePath("/portal");
+  return { ok: true };
+}
+
+const phoneSchema = z
+  .string()
+  .trim()
+  .max(25)
+  .regex(/^[+0-9 ()-]*$/, "Digits, spaces, and + ( ) - only.");
+
+/** Employee updates their own phone — the only self-editable contact field. */
+export async function updateOwnPhone(input: unknown): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const parsed = phoneSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a valid phone number." };
+
+  const service = createServiceClient();
+  const { error } = await service
+    .from("employees")
+    .update({ phone: parsed.data || null })
+    .eq("id", employee.id);
+  if (error) return { ok: false, error: "Couldn't save your phone." };
+
+  revalidatePath("/portal/settings");
+  return { ok: true };
+}
+
+const emailSchema = z.string().trim().toLowerCase().email().max(254);
+
+/**
+ * Employee changes their own login email. The magic token rotates with it
+ * (mandatory — see security.md), so previously shared schedule links die.
+ */
+export async function changeOwnEmail(input: unknown): Promise<ActionResult> {
+  const { user, employee } = await requireEmployee();
+  const parsed = emailSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a valid email." };
+  const email = parsed.data;
+  if (email === employee.email) return { ok: true };
+
+  const service = createServiceClient();
+  const { data: taken } = await service
+    .from("employees")
+    .select("id")
+    .eq("email", email)
+    .neq("id", employee.id)
+    .maybeSingle();
+  if (taken) return { ok: false, error: "That email is already in use." };
+
+  const upd = await service.auth.admin.updateUserById(user.id, {
+    email,
+    email_confirm: true,
+  });
+  if (upd.error) return { ok: false, error: upd.error.message };
+
+  const row = await service
+    .from("employees")
+    .update({ email, magic_token: generateMagicToken() })
+    .eq("id", employee.id);
+  if (row.error) return { ok: false, error: "Couldn't save your email." };
+
+  revalidatePath("/portal/settings");
+  return { ok: true };
+}
+
+const daysOffSchema = z.array(z.string()).max(7);
+
+/** Employee sets (or clears) their own preferred days off. */
+export async function updateOwnPreferredDaysOff(
+  input: unknown,
+): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const parsed = daysOffSchema.safeParse(input);
+  if (!parsed.success || !parsed.data.every(isWeekday)) {
+    return { ok: false, error: "Invalid days." };
+  }
+  const days = [...new Set(parsed.data)];
+
+  const service = createServiceClient();
+  const { error } = await service
+    .from("employees")
+    .update({ preferred_days_off: days })
+    .eq("id", employee.id);
+  if (error) return { ok: false, error: "Couldn't save your preferences." };
+
+  revalidatePath("/portal/settings");
   return { ok: true };
 }
 

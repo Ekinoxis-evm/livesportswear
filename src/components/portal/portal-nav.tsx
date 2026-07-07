@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, CalendarDays, Zap } from "lucide-react";
+import { ChartColumn, CalendarDays, Zap, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
-  { href: "/portal", label: "Home", icon: Home },
+  { href: "/portal", label: "Performance", icon: ChartColumn },
   { href: "/portal/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/portal/today", label: "Today", icon: Zap },
+  { href: "/portal/settings", label: "Settings", icon: Settings },
 ];
 
 export function PortalNav() {

@@ -106,6 +106,33 @@ export async function closeDay(): Promise<ActionResult> {
   const locName = loc?.name ?? "Store";
   const bd = businessDate(tz);
 
+  // Only someone on today's published schedule who is checked in on the floor
+  // may close the day (usually the evening shift).
+  const [{ data: myShift }, { data: myCheckin }] = await Promise.all([
+    service
+      .from("shifts")
+      .select("id, schedules!inner(status)")
+      .eq("employee_id", employee.id)
+      .eq("date", bd)
+      .eq("schedules.status", "published")
+      .limit(1)
+      .maybeSingle(),
+    service
+      .from("floor_checkins")
+      .select("id")
+      .eq("location_id", employee.location_id)
+      .eq("business_date", bd)
+      .eq("employee_id", employee.id)
+      .is("left_at", null)
+      .maybeSingle(),
+  ]);
+  if (!myShift) {
+    return { ok: false, error: "Only someone with a shift today can close the day." };
+  }
+  if (!myCheckin) {
+    return { ok: false, error: "Mark your entry before closing the day." };
+  }
+
   const { data: rows } = await service
     .from("client_events")
     .select("employee_id, sold, got_contact, employees(name)")

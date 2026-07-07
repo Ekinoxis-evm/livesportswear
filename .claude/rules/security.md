@@ -10,7 +10,8 @@
 - **Never log** the token. Never include in error messages. Never embed in admin URLs except via copy-to-clipboard action.
 - Rotated when:
   - The admin explicitly rotates it (button in employee detail page).
-  - An employee's email changes (rotation is mandatory).
+  - An employee's email changes (rotation is mandatory) — including the
+    self-service change in the portal (`changeOwnEmail`, `src/server/profile.ts`).
 - Public routes that accept a token MUST:
   1. Constant-time compare via the DB query (don't fetch all + compare in app code).
   2. Return `404`, not `401`, on miss (no token enumeration).
