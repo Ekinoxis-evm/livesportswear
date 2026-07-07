@@ -119,6 +119,41 @@ export async function fetchStaffSales(
   return { totals, sampleOrder };
 }
 
+export type DaySales = { total: number; currency: string | null; orders: number };
+
+/**
+ * The store's total sales for [start, endExclusive) — all non-cancelled,
+ * non-test orders regardless of staff attribution (the day's money line).
+ */
+export async function fetchDaySales(
+  start: string,
+  endExclusive: string,
+): Promise<DaySales> {
+  const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
+  const fields = "id,cancelled_at,test,current_total_price,currency";
+  let total = 0;
+  let orders = 0;
+  let currency: string | null = null;
+
+  let path: string | null =
+    `/orders.json?status=any&limit=250&fields=${fields}` +
+    `&created_at_min=${encodeURIComponent(start)}&created_at_max=${encodeURIComponent(max)}`;
+  while (path) {
+    const page: { body: { orders: (RestOrder & { currency?: string })[] }; nextPageInfo: string | null } =
+      await shopifyRest(path);
+    for (const o of page.body.orders) {
+      if (o.cancelled_at || o.test) continue;
+      total += Number(o.current_total_price) || 0;
+      orders++;
+      currency ??= o.currency ?? null;
+    }
+    path = page.nextPageInfo
+      ? `/orders.json?limit=250&fields=${fields}&page_info=${page.nextPageInfo}`
+      : null;
+  }
+  return { total: Math.round(total * 100) / 100, currency, orders };
+}
+
 type RestEvent = { verb: string; author: string | null };
 
 /**
