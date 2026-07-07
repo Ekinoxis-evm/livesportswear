@@ -15,6 +15,13 @@
   1. Constant-time compare via the DB query (don't fetch all + compare in app code).
   2. Return `404`, not `401`, on miss (no token enumeration).
 
+## Store-week share tokens (0017)
+- `locations.share_token`: 32-byte base64url capability for `/w/{token}/{week}`
+  — the whole store's **published** week, read-only, no login. Same rules as
+  magic tokens (never log, 404 on miss, DB-equality lookup). Generated at
+  location create (`createLocation`) and backfilled by 0017. Rotation: not yet
+  built — recreate via SQL if a link leaks.
+
 ## Attendance validation tokens (0015)
 - `attendance_validations.token` follows the same rules as employee magic
   tokens: 32-byte base64url, never logged, never echoed in errors (`validateAttendance`
