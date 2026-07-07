@@ -32,7 +32,7 @@ export function AdminMobileNav({ email }: { email: string }) {
             href={item.href}
             className={cn(
               "flex flex-1 flex-col items-center gap-1 py-2 text-[11px]",
-              active ? "text-foreground" : "text-muted-foreground",
+              active ? "text-primary font-semibold" : "text-muted-foreground",
             )}
           >
             <Icon className="size-5" />

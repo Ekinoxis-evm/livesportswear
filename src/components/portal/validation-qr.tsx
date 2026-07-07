@@ -15,7 +15,7 @@ export function ValidationQr({ token, caption }: { token: string; caption: strin
   }, [token]);
 
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl bg-white p-4">
+    <div className="border-border flex flex-col items-center gap-2 rounded-xl border bg-white p-4">
       {url ? (
         <QRCodeSVG value={url} size={168} marginSize={1} />
       ) : (
