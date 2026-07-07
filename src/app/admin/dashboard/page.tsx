@@ -87,6 +87,10 @@ export default async function DashboardPage() {
   const month = today.slice(0, 7);
   const year = Number(today.slice(0, 4));
   const monthNum = Number(today.slice(5, 7));
+  const monthStart = `${month}-01`;
+  const nextMonthStart = new Date(Date.UTC(year, monthNum, 1))
+    .toISOString()
+    .slice(0, 10);
   const [salesRes, goalsRes, eventsRes, adsRes, cfgRes] = await Promise.all([
     supabase.from("monthly_sales").select("amount").eq("month", month),
     supabase
@@ -97,13 +101,13 @@ export default async function DashboardPage() {
     supabase
       .from("client_events")
       .select("sold")
-      .gte("business_date", `${month}-01`)
-      .lte("business_date", `${month}-31`),
+      .gte("business_date", monthStart)
+      .lt("business_date", nextMonthStart),
     supabase
       .from("ad_insights")
       .select("spend, revenue")
-      .gte("date", `${month}-01`)
-      .lte("date", `${month}-31`),
+      .gte("date", monthStart)
+      .lt("date", nextMonthStart),
     supabase.from("commission_config").select("currency").eq("id", 1).maybeSingle(),
   ]);
   const currency = cfgRes.data?.currency ?? "USD";
