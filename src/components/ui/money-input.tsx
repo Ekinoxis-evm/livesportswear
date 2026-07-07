@@ -60,7 +60,17 @@ export function MoneyInput({
   className,
   ...props
 }: Props) {
-  const [display, setDisplay] = useState(() => toDisplay(value ?? "", decimals));
+  const [state, setState] = useState(() => ({
+    raw: value ?? "",
+    display: toDisplay(value ?? "", decimals),
+  }));
+
+  // Re-sync when the parent swaps the value from outside (e.g. the goal form
+  // loading another store/month) — otherwise the box keeps showing the old
+  // number while the submitted state has moved on.
+  if (state.raw !== (value ?? "")) {
+    setState({ raw: value ?? "", display: toDisplay(value ?? "", decimals) });
+  }
 
   return (
     <div className="relative">
@@ -70,10 +80,10 @@ export function MoneyInput({
       <Input
         {...props}
         inputMode="decimal"
-        value={display}
+        value={state.display}
         onChange={(e) => {
           const raw = toRaw(e.target.value, decimals);
-          setDisplay(toDisplay(raw, decimals));
+          setState({ raw, display: toDisplay(raw, decimals) });
           onValueChange(raw);
         }}
         className={cn("pl-7 tabular-nums", className)}
