@@ -13,6 +13,7 @@ import { weekRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
 import { formatMoney } from "@/lib/commission";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hhmm = (t: string) => t.slice(0, 5);
@@ -149,42 +150,48 @@ export default async function StoreWeekPage({
   const otherShifts = shifts.filter((s) => !inAnySlot(s));
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-4xl flex-col gap-5 p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-            LIVE! · Team schedule
-          </p>
-          <h1 className="text-xl font-bold">{loc.name}</h1>
-          <p className="text-muted-foreground text-sm tabular-nums">
-            {formatWeekRange(monday)}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <Link
-            href={`/w/${token}/${addDays(monday, -7)}`}
-            aria-label="Previous week"
-            className="hover:bg-muted rounded-md border p-1.5"
-          >
-            <ChevronLeft className="size-4" />
-          </Link>
-          {monday !== thisWeek && (
+    <div className="flex min-h-screen flex-col">
+      {/* Brand header — the same forest green as the admin sidebar */}
+      <header className="bg-sidebar text-sidebar-foreground">
+        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-end justify-between gap-3 px-6 py-5">
+          <div>
+            <p className="text-sidebar-foreground/70 text-xs font-semibold uppercase tracking-wide">
+              LIVE! · Team schedule
+            </p>
+            <h1 className="text-xl font-bold">{loc.name}</h1>
+            <p className="text-sidebar-foreground/70 text-sm tabular-nums">
+              {formatWeekRange(monday)}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
             <Link
-              href={`/w/${token}/${thisWeek}`}
-              className="text-primary px-1 text-sm underline-offset-4 hover:underline"
+              href={`/w/${token}/${addDays(monday, -7)}`}
+              aria-label="Previous week"
+              className="border-sidebar-border rounded-md border p-1.5 hover:bg-white/10"
             >
-              This week
+              <ChevronLeft className="size-4" />
             </Link>
-          )}
-          <Link
-            href={`/w/${token}/${addDays(monday, 7)}`}
-            aria-label="Next week"
-            className="hover:bg-muted rounded-md border p-1.5"
-          >
-            <ChevronRight className="size-4" />
-          </Link>
+            {monday !== thisWeek && (
+              <Link
+                href={`/w/${token}/${thisWeek}`}
+                className="px-1 text-sm underline-offset-4 hover:underline"
+              >
+                This week
+              </Link>
+            )}
+            <Link
+              href={`/w/${token}/${addDays(monday, 7)}`}
+              aria-label="Next week"
+              className="border-sidebar-border rounded-md border p-1.5 hover:bg-white/10"
+            >
+              <ChevronRight className="size-4" />
+            </Link>
+            <ThemeToggle className="text-sidebar-foreground/80 hover:bg-white/10 hover:text-sidebar-foreground ml-1" />
+          </div>
         </div>
-      </div>
+      </header>
+
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 p-6">
 
       {!schedule ? (
         <Card>
@@ -328,6 +335,7 @@ export default async function StoreWeekPage({
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 }
