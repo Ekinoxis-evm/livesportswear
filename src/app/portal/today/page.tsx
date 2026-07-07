@@ -232,7 +232,15 @@ export default async function TodayPage() {
 
       <ConversionStats store={store} mine={mine} people={people} />
 
-      <CloseDayButton alreadyClosed={Boolean(closeRow)} />
+      {myShift && myCheckin && !myCheckin.left_at ? (
+        <CloseDayButton alreadyClosed={Boolean(closeRow)} />
+      ) : (
+        events.length > 0 && (
+          <p className="text-muted-foreground text-center text-xs">
+            The day is closed by someone on shift who&apos;s checked in.
+          </p>
+        )
+      )}
     </div>
   );
 }
