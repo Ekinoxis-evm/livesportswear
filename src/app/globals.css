@@ -51,52 +51,53 @@
 
 :root {
   color-scheme: light;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* LIVE! brand light — cream ground, white surfaces, forest-green accent
+     (public/branding.md neutrals; green ties to the reforestation identity). */
+  --background: #f4f0f0;
+  --foreground: #1d1d1d;
+  --card: #ffffff;
+  --card-foreground: #1d1d1d;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1d;
+  --primary: #1f5240;
+  --primary-foreground: #f4f0f0;
+  --secondary: #e9e5e0;
+  --secondary-foreground: #1d1d1d;
+  --muted: #e9e5e0;
+  --muted-foreground: #6b655e;
+  --accent: #e4ede7;
+  --accent-foreground: #1f5240;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.4rem;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: #dcd6cf;
+  --input: #dcd6cf;
+  --ring: #1f5240;
+  --chart-1: #1f5240;
+  --chart-2: #5e9179;
+  --chart-3: #a3c4b1;
+  --chart-4: #8c8378;
+  --chart-5: #2d2926;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #16352a;
+  --sidebar-foreground: #f4f0f0;
+  --sidebar-primary: #1f5240;
+  --sidebar-primary-foreground: #f4f0f0;
+  --sidebar-accent: #f4f0f0;
+  --sidebar-accent-foreground: #16352a;
+  --sidebar-border: rgb(244 240 240 / 0.12);
+  --sidebar-ring: #7fb89e;
 }
 
 .dark {
   color-scheme: dark;
-  /* LIVE! brand — warm neutrals + violet accent (public/branding.md) */
+  /* LIVE! brand dark — warm neutrals (public/branding.md), forest-green accent. */
   --background: #1a1714;
   --foreground: #f4f0f0;
   --card: #25211c;
   --card-foreground: #f4f0f0;
   --popover: #25211c;
   --popover-foreground: #f4f0f0;
-  --primary: #6b4fe0;
-  --primary-foreground: #ffffff;
+  --primary: #5ca987;
+  --primary-foreground: #10261d;
   --secondary: #2d2926;
   --secondary-foreground: #f4f0f0;
   --muted: #2d2926;
@@ -106,20 +107,20 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: rgb(244 240 240 / 0.1);
   --input: rgb(244 240 240 / 0.14);
-  --ring: #6b4fe0;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: #1a1714;
+  --ring: #5ca987;
+  --chart-1: #5ca987;
+  --chart-2: #7fb89e;
+  --chart-3: #a3c4b1;
+  --chart-4: #a89f95;
+  --chart-5: #f4f0f0;
+  --sidebar: #16352a;
   --sidebar-foreground: #f4f0f0;
-  --sidebar-primary: #6b4fe0;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #2d2926;
-  --sidebar-accent-foreground: #f4f0f0;
+  --sidebar-primary: #5ca987;
+  --sidebar-primary-foreground: #10261d;
+  --sidebar-accent: #f4f0f0;
+  --sidebar-accent-foreground: #16352a;
   --sidebar-border: rgb(244 240 240 / 0.1);
-  --sidebar-ring: #6b4fe0;
+  --sidebar-ring: #7fb89e;
 }
 
 @layer base {

@@ -1,9 +1,16 @@
 # UI Patterns
 
 ## Brand
-- Dark by default (`<html class="dark">`).
-- Sporty + clean. Sans-serif (Geist).
-- Single bright accent — current placeholder is zinc; finalize once we lift the exact accent from liveactivewear.com. To change, update the `--primary` variables in `globals.css`.
+- **Light by default** (brand cream `#F4F0F0` background, white cards), with a
+  user dark-mode toggle (`next-themes`, class strategy; `ThemeToggle` in the
+  admin sidebar footer, admin mobile header, and portal header).
+- Sporty + clean. Sans-serif (Inter); Fraunces for display headings.
+- Accent (finalized 2026-07): **forest green** — `--primary: #1f5240` light /
+  `#5ca987` dark, tied to the brand's reforestation identity. Change via the
+  `--primary` variables in `globals.css`.
+- The **admin sidebar is deep forest green (`--sidebar: #16352a`) in both
+  themes** — a constant brand element; active nav item is a cream pill
+  (`sidebar-accent`). Palette hexes trace to `public/branding.md`.
 
 ## When to use what
 - **Dialog**: focused, modal interactions — confirming a publish, editing a shift template.
