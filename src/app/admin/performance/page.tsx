@@ -101,7 +101,7 @@ export default async function PerformancePage({
       supabase
         .from("floor_checkins")
         .select(
-          "employee_id, arrived_at, left_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, employees(name)",
+          "employee_id, arrived_at, left_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, employees!employee_id(name)",
         )
         .eq("location_id", location.id)
         .eq("business_date", date)
