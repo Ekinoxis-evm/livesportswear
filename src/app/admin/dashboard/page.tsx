@@ -5,11 +5,7 @@ import { primaryTimezone } from "@/lib/business-tz";
 import { getPayPeriod } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
 import { weekStart, weekDays } from "@/lib/scheduling/week";
-import {
-  hoursByEmployee,
-  coverageSummary,
-  type StatShift,
-} from "@/lib/scheduling/stats";
+import { coverageSummary, type StatShift } from "@/lib/scheduling/stats";
 import {
   Card,
   CardContent,
@@ -18,9 +14,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { HoursChart } from "@/components/dashboard/hours-chart";
 import { formatMoney } from "@/lib/commission";
 import { formatPct } from "@/lib/conversion";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { fetchDaySales, type DaySales } from "@/lib/shopify";
+import { monthRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
 import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
 
 export default async function DashboardPage() {
@@ -45,7 +43,7 @@ export default async function DashboardPage() {
       supabase
         .from("shifts")
         .select(
-          "employee_id, date, start_time, end_time, shift_template_id, schedules!inner(location_id), employee:employees(name)",
+          "employee_id, date, start_time, end_time, shift_template_id, schedules!inner(location_id)",
         )
         .gte("date", days[0])
         .lte("date", days[6]),
@@ -55,19 +53,7 @@ export default async function DashboardPage() {
   const templates = templatesRes.data ?? [];
   const weekShifts = (weekShiftsRes.data ?? []) as (StatShift & {
     schedules: { location_id: string };
-    employee: { name: string } | null;
   })[];
-
-  // Weekly hours per employee (chart).
-  const names = new Map<string, string>();
-  for (const s of weekShifts) names.set(s.employee_id, s.employee?.name ?? "?");
-  const hours = hoursByEmployee(weekShifts);
-  const chartData = Object.entries(hours)
-    .map(([id, h]) => ({
-      name: names.get(id) ?? "?",
-      hours: Math.round(h * 10) / 10,
-    }))
-    .sort((a, b) => b.hours - a.hours);
 
   // Coverage per location (this week).
   const coverage = locations.map((loc) => {
@@ -150,6 +136,25 @@ export default async function DashboardPage() {
   const spend = (adsRes.data ?? []).reduce((a, r) => a + Number(r.spend), 0);
   const revenue = (adsRes.data ?? []).reduce((a, r) => a + Number(r.revenue), 0);
   const roas = spend > 0 ? revenue / spend : null;
+
+  // Store metrics straight from Shopify (orders + tickets aren't in the DB).
+  const tz = await primaryTimezone();
+  let shopMonth: DaySales | null = null;
+  let shopToday: DaySales | null = null;
+  if (isShopifyConfigured()) {
+    try {
+      const mr = monthRangeInTz(month, tz);
+      const dr = dayRangeInTz(today, tz);
+      [shopMonth, shopToday] = await Promise.all([
+        fetchDaySales(mr.start, mr.endExclusive),
+        fetchDaySales(dr.start, dr.endExclusive),
+      ]);
+    } catch {
+      // cards fall back to em dashes
+    }
+  }
+  const avgTicket =
+    shopMonth && shopMonth.orders > 0 ? shopMonth.total / shopMonth.orders : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -286,17 +291,42 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Hours this week</CardTitle>
-            <CardDescription>Scheduled hours per employee.</CardDescription>
+            <CardDescription>Orders · {monthLabel(month)}</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {shopMonth ? shopMonth.orders : "—"}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <HoursChart data={chartData} />
-          </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Average ticket · {monthLabel(month)}</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {avgTicket != null ? formatMoney(avgTicket, currency) : "—"}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Sales today</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {shopToday ? formatMoney(shopToday.total, currency) : "—"}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Orders today</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {shopToday ? shopToday.orders : "—"}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
 
+      <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Coverage health</CardTitle>

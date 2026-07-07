@@ -38,7 +38,6 @@
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.76.1",
-    "recharts": "^3.8.1",
     "resend": "^6.12.3",
     "server-only": "^0.0.1",
     "shadcn": "^4.8.0",

@@ -28,6 +28,20 @@ export function monthRangeInTz(
   };
 }
 
+/** A store-local Mon–Sun week as UTC ISO instants [start, endExclusive). */
+export function weekRangeInTz(
+  monday: string,
+  tz: string,
+): { start: string; endExclusive: string } {
+  const d = new Date(`${monday}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 7);
+  const next = d.toISOString().slice(0, 10);
+  return {
+    start: fromZonedTime(`${monday}T00:00:00`, tz).toISOString(),
+    endExclusive: fromZonedTime(`${next}T00:00:00`, tz).toISOString(),
+  };
+}
+
 /** A store-local calendar day as UTC ISO instants [start, endExclusive). */
 export function dayRangeInTz(
   date: string,

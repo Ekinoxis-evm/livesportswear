@@ -27,12 +27,6 @@ import { PayPeriodForm } from "@/components/settings/pay-period-form";
 import { formatMoney } from "@/lib/commission";
 import { shortDate, shortDateRange } from "@/lib/format-date";
 
-const ROLE_LABELS: Record<string, string> = {
-  sales_rep: "Sales rep",
-  shift_lead: "Shift lead",
-  store_manager: "Store manager",
-};
-
 export default async function EmployeesPage() {
   const supabase = await createServerClient();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
@@ -47,7 +41,7 @@ export default async function EmployeesPage() {
 
   const { data: employees, error } = await supabase
     .from("employees")
-    .select("*, location:locations(name)")
+    .select("*")
     .order("name");
 
   // Pay + rates (moved here from Settings). Sprint dates in the store's timezone.
@@ -133,11 +127,8 @@ export default async function EmployeesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead className="hidden md:table-cell">Location</TableHead>
-              <TableHead className="hidden md:table-cell">Rules</TableHead>
-              <TableHead className="hidden tabular-nums sm:table-cell">Rate</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead className="hidden sm:table-cell">Email</TableHead>
+              <TableHead className="tabular-nums">Rate</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -153,46 +144,28 @@ export default async function EmployeesPage() {
                         backgroundColor: emp.avatar_color ?? "transparent",
                       }}
                     />
-                    <span className="flex flex-col">
-                      <Link
-                        href={`/admin/employees/${emp.id}`}
-                        className="hover:underline"
-                      >
-                        {emp.name}
-                      </Link>
-                      <span className="text-muted-foreground text-xs">
-                        {emp.email}
-                      </span>
-                    </span>
+                    <Link
+                      href={`/admin/employees/${emp.id}`}
+                      className="hover:underline"
+                    >
+                      {emp.name}
+                    </Link>
+                    {!emp.active && <Badge variant="secondary">Inactive</Badge>}
                   </span>
                 </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">
-                    {ROLE_LABELS[emp.role] ?? emp.role}
-                  </Badge>
+                <TableCell className="text-muted-foreground hidden sm:table-cell">
+                  {emp.email}
                 </TableCell>
-                <TableCell className="text-muted-foreground hidden md:table-cell">
-                  {emp.location?.name ?? "—"}
-                </TableCell>
-                <TableCell className="text-muted-foreground hidden tabular-nums text-xs md:table-cell">
-                  {emp.weekly_hour_target}h · ≤{emp.max_days_per_week}d · ≥
-                  {emp.weekly_days_off} off
-                </TableCell>
-                <TableCell className="hidden tabular-nums sm:table-cell">
+                <TableCell className="tabular-nums">
                   {rateBy.get(emp.id) != null
                     ? `${formatMoney(Number(rateBy.get(emp.id)), currency)}/h`
                     : "—"}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={emp.active ? "default" : "secondary"}>
-                    {emp.active ? "Active" : "Inactive"}
-                  </Badge>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <Link href={`/admin/employees/${emp.id}`}>
                       <Button variant="ghost" size="sm">
-                        Edit
+                        Details
                       </Button>
                     </Link>
                     <EmployeeRowActions
