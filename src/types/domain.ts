@@ -9,8 +9,7 @@ export type ViolationCode =
   | "BELOW_MIN_DAYS_OFF"
   | "BELOW_COVERAGE"
   | "ABOVE_HOUR_TARGET"
-  | "ABOVE_BIWEEKLY_HOURS"
-  | "PREFERRED_DAY_OFF_USED";
+  | "ABOVE_BIWEEKLY_HOURS";
 
 export type Violation = {
   level: ViolationLevel;
@@ -28,7 +27,6 @@ export type RuleEmployee = {
   weekly_hour_target: number;
   max_days_per_week: number;
   weekly_days_off: number;
-  preferred_days_off: string[];
 };
 
 export type RuleShift = {

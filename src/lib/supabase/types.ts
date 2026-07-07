@@ -305,7 +305,6 @@ export type Database = {
           max_days_per_week: number
           name: string
           phone: string | null
-          preferred_days_off: string[]
           role: Database["public"]["Enums"]["employee_role"]
           shopify_staff_id: string | null
           updated_at: string
@@ -326,7 +325,6 @@ export type Database = {
           max_days_per_week?: number
           name: string
           phone?: string | null
-          preferred_days_off?: string[]
           role?: Database["public"]["Enums"]["employee_role"]
           shopify_staff_id?: string | null
           updated_at?: string
@@ -347,7 +345,6 @@ export type Database = {
           max_days_per_week?: number
           name?: string
           phone?: string | null
-          preferred_days_off?: string[]
           role?: Database["public"]["Enums"]["employee_role"]
           shopify_staff_id?: string | null
           updated_at?: string

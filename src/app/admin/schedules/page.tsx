@@ -77,7 +77,7 @@ export default async function SchedulesPage({
   const { data: employees } = await supabase
     .from("employees")
     .select(
-      "id, name, role, avatar_color, weekly_hour_target, max_days_per_week, weekly_days_off, preferred_days_off",
+      "id, name, role, avatar_color, weekly_hour_target, max_days_per_week, weekly_days_off",
     )
     .eq("location_id", locationId)
     .eq("active", true)

@@ -16,12 +16,12 @@ insert into public.shift_templates (location_id, name, start_time, end_time, col
   ('22222222-2222-2222-2222-222222222222', 'Evening', '14:30', '22:30', '#a855f7', 2);
 
 -- Sample employees — note magic_token is a placeholder; production generates 32-byte random
-insert into public.employees (location_id, name, email, role, magic_token, preferred_days_off) values
-  ('11111111-1111-1111-1111-111111111111', 'Camila Rojas',    'camila@example.com',   'store_manager', 'seed-lincoln-camila',  array['sunday']),
-  ('11111111-1111-1111-1111-111111111111', 'Daniel Vargas',   'daniel@example.com',   'shift_lead',    'seed-lincoln-daniel',  array['monday']),
-  ('11111111-1111-1111-1111-111111111111', 'María Quintero',  'maria@example.com',    'shift_lead',    'seed-lincoln-maria',   array['sunday','wednesday']),
-  ('11111111-1111-1111-1111-111111111111', 'Andrés Cruz',     'andres@example.com',   'sales_rep',     'seed-lincoln-andres',  array['tuesday']),
-  ('11111111-1111-1111-1111-111111111111', 'Valentina Pérez', 'valentina@example.com','sales_rep',     'seed-lincoln-valen',   array['thursday']),
-  ('22222222-2222-2222-2222-222222222222', 'Jordan Reyes',    'jordan@example.com',   'store_manager', 'seed-intl-jordan',     array['sunday']),
-  ('22222222-2222-2222-2222-222222222222', 'Aisha Patel',     'aisha@example.com',    'shift_lead',    'seed-intl-aisha',      array['monday']),
-  ('22222222-2222-2222-2222-222222222222', 'Marcus Lee',      'marcus@example.com',   'sales_rep',     'seed-intl-marcus',     array['wednesday']);
+insert into public.employees (location_id, name, email, role, magic_token) values
+  ('11111111-1111-1111-1111-111111111111', 'Camila Rojas',    'camila@example.com',   'store_manager', 'seed-lincoln-camila'),
+  ('11111111-1111-1111-1111-111111111111', 'Daniel Vargas',   'daniel@example.com',   'shift_lead',    'seed-lincoln-daniel'),
+  ('11111111-1111-1111-1111-111111111111', 'María Quintero',  'maria@example.com',    'shift_lead',    'seed-lincoln-maria'),
+  ('11111111-1111-1111-1111-111111111111', 'Andrés Cruz',     'andres@example.com',   'sales_rep',     'seed-lincoln-andres'),
+  ('11111111-1111-1111-1111-111111111111', 'Valentina Pérez', 'valentina@example.com','sales_rep',     'seed-lincoln-valen'),
+  ('22222222-2222-2222-2222-222222222222', 'Jordan Reyes',    'jordan@example.com',   'store_manager', 'seed-intl-jordan'),
+  ('22222222-2222-2222-2222-222222222222', 'Aisha Patel',     'aisha@example.com',    'shift_lead',    'seed-intl-aisha'),
+  ('22222222-2222-2222-2222-222222222222', 'Marcus Lee',      'marcus@example.com',   'sales_rep',     'seed-intl-marcus');
