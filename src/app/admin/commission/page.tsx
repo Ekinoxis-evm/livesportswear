@@ -26,8 +26,7 @@ import {
 } from "@/components/ui/table";
 import { CommissionConfigForm } from "@/components/commission/config-form";
 import { monthLabel } from "@/lib/format-date";
-import type { GoalsByLocation } from "@/components/settings/store-goals-form";
-import { StoreMonthForm } from "@/components/commission/store-month-form";
+import { StoreMonthForm, type GoalsByLocation } from "@/components/commission/store-month-form";
 
 export default async function CommissionPage() {
   const supabase = await createServerClient();
@@ -53,16 +52,18 @@ export default async function CommissionPage() {
 
   const { data: goalRows } = await supabase
     .from("store_goals")
-    .select("location_id, month, goal_amount, tiers")
-    .eq("year", year);
+    .select("location_id, year, month, goal_amount, tiers")
+    .in("year", [year, year + 1]);
   const goalsByLocation: GoalsByLocation = {};
   const tiersByKey: Record<string, CommissionTier[]> = {};
   const monthTiersByLoc: Record<string, CommissionTier[]> = {};
   for (const g of goalRows ?? []) {
-    (goalsByLocation[g.location_id] ??= {})[g.month] = Number(g.goal_amount);
+    (goalsByLocation[g.location_id] ??= {})[`${g.year}-${g.month}`] = Number(g.goal_amount);
     const t = asTiers(g.tiers);
-    if (t.length) tiersByKey[`${g.location_id}-${g.month}`] = t;
-    if (g.month === monthNum) monthTiersByLoc[g.location_id] = resolveTiers(g.tiers, globalTiers);
+    if (t.length) tiersByKey[`${g.location_id}-${g.year}-${g.month}`] = t;
+    if (g.year === year && g.month === monthNum) {
+      monthTiersByLoc[g.location_id] = resolveTiers(g.tiers, globalTiers);
+    }
   }
 
   const { data: employees } = await supabase

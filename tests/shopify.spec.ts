@@ -3,6 +3,7 @@ import {
   previousMonth,
   monthRangeInTz,
   dayRangeInTz,
+  weekRangeInTz,
   normalizeStaffId,
 } from "@/lib/shopify-range";
 import { weekdayName } from "@/lib/weekdays";
@@ -44,6 +45,14 @@ describe("dayRangeInTz", () => {
   it("wraps month boundaries", () => {
     const r = dayRangeInTz("2026-07-31", "UTC");
     expect(r.endExclusive).toBe("2026-08-01T00:00:00.000Z");
+  });
+});
+
+describe("weekRangeInTz", () => {
+  it("spans Monday to the next Monday in the store's timezone", () => {
+    const r = weekRangeInTz("2026-07-06", "America/New_York");
+    expect(r.start).toBe("2026-07-06T04:00:00.000Z");
+    expect(r.endExclusive).toBe("2026-07-13T04:00:00.000Z");
   });
 });
 

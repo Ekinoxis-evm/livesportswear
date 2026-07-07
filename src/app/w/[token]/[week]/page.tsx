@@ -1,16 +1,32 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Crown } from "lucide-react";
+import { unstable_cache } from "next/cache";
+import { ChevronLeft, ChevronRight, Crown, Trophy } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { weekStart, weekDays, addDays, isoWeekday, formatWeekRange } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { SHIFT_SLOTS, templateForSlot, shiftMatchesSlot } from "@/lib/shift-slots";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { fetchStaffSales } from "@/lib/shopify";
+import { weekRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
+import { formatMoney } from "@/lib/commission";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hhmm = (t: string) => t.slice(0, 5);
+
+// One Shopify read per (location, week) per 10 minutes — this page is public.
+const cachedWeekSales = unstable_cache(
+  async (monday: string, tz: string): Promise<[string, number][]> => {
+    const range = weekRangeInTz(monday, tz);
+    const { totals } = await fetchStaffSales(range.start, range.endExclusive);
+    return [...totals.entries()];
+  },
+  ["share-week-sales"],
+  { revalidate: 600 },
+);
 
 // Same fallback colors as the admin board's slot rows.
 const SLOT_COLOR: Record<string, string> = {
@@ -95,6 +111,37 @@ export default async function StoreWeekPage({
   const days = weekDays(monday);
   const today = businessDate(loc.timezone);
   const thisWeek = weekStart(today);
+
+  // Week sales ranking — only for this location's mapped employees; sales by
+  // staff we can't attribute to someone at this store are left out.
+  let weekRanking: { name: string; amount: number }[] = [];
+  if (schedule && isShopifyConfigured()) {
+    try {
+      const [entries, { data: emps }] = await Promise.all([
+        cachedWeekSales(monday, loc.timezone),
+        supabase
+          .from("employees")
+          .select("name, shopify_staff_id")
+          .eq("location_id", loc.id)
+          .not("shopify_staff_id", "is", null),
+      ]);
+      const nameOf = new Map(
+        (emps ?? []).map((e) => [
+          normalizeStaffId(e.shopify_staff_id as string),
+          e.name,
+        ]),
+      );
+      weekRanking = entries
+        .flatMap(([staffId, amount]) => {
+          const name = nameOf.get(staffId);
+          return name ? [{ name, amount }] : [];
+        })
+        .sort((a, b) => b.amount - a.amount);
+    } catch {
+      // section hidden when Shopify is unreachable
+    }
+  }
+  const weekTotal = weekRanking.reduce((a, r) => a + r.amount, 0);
 
   const slots = SHIFT_SLOTS.map((slot) => ({ slot, tpl: templateForSlot(slot, templates) }));
   const inAnySlot = (s: ShiftRow) =>
@@ -247,6 +294,39 @@ export default async function StoreWeekPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {weekRanking.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 pt-6">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-sm font-semibold">
+                <Trophy className="size-4 text-amber-500" /> Sales this week
+              </span>
+              <span className="text-sm font-semibold tabular-nums">
+                {formatMoney(weekTotal)}
+              </span>
+            </div>
+            <ul className="flex flex-col divide-y">
+              {weekRanking.map((r, i) => (
+                <li
+                  key={r.name}
+                  className="flex items-center justify-between py-2 text-sm"
+                >
+                  <span>
+                    <span className="text-muted-foreground mr-2 tabular-nums">
+                      {i + 1}.
+                    </span>
+                    {r.name}
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {formatMoney(r.amount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

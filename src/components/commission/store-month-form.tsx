@@ -23,6 +23,8 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+export type GoalsByLocation = Record<string, Record<string, number>>;
+
 type Row = { min_sales: string; rate: string };
 const toRows = (tiers: CommissionTier[]): Row[] =>
   tiers.map((t) => ({ min_sales: String(t.min_sales), rate: String(t.rate * 100) }));
@@ -39,27 +41,34 @@ export function StoreMonthForm({
   locations: { id: string; name: string }[];
   year: number;
   month: number;
-  goalsByLocation: Record<string, Record<number, number>>;
+  goalsByLocation: GoalsByLocation;
   tiersByKey: Record<string, CommissionTier[]>;
   globalTiers: CommissionTier[];
   currency: string;
 }) {
   const router = useRouter();
   const [locationId, setLocationId] = useState(locations[0]?.id ?? "");
+  const [yearSel, setYearSel] = useState(year);
   const [monthSel, setMonthSel] = useState(month);
   const [pending, setPending] = useState(false);
+  const years = [year, year + 1];
 
-  const goalOf = (loc: string, m: number) =>
-    goalsByLocation[loc]?.[m] != null ? String(goalsByLocation[loc][m]) : "";
-  const tiersOf = (loc: string, m: number) => tiersByKey[`${loc}-${m}`];
+  const goalOf = (loc: string, y: number, m: number) =>
+    goalsByLocation[loc]?.[`${y}-${m}`] != null
+      ? String(goalsByLocation[loc][`${y}-${m}`])
+      : "";
+  const tiersOf = (loc: string, y: number, m: number) =>
+    tiersByKey[`${loc}-${y}-${m}`];
 
-  const [goal, setGoal] = useState(goalOf(locationId, monthSel));
-  const [rows, setRows] = useState<Row[]>(toRows(tiersOf(locationId, monthSel) ?? globalTiers));
-  const [inherited, setInherited] = useState(!tiersOf(locationId, monthSel));
+  const [goal, setGoal] = useState(goalOf(locationId, yearSel, monthSel));
+  const [rows, setRows] = useState<Row[]>(
+    toRows(tiersOf(locationId, yearSel, monthSel) ?? globalTiers),
+  );
+  const [inherited, setInherited] = useState(!tiersOf(locationId, yearSel, monthSel));
 
-  function load(loc: string, m: number) {
-    setGoal(goalOf(loc, m));
-    const t = tiersOf(loc, m);
+  function load(loc: string, y: number, m: number) {
+    setGoal(goalOf(loc, y, m));
+    const t = tiersOf(loc, y, m);
     setRows(toRows(t ?? globalTiers));
     setInherited(!t);
   }
@@ -73,7 +82,7 @@ export function StoreMonthForm({
           .map((r) => ({ min_sales: Number(r.min_sales), rate: Number(r.rate) / 100 }));
     setStoreMonth({
       location_id: locationId,
-      year,
+      year: yearSel,
       month: monthSel,
       goal_amount: goal === "" ? 0 : Number(goal),
       tiers,
@@ -104,7 +113,7 @@ export function StoreMonthForm({
             onValueChange={(v) => {
               if (!v) return;
               setLocationId(v);
-              load(v, monthSel);
+              load(v, yearSel, monthSel);
             }}
           >
             <SelectTrigger className="w-48">
@@ -118,7 +127,7 @@ export function StoreMonthForm({
           </Select>
         </div>
         <div className="flex flex-col gap-2">
-          <Label>Month ({year})</Label>
+          <Label>Month</Label>
           <Select
             items={Object.fromEntries(MONTHS.map((m, i) => [String(i + 1), m]))}
             value={String(monthSel)}
@@ -126,7 +135,7 @@ export function StoreMonthForm({
               if (!v) return;
               const m = Number(v);
               setMonthSel(m);
-              load(locationId, m);
+              load(locationId, yearSel, m);
             }}
           >
             <SelectTrigger className="w-40">
@@ -135,6 +144,28 @@ export function StoreMonthForm({
             <SelectContent>
               {MONTHS.map((m, i) => (
                 <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label>Year</Label>
+          <Select
+            items={Object.fromEntries(years.map((y) => [String(y), String(y)]))}
+            value={String(yearSel)}
+            onValueChange={(v) => {
+              if (!v) return;
+              const y = Number(v);
+              setYearSel(y);
+              load(locationId, y, monthSel);
+            }}
+          >
+            <SelectTrigger className="w-28">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((y) => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
               ))}
             </SelectContent>
           </Select>
