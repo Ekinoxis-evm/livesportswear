@@ -1,29 +1,47 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crown } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { weekStart, weekDays, addDays, isoWeekday, formatWeekRange } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
-import { slotLabelForHours } from "@/lib/shift-slots";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SHIFT_SLOTS, templateForSlot, shiftMatchesSlot } from "@/lib/shift-slots";
+import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hhmm = (t: string) => t.slice(0, 5);
+
+// Same fallback colors as the admin board's slot rows.
+const SLOT_COLOR: Record<string, string> = {
+  morning: "#22c55e",
+  evening: "#a855f7",
+};
 
 type ShiftRow = {
   employee_id: string;
   date: string;
   start_time: string;
   end_time: string;
-  template: { name: string } | null;
-  employee: { name: string } | null;
+  shift_template_id: string | null;
+  employee: { name: string; role: string } | null;
 };
+
+function Chip({ shift, withTime }: { shift: ShiftRow; withTime?: boolean }) {
+  return (
+    <span className="bg-muted flex items-center gap-1 rounded-md px-2 py-1 text-xs">
+      {shift.employee?.role === "store_manager" && (
+        <Crown className="size-3 shrink-0 text-amber-500" />
+      )}
+      <span className="truncate">{shift.employee?.name ?? "—"}</span>
+      {withTime && (
+        <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">
+          {hhmm(shift.start_time)}–{hhmm(shift.end_time)}
+        </span>
+      )}
+    </span>
+  );
+}
 
 export default async function StoreWeekPage({
   params,
@@ -45,20 +63,28 @@ export default async function StoreWeekPage({
   const monday = weekStart(week);
   if (monday !== week) redirect(`/w/${token}/${monday}`);
 
-  const { data: schedule } = await supabase
-    .from("schedules")
-    .select("id")
-    .eq("location_id", loc.id)
-    .eq("week_start", monday)
-    .eq("status", "published")
-    .maybeSingle();
+  const [{ data: schedule }, { data: templateRows }] = await Promise.all([
+    supabase
+      .from("schedules")
+      .select("id")
+      .eq("location_id", loc.id)
+      .eq("week_start", monday)
+      .eq("status", "published")
+      .maybeSingle(),
+    supabase
+      .from("shift_templates")
+      .select("id, name, start_time, end_time, color")
+      .eq("location_id", loc.id)
+      .eq("active", true),
+  ]);
+  const templates = templateRows ?? [];
 
   let shifts: ShiftRow[] = [];
   if (schedule) {
     const { data } = await supabase
       .from("shifts")
       .select(
-        "employee_id, date, start_time, end_time, template:shift_templates(name), employee:employees(name)",
+        "employee_id, date, start_time, end_time, shift_template_id, employee:employees(name, role)",
       )
       .eq("schedule_id", schedule.id)
       .order("date")
@@ -70,11 +96,13 @@ export default async function StoreWeekPage({
   const today = businessDate(loc.timezone);
   const thisWeek = weekStart(today);
 
-  const label = (s: ShiftRow) =>
-    s.template?.name ?? slotLabelForHours(s.start_time, s.end_time) ?? "Shift";
+  const slots = SHIFT_SLOTS.map((slot) => ({ slot, tpl: templateForSlot(slot, templates) }));
+  const inAnySlot = (s: ShiftRow) =>
+    slots.some(({ slot, tpl }) => shiftMatchesSlot(s, slot, tpl));
+  const otherShifts = shifts.filter((s) => !inAnySlot(s));
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-5 p-6">
+    <div className="mx-auto flex min-h-screen max-w-4xl flex-col gap-5 p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
@@ -118,49 +146,106 @@ export default async function StoreWeekPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="flex flex-col gap-3">
-          {days.map((day) => {
-            const dayShifts = shifts.filter((s) => s.date === day);
-            const isToday = day === today;
-            return (
-              <Card key={day} className={isToday ? "border-primary" : undefined}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-baseline gap-2 text-sm">
-                    {SHORT_WEEKDAYS[isoWeekday(day) - 1]}
-                    <span className="text-muted-foreground text-xs font-normal tabular-nums">
-                      {day}
-                    </span>
-                    {isToday && (
-                      <span className="text-primary text-xs font-semibold uppercase">
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-muted/50">
+                <th className="bg-muted/50 sticky left-0 z-10 p-2 text-left font-medium">
+                  Shift
+                </th>
+                {days.map((d) => (
+                  <th
+                    key={d}
+                    className={cn(
+                      "min-w-28 p-2 text-left font-medium",
+                      d === today && "text-primary",
+                    )}
+                  >
+                    <span className="text-muted-foreground">
+                      {SHORT_WEEKDAYS[isoWeekday(d) - 1]}
+                    </span>{" "}
+                    <span className="tabular-nums">{d.slice(8, 10)}</span>
+                    {d === today && (
+                      <span className="text-primary ml-1 text-[10px] font-semibold uppercase">
                         Today
                       </span>
                     )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {dayShifts.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">Nobody scheduled.</p>
-                  ) : (
-                    <ul className="flex flex-col divide-y">
-                      {dayShifts.map((s, i) => (
-                        <li
-                          key={`${s.employee_id}-${i}`}
-                          className="flex items-center justify-between py-1.5 text-sm"
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {slots.map(({ slot, tpl }) => {
+                const color = tpl?.color ?? SLOT_COLOR[slot.key] ?? "var(--color-primary)";
+                return (
+                  <tr key={slot.key} className="border-t align-top">
+                    <td className="bg-background sticky left-0 z-10 p-2">
+                      <span className="flex items-center gap-2 font-medium">
+                        <span
+                          aria-hidden
+                          className="h-4 w-1 rounded"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="flex flex-col">
+                          {slot.label}
+                          <span className="text-muted-foreground text-xs font-normal tabular-nums">
+                            {slot.start}–{slot.end}
+                          </span>
+                        </span>
+                      </span>
+                    </td>
+                    {days.map((d) => {
+                      const assigned = shifts.filter(
+                        (s) => s.date === d && shiftMatchesSlot(s, slot, tpl),
+                      );
+                      return (
+                        <td
+                          key={d}
+                          className={cn(
+                            "border-l p-1.5 align-top",
+                            d === today && "bg-primary/5",
+                          )}
                         >
-                          <span className="font-medium">
-                            {s.employee?.name ?? "—"}
-                          </span>
-                          <span className="text-muted-foreground tabular-nums">
-                            {label(s)} · {hhmm(s.start_time)}–{hhmm(s.end_time)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+                          <div className="flex flex-col gap-1">
+                            {assigned.map((s, i) => (
+                              <Chip key={`${s.employee_id}-${i}`} shift={s} />
+                            ))}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+              {otherShifts.length > 0 && (
+                <tr className="border-t align-top">
+                  <td className="bg-background sticky left-0 z-10 p-2">
+                    <span className="flex items-center gap-2 font-medium">
+                      <span aria-hidden className="bg-muted-foreground h-4 w-1 rounded" />
+                      Other
+                    </span>
+                  </td>
+                  {days.map((d) => (
+                    <td
+                      key={d}
+                      className={cn(
+                        "border-l p-1.5 align-top",
+                        d === today && "bg-primary/5",
+                      )}
+                    >
+                      <div className="flex flex-col gap-1">
+                        {otherShifts
+                          .filter((s) => s.date === d)
+                          .map((s, i) => (
+                            <Chip key={`${s.employee_id}-${i}`} shift={s} withTime />
+                          ))}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
