@@ -2,6 +2,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireEmployee } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
+import { weekdayName } from "@/lib/weekdays";
 import { totals, byPerson } from "@/lib/conversion";
 import { orderFloor, type FloorMember } from "@/lib/floor-queue";
 import { slotLabelForHours } from "@/lib/shift-slots";
@@ -216,7 +217,9 @@ export default async function TodayPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold">Today · {locName}</h1>
-        <p className="text-muted-foreground text-sm tabular-nums">{bd}</p>
+        <p className="text-muted-foreground text-sm">
+          {weekdayName(bd)} <span className="tabular-nums">· {bd}</span>
+        </p>
       </div>
 
       <ShiftToday meId={employee.id} shift={myShift} checkin={myCheckinView} />

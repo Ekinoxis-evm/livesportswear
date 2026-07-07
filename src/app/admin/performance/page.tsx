@@ -6,6 +6,11 @@ import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
 import { stampStatus, workedHours, type AttendanceStamp } from "@/lib/attendance";
+import { weekdayName } from "@/lib/weekdays";
+import { formatMoney } from "@/lib/commission";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { fetchDaySales } from "@/lib/shopify";
+import { dayRangeInTz } from "@/lib/shopify-range";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -94,7 +99,7 @@ export default async function PerformancePage({
         .eq("business_date", date),
       supabase
         .from("store_day_closes")
-        .select("id")
+        .select("id, shopify_sales, currency")
         .eq("location_id", location.id)
         .eq("business_date", date)
         .maybeSingle(),
@@ -143,6 +148,20 @@ export default async function PerformancePage({
     0,
   );
 
+  // Day's Shopify money: the close-time snapshot when the day was closed,
+  // otherwise a live read (today, or a day closed before Shopify connected).
+  let shopifySales: number | null =
+    closeRow?.shopify_sales != null ? Number(closeRow.shopify_sales) : null;
+  const currency = closeRow?.currency ?? "USD";
+  if (shopifySales == null && isShopifyConfigured()) {
+    try {
+      const range = dayRangeInTz(date, tz);
+      shopifySales = (await fetchDaySales(range.start, range.endExclusive)).total;
+    } catch {
+      // card shows an em dash
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -174,8 +193,8 @@ export default async function PerformancePage({
           >
             <ChevronLeft className="size-4" />
           </Link>
-          <span className="min-w-28 text-center text-sm font-semibold tabular-nums">
-            {date}
+          <span className="min-w-40 text-center text-sm font-semibold">
+            {weekdayName(date)} <span className="tabular-nums">· {date}</span>
           </span>
           <Link
             href={href(shiftDate(date, 1))}
@@ -197,7 +216,7 @@ export default async function PerformancePage({
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
             <CardDescription>Clients attended</CardDescription>
@@ -216,6 +235,17 @@ export default async function PerformancePage({
             <CardTitle className="text-2xl tabular-nums">
               {store.attended > 0 ? formatPct(store.conversion) : "—"}
             </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Shopify sales</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {shopifySales != null ? formatMoney(shopifySales, currency) : "—"}
+            </CardTitle>
+            {closeRow?.shopify_sales == null && shopifySales != null && (
+              <CardDescription>live — snapshots at close</CardDescription>
+            )}
           </CardHeader>
         </Card>
       </div>

@@ -8,6 +8,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { fetchDaySales } from "@/lib/shopify";
+import { dayRangeInTz } from "@/lib/shopify-range";
+import { formatMoney } from "@/lib/commission";
 import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
 import type { ActionResult } from "@/server/shared";
 
@@ -153,6 +157,21 @@ export async function closeDay(): Promise<ActionResult> {
     conversionPct: formatPct(p.conversion),
   }));
 
+  // The day's Shopify money line, captured at close. Shopify being down must
+  // never block closing the day.
+  let shopifySales: number | null = null;
+  let currency: string | null = null;
+  if (isShopifyConfigured()) {
+    try {
+      const range = dayRangeInTz(bd, tz);
+      const day = await fetchDaySales(range.start, range.endExclusive);
+      shopifySales = day.total;
+      currency = day.currency;
+    } catch {
+      // report email simply omits the money line
+    }
+  }
+
   const { error: upErr } = await service.from("store_day_closes").upsert(
     {
       location_id: employee.location_id,
@@ -161,6 +180,8 @@ export async function closeDay(): Promise<ActionResult> {
       attended_count: t.attended,
       sold_count: t.sold,
       contact_count: t.contacts,
+      shopify_sales: shopifySales,
+      currency,
     },
     { onConflict: "location_id,business_date" },
   );
@@ -179,7 +200,10 @@ export async function closeDay(): Promise<ActionResult> {
         sold: t.sold,
         contacts: t.contacts,
         conversionPct: formatPct(t.conversion),
-        shopifySales: null,
+        shopifySales:
+          shopifySales != null
+            ? formatMoney(shopifySales, currency ?? "USD")
+            : null,
         perPerson,
       }),
     });

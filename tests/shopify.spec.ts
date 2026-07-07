@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   previousMonth,
   monthRangeInTz,
+  dayRangeInTz,
   normalizeStaffId,
 } from "@/lib/shopify-range";
+import { weekdayName } from "@/lib/weekdays";
 
 describe("previousMonth", () => {
   it("steps back within a year", () => {
@@ -30,6 +32,26 @@ describe("monthRangeInTz", () => {
   it("handles the EST/EDT boundary months", () => {
     const r = monthRangeInTz("2026-01", "America/New_York");
     expect(r.start).toBe("2026-01-01T05:00:00.000Z"); // EST is UTC-5
+  });
+});
+
+describe("dayRangeInTz", () => {
+  it("anchors a store day to its timezone", () => {
+    const r = dayRangeInTz("2026-07-07", "America/New_York");
+    expect(r.start).toBe("2026-07-07T04:00:00.000Z");
+    expect(r.endExclusive).toBe("2026-07-08T04:00:00.000Z");
+  });
+  it("wraps month boundaries", () => {
+    const r = dayRangeInTz("2026-07-31", "UTC");
+    expect(r.endExclusive).toBe("2026-08-01T00:00:00.000Z");
+  });
+});
+
+describe("weekdayName", () => {
+  it("names the weekday of a date string", () => {
+    expect(weekdayName("2026-07-07")).toBe("Tuesday");
+    expect(weekdayName("2026-07-06")).toBe("Monday");
+    expect(weekdayName("2026-07-12")).toBe("Sunday");
   });
 });
 

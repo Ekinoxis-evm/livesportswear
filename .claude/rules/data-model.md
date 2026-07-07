@@ -123,7 +123,8 @@ keys are connected.
 - `closed_by uuid fk -> employees (on delete set null)`
 - `closed_at timestamptz not null default now()`
 - `attended_count int`, `sold_count int`, `contact_count int`
-- `shopify_sales numeric(12,2)` (nullable), `currency text`
+- `shopify_sales numeric(12,2)` (nullable), `currency text` — snapshotted from
+  Shopify at close time (`closeDay`); null if Shopify was unreachable/unconfigured
 - `unique (location_id, business_date)`
 
 ### `store_goals` (added 0009)
