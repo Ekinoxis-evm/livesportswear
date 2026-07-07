@@ -36,10 +36,12 @@ export function ShopifyPanel({
     return (
       <div className="text-muted-foreground flex flex-col gap-2 text-sm">
         <p>
-          Not connected yet. Add <code>SHOPIFY_STORE_DOMAIN</code> and{" "}
-          <code>SHOPIFY_ADMIN_TOKEN</code> in Vercel (Admin API scopes{" "}
-          <code>read_orders</code>, <code>read_users</code>), then redeploy.
-          Sales then sync automatically each day, and you can map staff here.
+          Not connected yet. Add <code>SHOPIFY_STORE_DOMAIN</code>,{" "}
+          <code>SHOPIFY_CLIENT_ID</code> and <code>SHOPIFY_CLIENT_SECRET</code>{" "}
+          in Vercel (Dev Dashboard app in the store&apos;s organization, Admin
+          API scopes <code>read_orders</code>, <code>read_users</code>), then
+          redeploy. Sales then sync automatically each day, and you can map
+          staff here.
         </p>
       </div>
     );

@@ -1,25 +1,70 @@
 import "server-only";
 import {
   SHOPIFY_STORE_DOMAIN,
+  SHOPIFY_CLIENT_ID,
+  SHOPIFY_CLIENT_SECRET,
   SHOPIFY_ADMIN_TOKEN,
   SHOPIFY_API_VERSION,
 } from "@/lib/shopify-config";
+import { ordersSearchQuery } from "@/lib/shopify-range";
+
+// Client-credentials tokens live 24h; cache per instance and refresh early.
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getAccessToken(): Promise<string> {
+  if (SHOPIFY_ADMIN_TOKEN) return SHOPIFY_ADMIN_TOKEN;
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
+    return cachedToken.token;
+  }
+  const res = await fetch(
+    `https://${SHOPIFY_STORE_DOMAIN}/admin/oauth/access_token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: SHOPIFY_CLIENT_ID,
+        client_secret: SHOPIFY_CLIENT_SECRET,
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`Shopify auth error ${res.status}`);
+  const json = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+  };
+  if (!json.access_token) {
+    throw new Error("Shopify auth: no access token returned.");
+  }
+  cachedToken = {
+    token: json.access_token,
+    expiresAt: Date.now() + (json.expires_in ?? 86_399) * 1000,
+  };
+  return cachedToken.token;
+}
 
 async function shopifyGraphQL<T>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T> {
-  const res = await fetch(
-    `https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": SHOPIFY_ADMIN_TOKEN,
+  const call = async (token: string) =>
+    fetch(
+      `https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": token,
+        },
+        body: JSON.stringify({ query, variables }),
       },
-      body: JSON.stringify({ query, variables }),
-    },
-  );
+    );
+
+  let res = await call(await getAccessToken());
+  if (res.status === 401 && !SHOPIFY_ADMIN_TOKEN) {
+    cachedToken = null; // token revoked or expired early — mint a fresh one
+    res = await call(await getAccessToken());
+  }
   if (!res.ok) throw new Error(`Shopify API error ${res.status}`);
   const json = (await res.json()) as {
     data?: T;
@@ -60,12 +105,13 @@ type OrdersPage = {
 };
 
 /**
- * Total sales per Shopify staff member for [start, endExclusive).
- * Orders are attributed via Order.staffMember (POS staff). Paginates fully.
+ * Total sales per Shopify staff member for [start, endExclusive) — UTC ISO
+ * instants (callers pass store-local month boundaries). Cancelled orders are
+ * excluded; orders are attributed via Order.staffMember (POS staff). Paginates fully.
  */
 export async function fetchSalesByStaff(
-  startDate: string, // YYYY-MM-DD inclusive
-  endExclusive: string, // YYYY-MM-DD exclusive
+  start: string,
+  endExclusive: string,
 ): Promise<Map<string, number>> {
   const totals = new Map<string, number>();
   let after: string | null = null;
@@ -83,7 +129,7 @@ export async function fetchSalesByStaff(
           pageInfo { hasNextPage endCursor }
         }
       }`,
-      { q: `created_at:>=${startDate} created_at:<${endExclusive}`, after },
+      { q: ordersSearchQuery(start, endExclusive), after },
     );
 
     for (const edge of data.orders.edges) {

@@ -2,20 +2,12 @@ import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { listStaffMembers, fetchSalesByStaff } from "@/lib/shopify";
+import { monthRangeInTz } from "@/lib/shopify-range";
+import { primaryTimezone } from "@/lib/business-tz";
 
 export type SyncResult =
   | { ok: true; updated: number; unmatched: number }
   | { ok: false; error: string };
-
-function monthRange(month: string): { start: string; endExclusive: string } {
-  const [y, m] = month.split("-").map(Number);
-  const ny = m === 12 ? y + 1 : y;
-  const nm = m === 12 ? 1 : m + 1;
-  return {
-    start: `${month}-01`,
-    endExclusive: `${ny}-${String(nm).padStart(2, "0")}-01`,
-  };
-}
 
 /**
  * Pulls one month of sales from Shopify, attributes each order to a Shopify
@@ -31,7 +23,7 @@ export async function runShopifySync(month: string): Promise<SyncResult> {
     return { ok: false, error: "Invalid month." };
   }
 
-  const { start, endExclusive } = monthRange(month);
+  const { start, endExclusive } = monthRangeInTz(month, await primaryTimezone());
 
   let salesByStaff: Map<string, number>;
   let staff: { id: string; email: string | null }[];
