@@ -66,6 +66,26 @@
 - Don't log full employee email or phone. Mask: `j***@liveactivewear.com`.
 - Audit log captures the diff but not the magic token field.
 
+## Store screen accounts (0019)
+- A third role, `app_metadata.role = "store"`: one **shared per-location kiosk
+  login** (`app_metadata.location_id` claim, no `employees` row, no
+  `auth_user_id` link). Created by an admin from the Locations page
+  (`createStoreAccount`, `src/server/store-accounts.ts`); password shown once.
+- `requireStore()` (`src/lib/auth.ts`) gates `/store/*` (also enforced in
+  `src/proxy.ts`). The RLS helpers (`current_employee_id()` etc.) return NULL
+  for a store JWT — by design the kiosk only works through **service-client
+  server actions** (`src/server/store-floor.ts`) that validate the target
+  employee belongs to the claim's location.
+- **Kiosk PIN**: entry/exit taps require the employee's 4-digit PIN
+  (`employees.kiosk_pin_hash`, sha256 salted with the employee id). It's a
+  floor-speed control, not a credential — never accept it for login. Queue
+  actions (take client, sold/no-sale) are deliberately one-tap.
+- Kiosk-made entry/exit stamps are recorded **validated** (`*_validated_at`
+  set, `*_validated_by` null): the device standing in the store plus the PIN is
+  the attestation. The kiosk is the ONLY check-in surface — the employee-portal
+  floor UI and the QR peer-validation flow were removed with it
+  (`attendance_validations` is legacy/read-only history now).
+
 ## Roles & accounts
 - Admins and employees are both Supabase Auth users, distinguished by `app_metadata.role`. The admin claim is set out-of-band (service role). Employees get accounts via the admin "Invite to portal" action (`src/server/employee-accounts.ts`), which creates the auth user with `role=employee` + `employee_id` and links `employees.auth_user_id`.
 - `requireAdmin()` / `requireEmployee()` (`src/lib/auth.ts`) gate server code; `src/proxy.ts` gates `/admin` (admin only) and `/portal` (any authenticated) by the JWT claim — no DB call.

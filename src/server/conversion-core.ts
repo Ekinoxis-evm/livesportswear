@@ -1,9 +1,4 @@
-"use server";
-
-import { z } from "zod";
-import { revalidatePath } from "next/cache";
-import { requireEmployee } from "@/lib/auth";
-import { createServerClient } from "@/lib/supabase/server";
+import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
@@ -16,68 +11,6 @@ import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
 import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
 import type { ActionResult } from "@/server/shared";
-
-const markSchema = z.object({ sold: z.boolean(), got_contact: z.boolean() });
-
-async function locationTimezone(locationId: string): Promise<string> {
-  const service = createServiceClient();
-  const { data } = await service
-    .from("locations")
-    .select("timezone")
-    .eq("id", locationId)
-    .maybeSingle();
-  return data?.timezone ?? "UTC";
-}
-
-/** Record one attended customer (sold / got-contact) for the signed-in rep. */
-export async function markClient(
-  input: z.input<typeof markSchema>,
-): Promise<ActionResult> {
-  const { employee } = await requireEmployee();
-  const parsed = markSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
-
-  const tz = await locationTimezone(employee.location_id);
-  // Server (RLS) client: the self-insert policy checks current_employee_id()
-  // and current_location_id(), so a rep can only write their own events.
-  const supabase = await createServerClient();
-  const { error } = await supabase.from("client_events").insert({
-    location_id: employee.location_id,
-    employee_id: employee.id,
-    business_date: businessDate(tz),
-    sold: parsed.data.sold,
-    got_contact: parsed.data.got_contact,
-  });
-  if (error) return { ok: false, error: error.message };
-
-  revalidatePath("/portal/today");
-  return { ok: true };
-}
-
-/** Undo the rep's most recent client today (mis-swipe correction). */
-export async function undoLastClient(): Promise<ActionResult> {
-  const { employee } = await requireEmployee();
-  const tz = await locationTimezone(employee.location_id);
-  const bd = businessDate(tz);
-
-  // Service client: scoped to delete only the caller's own latest same-day row.
-  const service = createServiceClient();
-  const { data: last } = await service
-    .from("client_events")
-    .select("id")
-    .eq("employee_id", employee.id)
-    .eq("business_date", bd)
-    .order("attended_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!last) return { ok: false, error: "Nothing to undo." };
-
-  const { error } = await service.from("client_events").delete().eq("id", last.id);
-  if (error) return { ok: false, error: error.message };
-
-  revalidatePath("/portal/today");
-  return { ok: true };
-}
 
 /** Emails of admins who should receive a location's daily report. */
 async function reportRecipients(): Promise<string[]> {
@@ -95,18 +28,23 @@ async function reportRecipients(): Promise<string[]> {
 }
 
 /**
- * Close the store day: snapshot the location's conversion into store_day_closes
- * and email the daily report to admins. Idempotent on (location, business_date).
- * shopify_sales is left null until POS keys are connected (then backfilled).
+ * Close the store day as `closer`: same eligibility rule regardless of the
+ * caller (portal button or store kiosk) — the closer must be on today's
+ * published schedule AND checked in on the floor. Snapshots conversion (and
+ * the day's Shopify sales) into store_day_closes and emails the daily report.
+ * Idempotent on (location, business_date).
  */
-export async function closeDay(): Promise<ActionResult> {
-  const { employee } = await requireEmployee();
+export async function closeDayFor(closer: {
+  id: string;
+  name: string;
+  location_id: string;
+}): Promise<ActionResult> {
   const service = createServiceClient();
 
   const { data: loc } = await service
     .from("locations")
     .select("name, timezone")
-    .eq("id", employee.location_id)
+    .eq("id", closer.location_id)
     .maybeSingle();
   const tz = loc?.timezone ?? "UTC";
   const locName = loc?.name ?? "Store";
@@ -114,11 +52,11 @@ export async function closeDay(): Promise<ActionResult> {
 
   // Only someone on today's published schedule who is checked in on the floor
   // may close the day (usually the evening shift).
-  const [{ data: myShift }, { data: myCheckin }] = await Promise.all([
+  const [{ data: closerShift }, { data: closerCheckin }] = await Promise.all([
     service
       .from("shifts")
       .select("id, schedules!inner(status)")
-      .eq("employee_id", employee.id)
+      .eq("employee_id", closer.id)
       .eq("date", bd)
       .eq("schedules.status", "published")
       .limit(1)
@@ -126,23 +64,23 @@ export async function closeDay(): Promise<ActionResult> {
     service
       .from("floor_checkins")
       .select("id")
-      .eq("location_id", employee.location_id)
+      .eq("location_id", closer.location_id)
       .eq("business_date", bd)
-      .eq("employee_id", employee.id)
+      .eq("employee_id", closer.id)
       .is("left_at", null)
       .maybeSingle(),
   ]);
-  if (!myShift) {
+  if (!closerShift) {
     return { ok: false, error: "Only someone with a shift today can close the day." };
   }
-  if (!myCheckin) {
+  if (!closerCheckin) {
     return { ok: false, error: "Mark your entry before closing the day." };
   }
 
   const { data: rows } = await service
     .from("client_events")
     .select("employee_id, sold, got_contact, employees(name)")
-    .eq("location_id", employee.location_id)
+    .eq("location_id", closer.location_id)
     .eq("business_date", bd);
   const events = rows ?? [];
 
@@ -176,9 +114,9 @@ export async function closeDay(): Promise<ActionResult> {
 
   const { error: upErr } = await service.from("store_day_closes").upsert(
     {
-      location_id: employee.location_id,
+      location_id: closer.location_id,
       business_date: bd,
-      closed_by: employee.id,
+      closed_by: closer.id,
       attended_count: t.attended,
       sold_count: t.sold,
       contact_count: t.contacts,
@@ -197,7 +135,7 @@ export async function closeDay(): Promise<ActionResult> {
       react: DayReportEmail({
         locationName: locName,
         businessDate: `${weekdayName(bd)} · ${shortDate(bd)}`,
-        closedByName: employee.name,
+        closedByName: closer.name,
         attended: t.attended,
         sold: t.sold,
         contacts: t.contacts,
@@ -211,6 +149,5 @@ export async function closeDay(): Promise<ActionResult> {
     });
   }
 
-  revalidatePath("/portal/today");
   return { ok: true };
 }

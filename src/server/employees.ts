@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { generateMagicToken } from "@/lib/magic-token";
+import { hashPin, PIN_RE } from "@/lib/kiosk-pin";
 import { inviteEmployee } from "@/server/employee-accounts";
 import {
   type ActionResult,
@@ -196,5 +197,27 @@ export async function rotateMagicToken(id: string): Promise<ActionResult> {
 
   if (error) return { ok: false, error: dbError(error) };
   revalidatePath("/admin/employees");
+  return { ok: true };
+}
+
+/** Admin sets (or resets) an employee's kiosk PIN — rollout helper. */
+export async function setEmployeeKioskPin(
+  employeeId: string,
+  pin: string,
+): Promise<ActionResult> {
+  await requireAdmin();
+  if (!z.string().uuid().safeParse(employeeId).success) {
+    return { ok: false, error: "Invalid employee." };
+  }
+  if (!PIN_RE.test(pin)) return { ok: false, error: "Use exactly 4 digits." };
+
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from("employees")
+    .update({ kiosk_pin_hash: hashPin(pin, employeeId) })
+    .eq("id", employeeId);
+  if (error) return { ok: false, error: dbError(error) };
+
+  revalidatePath(`/admin/employees/${employeeId}`);
   return { ok: true };
 }

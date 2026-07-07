@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireEmployee } from "@/lib/auth";
 import { generateMagicToken } from "@/lib/magic-token";
+import { hashPin, PIN_RE } from "@/lib/kiosk-pin";
 import { type ActionResult } from "@/server/shared";
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -110,6 +111,25 @@ export async function changeOwnEmail(input: unknown): Promise<ActionResult> {
     .update({ email, magic_token: generateMagicToken() })
     .eq("id", employee.id);
   if (row.error) return { ok: false, error: "Couldn't save your email." };
+
+  revalidatePath("/portal/settings");
+  return { ok: true };
+}
+
+/** Employee sets their own 4-digit kiosk PIN (entry/exit on the store screen). */
+export async function setOwnKioskPin(input: unknown): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const parsed = z.string().safeParse(input);
+  if (!parsed.success || !PIN_RE.test(parsed.data)) {
+    return { ok: false, error: "Use exactly 4 digits." };
+  }
+
+  const service = createServiceClient();
+  const { error } = await service
+    .from("employees")
+    .update({ kiosk_pin_hash: hashPin(parsed.data, employee.id) })
+    .eq("id", employee.id);
+  if (error) return { ok: false, error: "Couldn't save your PIN." };
 
   revalidatePath("/portal/settings");
   return { ok: true };

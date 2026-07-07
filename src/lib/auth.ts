@@ -3,12 +3,12 @@ import type { User } from "@supabase/supabase-js";
 import { createServerClient } from "@/lib/supabase/server";
 import type { Employee } from "@/types/db";
 
-export type Role = "admin" | "employee";
+export type Role = "admin" | "employee" | "store";
 
 /** Role from the Supabase JWT claim app_metadata.role. */
 export function roleOf(user: User | null): Role | null {
   const r = (user?.app_metadata as { role?: string } | undefined)?.role;
-  return r === "admin" || r === "employee" ? r : null;
+  return r === "admin" || r === "employee" || r === "store" ? r : null;
 }
 
 /** A master admin (no admin_scope claim, or 'master') sees every location. */
@@ -58,6 +58,23 @@ export async function accessibleLocationIds(): Promise<string[] | "all"> {
     .select("location_id")
     .eq("admin_user_id", user.id);
   return (data ?? []).map((r) => r.location_id);
+}
+
+/**
+ * Guard for the shared store screen. A store account is per-location, not
+ * per-person — its identity is the location_id claim, never an employees row.
+ */
+export async function requireStore(): Promise<{
+  user: User;
+  locationId: string;
+}> {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  if (roleOf(user) !== "store") redirect("/");
+  const locationId = (user.app_metadata as { location_id?: string })
+    .location_id;
+  if (!locationId) redirect("/login");
+  return { user, locationId };
 }
 
 /** Guard for the employee portal; returns the linked employee row. */

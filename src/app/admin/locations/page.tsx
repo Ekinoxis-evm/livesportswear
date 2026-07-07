@@ -12,9 +12,17 @@ import {
 } from "@/components/ui/table";
 import { LocationFormSheet } from "@/components/location/location-form-sheet";
 import { LocationActiveToggle } from "@/components/location/location-actions";
+import { StoreAccountPanel } from "@/components/location/store-account-panel";
 import { CopyButton } from "@/components/shared/copy-button";
 import { businessDate } from "@/lib/business-date";
 import { weekStart } from "@/lib/scheduling/week";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export default async function LocationsPage() {
   const supabase = await createServerClient();
@@ -107,6 +115,30 @@ export default async function LocationsPage() {
             ))}
           </TableBody>
         </Table>
+      )}
+
+      {locations && locations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Store screens</CardTitle>
+            <CardDescription>
+              One shared login per store for the floor kiosk (the queue, PIN
+              check-ins, close day). Employees keep their own portal accounts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            {locations
+              .filter((l) => l.active)
+              .map((l) => (
+                <div key={l.id} className="flex flex-col gap-2">
+                  <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
+                    {l.name}
+                  </span>
+                  <StoreAccountPanel locationId={l.id} />
+                </div>
+              ))}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

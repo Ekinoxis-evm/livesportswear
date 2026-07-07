@@ -6,5 +6,6 @@ export default async function Home() {
   const role = roleOf(user);
   if (role === "admin") redirect("/admin/dashboard");
   if (role === "employee") redirect("/portal");
+  if (role === "store") redirect("/store");
   redirect("/login");
 }

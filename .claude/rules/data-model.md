@@ -37,6 +37,9 @@ A worker. Always belongs to one location in v1 (no multi-location reps yet).
 - `magic_token text not null unique`                — see security.md
 - `auth_user_id uuid unique fk -> auth.users`       — set when invited to the portal (0003)
 - `avatar_url text`                                 — profile photo (Supabase Storage `avatars` bucket)
+- `kiosk_pin_hash text` (added 0019)                — sha256(employee_id:pin); confirms
+  identity for entry/exit taps on the shared store screen (see security.md "Store
+  screen accounts"). Set via `setOwnKioskPin` (portal) / `setEmployeeKioskPin` (admin).
 - `created_at, updated_at`
 
 ### `employee_compensation` (added 0003)
@@ -171,11 +174,11 @@ customer increments `rotation_count` (→ back of the line). See
   lead; non-null puts the member at the front of the line (latest bump wins),
   cleared when they take a customer or re-check-in
 - `entry_validated_at/by`, `exit_validated_at/by`, `entry_self`, `exit_self`
-  (added 0015) — peer attestation of arrival/departure. A lead checking a
-  coworker in/out validates it; first-in / last-out self-validate flagged
-  (`*_self`); anyone else stays pending behind a QR (`attendance_validations`).
-  Attestation never blocks the queue; hours math is pure in
-  `src/lib/attendance.ts` (`workedHours`, `stampStatus`).
+  (added 0015) — attestation of arrival/departure. Since the store kiosk
+  (0019) became the only check-in surface, stamps are written validated
+  (device + PIN); the earlier peer/QR flow (`attendance_validations`) is
+  legacy history. Hours math stays pure in `src/lib/attendance.ts`
+  (`workedHours`, `stampStatus`).
 - `unique (location_id, business_date, employee_id)`
 - RLS: admin location-scoped; any employee at the location can read/write the
   store's floor (shared shop-floor data).
@@ -192,7 +195,11 @@ a *temporary* credential; see security.md.
 - RLS: enabled with **no policies** (default deny) — read/written only by
   admin-gated server code via the service client.
 
-### `attendance_validations` (added 0015)
+### `attendance_validations` (added 0015 — LEGACY since 0019)
+
+> No longer written: check-ins moved to the store kiosk, whose stamps are
+> validated directly. Kept for historical rows; drop in a future migration.
+
 One-time QR tokens for entry/exit attestation (audit trail). The employee's
 Today card shows a QR encoding `/portal/validate/{token}`; an active coworker
 at the store opens it and confirms (`validateAttendance`, `src/server/floor.ts`).
