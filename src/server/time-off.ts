@@ -11,6 +11,7 @@ import { businessDate } from "@/lib/business-date";
 import { isLateSubmission } from "@/lib/scheduling/payroll";
 import { sendSafe } from "@/lib/resend";
 import { TimeOffDecisionEmail } from "@/lib/emails/time-off-decision";
+import { shortDate } from "@/lib/format-date";
 import {
   type ActionResult,
   emptyToNull,
@@ -232,8 +233,8 @@ export async function decideTimeOff(
       react: React.createElement(TimeOffDecisionEmail, {
         employeeName: emp.name,
         status: parsed.data.status,
-        startDate: upd.data.start_date,
-        endDate: upd.data.end_date,
+        startDate: shortDate(upd.data.start_date),
+        endDate: shortDate(upd.data.end_date),
         note: parsed.data.note ?? undefined,
         scheduleUrl: `${appUrl}/s/${emp.magic_token}`,
       }),

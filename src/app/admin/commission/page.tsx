@@ -25,7 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CommissionConfigForm } from "@/components/commission/config-form";
-import { SalesEntry } from "@/components/commission/sales-entry";
+import { monthLabel } from "@/lib/format-date";
 import type { GoalsByLocation } from "@/components/settings/store-goals-form";
 import { StoreMonthForm } from "@/components/commission/store-month-form";
 
@@ -90,19 +90,13 @@ export default async function CommissionPage() {
     })
     .sort((a, b) => b.amount - a.amount);
 
-  const salesEmployees = (employees ?? []).map((e) => ({
-    id: e.id,
-    name: e.name,
-    amount: salesBy.get(e.id) ?? 0,
-  }));
-
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sales &amp; commission</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Monthly goals and commission tiers per store, and this month&apos;s sales
-          ({month}).
+          ({monthLabel(month)}).
         </p>
       </div>
 
@@ -136,22 +130,6 @@ export default async function CommissionPage() {
         </CardHeader>
         <CardContent>
           <CommissionConfigForm tiers={globalTiers} currency={currency} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Sales this month</CardTitle>
-          <CardDescription>
-            Manual entry for now; Shopify POS will populate this later.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {salesEmployees.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No active employees.</p>
-          ) : (
-            <SalesEntry month={month} employees={salesEmployees} currency={currency} />
-          )}
         </CardContent>
       </Card>
 

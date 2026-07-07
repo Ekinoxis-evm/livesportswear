@@ -7,6 +7,7 @@ import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
 import { stampStatus, workedHours, type AttendanceStamp } from "@/lib/attendance";
 import { weekdayName } from "@/lib/weekdays";
+import { shortDate } from "@/lib/format-date";
 import { formatMoney } from "@/lib/commission";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales } from "@/lib/shopify";
@@ -193,8 +194,8 @@ export default async function PerformancePage({
           >
             <ChevronLeft className="size-4" />
           </Link>
-          <span className="min-w-40 text-center text-sm font-semibold">
-            {weekdayName(date)} <span className="tabular-nums">· {date}</span>
+          <span className="min-w-36 text-center text-sm font-semibold">
+            {weekdayName(date)} · {shortDate(date)}
           </span>
           <Link
             href={href(shiftDate(date, 1))}
@@ -254,7 +255,7 @@ export default async function PerformancePage({
         <CardHeader>
           <CardTitle className="text-base">By employee</CardTitle>
           <CardDescription>
-            {location.name} · {date}
+            {location.name} · {shortDate(date)}
           </CardDescription>
         </CardHeader>
         {people.length === 0 ? (
@@ -295,7 +296,7 @@ export default async function PerformancePage({
         <CardHeader>
           <CardTitle className="text-base">Hours worked</CardTitle>
           <CardDescription>
-            Entry / exit as validated on the floor · {location.name} · {date}
+            Entry / exit as validated on the floor · {location.name} · {shortDate(date)}
           </CardDescription>
         </CardHeader>
         {checkins.length === 0 ? (

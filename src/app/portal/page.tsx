@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { weekStart, weekDays, addDays } from "@/lib/scheduling/week";
 import { businessDate } from "@/lib/business-date";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
+import { monthLabel } from "@/lib/format-date";
 import {
   commissionFor,
   formatMoney,
@@ -116,7 +117,7 @@ export default async function PortalPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">This month</CardTitle>
-            <CardDescription>{month}</CardDescription>
+            <CardDescription>{monthLabel(month)}</CardDescription>
           </CardHeader>
           <CardContent className="flex gap-8">
             <Stat label="Hours" value={`${monthStats.totalHours.toFixed(1)}h`} />
@@ -129,7 +130,7 @@ export default async function PortalPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Sales &amp; commission</CardTitle>
-            <CardDescription>{month}</CardDescription>
+            <CardDescription>{monthLabel(month)}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-8">

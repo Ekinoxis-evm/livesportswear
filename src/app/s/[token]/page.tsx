@@ -13,6 +13,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { TimeOffRequestForm } from "@/components/time-off/request-form";
+import { shortDateRange } from "@/lib/format-date";
 
 const hhmm = (t: string) => t.slice(0, 5);
 
@@ -139,10 +140,8 @@ export default async function PublicSchedulePage({
                   key={r.id}
                   className="flex items-center justify-between text-sm"
                 >
-                  <span className="tabular-nums">
-                    {r.start_date === r.end_date
-                      ? r.start_date
-                      : `${r.start_date} – ${r.end_date}`}
+                  <span>
+                    {shortDateRange(r.start_date, r.end_date)}
                   </span>
                   <Badge
                     variant={

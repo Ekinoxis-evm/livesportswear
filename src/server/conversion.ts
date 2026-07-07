@@ -12,6 +12,8 @@ import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales } from "@/lib/shopify";
 import { dayRangeInTz } from "@/lib/shopify-range";
 import { formatMoney } from "@/lib/commission";
+import { weekdayName } from "@/lib/weekdays";
+import { shortDate } from "@/lib/format-date";
 import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
 import type { ActionResult } from "@/server/shared";
 
@@ -191,10 +193,10 @@ export async function closeDay(): Promise<ActionResult> {
   for (const to of recipients) {
     await sendSafe({
       to,
-      subject: `Daily report — ${locName} ${bd}`,
+      subject: `Daily report — ${locName} · ${weekdayName(bd)} ${shortDate(bd)}`,
       react: DayReportEmail({
         locationName: locName,
-        businessDate: bd,
+        businessDate: `${weekdayName(bd)} · ${shortDate(bd)}`,
         closedByName: employee.name,
         attended: t.attended,
         sold: t.sold,

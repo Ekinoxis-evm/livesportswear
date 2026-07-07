@@ -21,6 +21,7 @@ import { ViolationsBanner } from "@/components/schedule/violations-banner";
 import { PublishButton } from "@/components/schedule/publish-button";
 import { ResendEmailMenu } from "@/components/schedule/resend-email-menu";
 import { CopyButton } from "@/components/shared/copy-button";
+import { shortDateRange } from "@/lib/format-date";
 
 export default async function SchedulesPage({
   searchParams,
@@ -307,7 +308,7 @@ export default async function SchedulesPage({
                   <span className="font-medium">
                     {nameById.get(r.employee_id) ?? "—"}
                   </span>{" "}
-                  · {r.start_date === r.end_date ? r.start_date : `${r.start_date} → ${r.end_date}`}
+                  · {shortDateRange(r.start_date, r.end_date)}
                   {r.reason ? ` · ${r.reason}` : ""}
                 </li>
               ))}

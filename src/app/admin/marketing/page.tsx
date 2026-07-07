@@ -12,6 +12,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { monthLabel } from "@/lib/format-date";
 import {
   Table,
   TableBody,
@@ -87,7 +88,7 @@ export default async function MarketingPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Marketing</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Meta Ads spend &amp; ROAS · {month}
+          Meta Ads spend &amp; ROAS · {monthLabel(month)}
         </p>
       </div>
 
