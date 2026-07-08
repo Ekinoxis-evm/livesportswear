@@ -133,7 +133,12 @@ export async function setEmployeePassword(
   const password = tempPassword();
 
   if (emp.auth_user_id) {
-    const upd = await service.auth.admin.updateUserById(emp.auth_user_id, { password });
+    // email_confirm heals accounts from the old invite flow — Supabase refuses
+    // password logins while email_confirmed_at is null.
+    const upd = await service.auth.admin.updateUserById(emp.auth_user_id, {
+      password,
+      email_confirm: true,
+    });
     if (upd.error) return { ok: false, error: upd.error.message };
   } else {
     const created = await service.auth.admin.createUser({
