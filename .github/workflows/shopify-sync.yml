@@ -1,12 +1,13 @@
-# Intraday Shopify sales sync — hourly, so the dashboard's per-employee and
-# per-store sales are never more than ~an hour behind the register. Runs at
-# :30 to dodge GitHub's top-of-hour scheduler congestion; off-hours runs are
-# cheap no-op curls. Lives here because the Vercel plan only allows once-daily
+# Intraday Shopify sales sync — every 10 minutes, so the dashboard's
+# per-employee and per-store sales track the register near-live (GitHub's
+# scheduler is best-effort, so expect occasional 15–20 min gaps). Offset from
+# :00 to dodge the top-of-hour scheduler congestion; off-hours runs are cheap
+# no-op curls. Lives here because the Vercel plan only allows once-daily
 # crons; the daily 06:00 UTC safety-net run stays in vercel.ts.
 name: shopify-sync
 on:
   schedule:
-    - cron: "30 * * * *"
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
 
 jobs:
