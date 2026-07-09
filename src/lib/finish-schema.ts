@@ -1,0 +1,37 @@
+import { z } from "zod";
+
+/**
+ * Validation for finishing a customer on the kiosk. Pure (no server imports)
+ * so it's unit-testable. NOTE: this cannot be a z.discriminatedUnion — two
+ * branches would share kind "walkin", and Zod v4 throws "Duplicate
+ * discriminator value" at parse time (the bug that broke saving results).
+ */
+
+const productSchema = z.object({
+  id: z.string().min(1).max(30),
+  title: z.string().min(1).max(200),
+});
+
+// A walk-in that didn't buy REQUIRES at least one reason.
+const walkinSchema = z
+  .object({
+    kind: z.literal("walkin"),
+    sold: z.boolean(),
+    got_contact: z.boolean(),
+    reasons: z.array(z.string().trim().min(1).max(60)).max(6).optional(),
+    products: z.array(productSchema).max(5).optional(),
+    note: z.string().trim().max(300).optional(),
+  })
+  .refine((v) => v.sold || (v.reasons?.length ?? 0) > 0, {
+    message: "Pick at least one reason.",
+  });
+
+// For a return, `sold` means "the customer bought something else".
+const returnSchema = z.object({
+  kind: z.literal("return"),
+  sold: z.boolean(),
+});
+
+export const finishSchema = z.union([walkinSchema, returnSchema]);
+
+export type FinishInput = z.input<typeof finishSchema>;
