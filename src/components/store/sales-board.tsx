@@ -52,17 +52,26 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
   // A return shouldn't burn the up-next's turn — the LAST in line is suggested.
   const returnSuggestion = line[line.length - 1] ?? null;
 
-  function run(action: Promise<{ ok: boolean; error?: string }>, okMsg: string) {
-    start(async () => {
-      const res = await action;
-      if (!res.ok) {
-        toast.error(res.error ?? "Something went wrong.");
-        return;
-      }
-      if (okMsg) toast.success(okMsg);
-      setFinishTarget(null);
-      setReturnPicker(false);
-      router.refresh();
+  // Resolves with the outcome so optimistic UI (the drag order) can settle.
+  // Refreshes on failure too — a rejected action means the server state
+  // diverged from what the screen shows.
+  function run(
+    action: Promise<{ ok: boolean; error?: string }>,
+    okMsg: string,
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      start(async () => {
+        const res = await action;
+        if (res.ok) {
+          if (okMsg) toast.success(okMsg);
+          setFinishTarget(null);
+          setReturnPicker(false);
+        } else {
+          toast.error(res.error ?? "Something went wrong.");
+        }
+        router.refresh();
+        resolve(res.ok);
+      });
     });
   }
 

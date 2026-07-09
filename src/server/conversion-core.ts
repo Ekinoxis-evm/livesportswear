@@ -12,15 +12,24 @@ import { shortDate } from "@/lib/format-date";
 import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
 import type { ActionResult } from "@/server/shared";
 
-/** Emails of admins who should receive a location's daily report. */
-async function reportRecipients(): Promise<string[]> {
+/**
+ * Emails of admins who should receive THIS location's daily report: master
+ * admins always; location-scoped admins only when admin_locations maps them
+ * to the location (a scoped admin must never see another store's numbers).
+ */
+async function reportRecipients(locationId: string): Promise<string[]> {
   const service = createServiceClient();
-  const { data } = await service.auth.admin.listUsers();
+  const [{ data }, { data: mappings }] = await Promise.all([
+    service.auth.admin.listUsers(),
+    service.from("admin_locations").select("admin_user_id").eq("location_id", locationId),
+  ]);
+  const allowed = new Set((mappings ?? []).map((m) => m.admin_user_id));
   const users = data?.users ?? [];
   const recipients = users.filter((u) => {
     const meta = u.app_metadata as { role?: string; admin_scope?: string } | undefined;
     if (meta?.role !== "admin") return false;
-    return true; // location scoping is refined in Phase F via admin_locations
+    if (meta.admin_scope === "location") return allowed.has(u.id);
+    return true; // master admin (no scope claim, or 'master')
   });
   const emails = recipients.map((u) => u.email).filter((e): e is string => Boolean(e));
   const fallback = process.env.STORE_REPORT_EMAIL;
@@ -89,7 +98,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
         .eq("business_date", bd)
         .order("arrived_at"),
       getDaySalesCached(bd, tz),
-      reportRecipients(),
+      reportRecipients(locationId),
     ]);
 
   const events = eventRows ?? [];
@@ -240,7 +249,25 @@ export async function closeDayFor(closer: {
   const ineligible = await closerEligibility(closer, bd);
   if (ineligible) return { ok: false, error: ineligible };
 
+  // A repeat call (double tap, client retry) must not re-email every admin.
+  const { data: existing } = await service
+    .from("store_day_closes")
+    .select("id")
+    .eq("location_id", closer.location_id)
+    .eq("business_date", bd)
+    .maybeSingle();
+  if (existing) return { ok: false, error: "The day is already closed." };
+
   const d = await buildDayReportData(closer.location_id);
+
+  // Refuse to close with nobody to report to — otherwise the day is marked
+  // closed and the report is unsendable forever (no resend path exists).
+  if (d.recipients.length === 0) {
+    return {
+      ok: false,
+      error: "No report recipients configured — set up an admin email first.",
+    };
+  }
 
   const { error: upErr } = await service.from("store_day_closes").upsert(
     {

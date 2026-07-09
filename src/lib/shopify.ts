@@ -194,20 +194,63 @@ export async function listStaffMembers(): Promise<ShopifyStaff[]> {
 
 export type ProductHit = { id: string; title: string; image: string | null };
 
-type RestProduct = {
-  id: number;
-  title: string;
-  images?: { src: string }[];
+async function shopifyGraphql<T>(query: string, variables: object): Promise<T> {
+  const call = async (token: string) =>
+    fetch(
+      `https://${SHOPIFY_STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+      {
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query, variables }),
+      },
+    );
+
+  let res = await call(await getAccessToken());
+  if (res.status === 401 && !SHOPIFY_ADMIN_TOKEN) {
+    cachedToken = null; // token revoked or expired early — mint a fresh one
+    res = await call(await getAccessToken());
+  }
+  if (!res.ok) throw new Error(`Shopify API error ${res.status}`);
+  const json = (await res.json()) as { data?: T; errors?: { message: string }[] };
+  if (json.errors?.length || !json.data) {
+    throw new Error(`Shopify GraphQL: ${json.errors?.[0]?.message ?? "no data"}`);
+  }
+  return json.data;
+}
+
+type ProductSearchData = {
+  products: {
+    nodes: {
+      id: string;
+      title: string;
+      featuredMedia: { preview: { image: { url: string } | null } | null } | null;
+    }[];
+  };
 };
 
-/** Case-insensitive title-contains search — feeds the no-sale product tags. */
+/**
+ * Case-insensitive title-contains search — feeds the no-sale product tags.
+ * GraphQL, because the REST products.json title filter is EXACT-match on
+ * modern API versions (verified live: "shorts" → 0 hits on a 3,596-product
+ * store) — it silently found nothing.
+ */
 export async function searchProducts(query: string): Promise<ProductHit[]> {
-  const { body } = await shopifyRest<{ products: RestProduct[] }>(
-    `/products.json?title=${encodeURIComponent(query)}&limit=10&fields=id,title,images`,
+  const sanitized = query.replace(/["\\()]/g, " ").trim();
+  if (!sanitized) return [];
+  const data = await shopifyGraphql<ProductSearchData>(
+    `query($q: String!) {
+      products(first: 10, query: $q) {
+        nodes { id title featuredMedia { preview { image { url } } } }
+      }
+    }`,
+    { q: `title:*${sanitized}*` },
   );
-  return body.products.map((p) => ({
-    id: String(p.id),
+  return data.products.nodes.map((p) => ({
+    id: p.id.split("/").pop() ?? p.id,
     title: p.title,
-    image: p.images?.[0]?.src ?? null,
+    image: p.featuredMedia?.preview?.image?.url ?? null,
   }));
 }
