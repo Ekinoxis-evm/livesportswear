@@ -191,3 +191,23 @@ export async function listStaffMembers(): Promise<ShopifyStaff[]> {
     .map((id) => ({ id, name: names.get(id) ?? `Staff ${id}`, email: null }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+export type ProductHit = { id: string; title: string; image: string | null };
+
+type RestProduct = {
+  id: number;
+  title: string;
+  images?: { src: string }[];
+};
+
+/** Case-insensitive title-contains search — feeds the no-sale product tags. */
+export async function searchProducts(query: string): Promise<ProductHit[]> {
+  const { body } = await shopifyRest<{ products: RestProduct[] }>(
+    `/products.json?title=${encodeURIComponent(query)}&limit=10&fields=id,title,images`,
+  );
+  return body.products.map((p) => ({
+    id: String(p.id),
+    title: p.title,
+    image: p.images?.[0]?.src ?? null,
+  }));
+}

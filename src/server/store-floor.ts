@@ -18,10 +18,40 @@ import {
   closeDayDraftFor,
   type CloseDayDraft,
 } from "@/server/conversion-core";
-import type { ActionResult } from "@/server/shared";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { searchProducts, type ProductHit } from "@/lib/shopify";
+import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
-const resultSchema = z.object({ sold: z.boolean(), got_contact: z.boolean() });
+
+const productSchema = z.object({
+  id: z.string().min(1).max(30),
+  title: z.string().min(1).max(200),
+});
+
+// A walk-in that didn't buy REQUIRES at least one reason; a return's `sold`
+// means "the customer bought something else".
+const finishSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("walkin"),
+    sold: z.literal(true),
+    got_contact: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal("walkin"),
+    sold: z.literal(false),
+    got_contact: z.boolean(),
+    reasons: z.array(z.string().trim().min(1).max(60)).min(1).max(6),
+    products: z.array(productSchema).max(5).optional(),
+    note: z.string().trim().max(300).optional(),
+  }),
+  z.object({
+    kind: z.literal("return"),
+    sold: z.boolean(),
+  }),
+]);
+
+export type FinishInput = z.input<typeof finishSchema>;
 
 type StoreEmployee = {
   id: string;
@@ -186,6 +216,14 @@ export async function storeTakeClient(employeeId: string): Promise<ActionResult>
   return storePatch(employeeId, { status: "attending", bumped_at: null });
 }
 
+/**
+ * Take a RETURN/EXCHANGE customer. Same attending state — the difference is
+ * recorded at finish time (kind: "return", which doesn't burn a queue turn).
+ */
+export async function storeStartReturn(employeeId: string): Promise<ActionResult> {
+  return storePatch(employeeId, { status: "attending" });
+}
+
 /** Cancel an attending state without recording a customer. */
 export async function storeSetAvailable(employeeId: string): Promise<ActionResult> {
   return storePatch(employeeId, { status: "available" });
@@ -196,22 +234,53 @@ export async function storeMakeUpNext(employeeId: string): Promise<ActionResult>
   return storePatch(employeeId, { bumped_at: new Date().toISOString() });
 }
 
-/** Record the customer result and rotate the employee to the back of the line. */
+/**
+ * Record the customer result and free the employee (a walk-in rotates them to
+ * the back of the line; a return keeps their turn). No-sale walk-ins carry
+ * their mandatory reasons here.
+ */
 export async function storeFinish(
   employeeId: string,
-  input: z.input<typeof resultSchema>,
+  input: FinishInput,
 ): Promise<ActionResult> {
   const { locationId, service, bd } = await storeCtx();
   const emp = await targetEmployee(service, locationId, employeeId);
   if (!emp) return { ok: false, error: "That employee isn't at this store." };
-  const parsed = resultSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  const parsed = finishSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: firstError(parsed.error) };
+  }
 
-  const res = await doFinishCustomer(service, locationId, bd, emp.id, parsed.data);
+  const d = parsed.data;
+  const res = await doFinishCustomer(service, locationId, bd, emp.id, {
+    kind: d.kind,
+    sold: d.sold,
+    got_contact: d.kind === "walkin" ? d.got_contact : false,
+    reasons: d.kind === "walkin" && !d.sold ? d.reasons : undefined,
+    products: d.kind === "walkin" && !d.sold ? d.products : undefined,
+    note: d.kind === "walkin" && !d.sold ? d.note : undefined,
+  });
   if (res.ok) {
     revalidatePath("/store", "layout");
   }
   return res;
+}
+
+const searchSchema = z.string().trim().min(2).max(60);
+
+/** Product search for no-sale tagging; degrades to [] when Shopify is down. */
+export async function storeSearchProducts(
+  query: string,
+): Promise<ActionResult<ProductHit[]>> {
+  await requireStore();
+  const parsed = searchSchema.safeParse(query);
+  if (!parsed.success) return { ok: true, data: [] };
+  if (!isShopifyConfigured()) return { ok: true, data: [] };
+  try {
+    return { ok: true, data: await searchProducts(parsed.data) };
+  } catch {
+    return { ok: true, data: [] };
+  }
 }
 
 /**

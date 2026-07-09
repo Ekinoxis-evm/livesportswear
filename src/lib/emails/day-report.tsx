@@ -28,6 +28,8 @@ export type DayReportEmailProps = {
   sold: number;
   contacts: number;
   conversionPct: string;
+  returns?: number;
+  returnExtraSales?: number;
   shopifySales?: string | null; // formatted money, when POS keys are connected
   shopifyOrders?: number | null;
   perPerson: DayReportRow[];
@@ -77,6 +79,8 @@ export function DayReportEmail({
   sold,
   contacts,
   conversionPct,
+  returns,
+  returnExtraSales,
   shopifySales,
   shopifyOrders,
   perPerson,
@@ -135,6 +139,15 @@ export function DayReportEmail({
               <KPI label="Contacts" value={String(contacts)} />
             </Row>
           </Section>
+
+          {returns != null && returns > 0 && (
+            <Text style={{ fontSize: "13px", color: muted, margin: "8px 0 0" }}>
+              Returns: <span style={{ color: text }}>{returns}</span>
+              {" · "}
+              <span style={{ color: text }}>{returnExtraSales ?? 0}</span> converted to an
+              extra sale
+            </Text>
+          )}
 
           {shopifySales != null ? (
             <Text style={{ fontSize: "13px", color: muted, margin: "8px 0 0" }}>

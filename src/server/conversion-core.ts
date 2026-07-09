@@ -36,6 +36,8 @@ export type CloseDayDraft = {
   sold: number;
   contacts: number;
   conversionPct: string;
+  returns: number;
+  returnExtraSales: number;
   shopifySales: string | null; // formatted money-in for the day
   shopifyOrders: number | null;
   eventCount: number;
@@ -72,7 +74,9 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
     await Promise.all([
       service
         .from("client_events")
-        .select("employee_id, attended_at, sold, got_contact, employees(name)")
+        .select(
+          "employee_id, attended_at, kind, sold, got_contact, reasons, note, products, employees(name)",
+        )
         .eq("location_id", locationId)
         .eq("business_date", bd)
         .order("attended_at"),
@@ -109,8 +113,12 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
     events: events.map((e) => ({
       employeeName: nameOf(e),
       attended_at: e.attended_at,
+      kind: e.kind,
       sold: e.sold,
       got_contact: e.got_contact,
+      reasons: e.reasons,
+      products: (e.products as { title: string }[] | null) ?? null,
+      note: e.note,
     })),
     checkins: checkins.map((c) => ({
       employeeName: nameOf(c),
@@ -197,6 +205,8 @@ export async function closeDayDraftFor(closer: {
       sold: d.t.sold,
       contacts: d.t.contacts,
       conversionPct: formatPct(d.t.conversion),
+      returns: d.t.returns,
+      returnExtraSales: d.t.returnExtraSales,
       shopifySales:
         d.shopify != null ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD") : null,
       shopifyOrders: d.shopify?.orders ?? null,
@@ -259,6 +269,8 @@ export async function closeDayFor(closer: {
         sold: d.t.sold,
         contacts: d.t.contacts,
         conversionPct: formatPct(d.t.conversion),
+        returns: d.t.returns,
+        returnExtraSales: d.t.returnExtraSales,
         shopifySales:
           d.shopify != null
             ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD")
