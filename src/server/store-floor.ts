@@ -82,22 +82,65 @@ export async function storeOpenDay(): Promise<ActionResult> {
   return res;
 }
 
+const MAX_PHOTO_BYTES = 200 * 1024; // client targets ~25KB; this is the hard ceiling
+
+/**
+ * Face-photo evidence for a stamp. Upload failure returns null instead of an
+ * error: the photo is evidence, not a gate, and its absence is itself visible
+ * in the day's records.
+ */
+async function uploadStampPhoto(
+  service: ReturnType<typeof createServiceClient>,
+  formData: FormData,
+  locationId: string,
+  bd: string,
+  employeeId: string,
+  kind: "entry" | "exit",
+): Promise<string | null> {
+  const photo = formData.get("photo");
+  if (!(photo instanceof File) || photo.size === 0) return null;
+  if (photo.type !== "image/jpeg" || photo.size > MAX_PHOTO_BYTES) return null;
+
+  const path = `${locationId}/${bd}/${employeeId}-${kind}.jpg`;
+  const upload = await service.storage
+    .from("checkin-photos")
+    .upload(path, await photo.arrayBuffer(), {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+  return upload.error ? null : path;
+}
+
+const stampSchema = z.object({
+  employeeId: z.string().uuid(),
+  pin: z.string().regex(PIN_RE),
+});
+
+function parseStampForm(formData: FormData) {
+  return stampSchema.safeParse({
+    employeeId: formData.get("employeeId"),
+    pin: formData.get("pin"),
+  });
+}
+
 /**
  * Kiosk check-in: PIN-confirmed, and the stamp counts as validated — the
  * device standing in the store is the attestation, so no QR is issued.
+ * The optional face photo is stored as evidence (30-day retention).
  */
-export async function storeCheckIn(
-  employeeId: string,
-  pin: string,
-): Promise<ActionResult> {
+export async function storeCheckIn(formData: FormData): Promise<ActionResult> {
+  const parsed = parseStampForm(formData);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
   const { locationId, service, bd } = await storeCtx();
-  const emp = await targetEmployee(service, locationId, employeeId);
+  const emp = await targetEmployee(service, locationId, parsed.data.employeeId);
   if (!emp) return { ok: false, error: "That employee isn't at this store." };
-  const bad = pinError(emp, pin);
+  const bad = pinError(emp, parsed.data.pin);
   if (bad) return { ok: false, error: bad };
 
+  const photoPath = await uploadStampPhoto(service, formData, locationId, bd, emp.id, "entry");
   const now = new Date().toISOString();
-  const res = await doCheckIn(service, locationId, bd, emp.id, now);
+  const res = await doCheckIn(service, locationId, bd, emp.id, now, photoPath);
   if (res.ok) {
     revalidatePath("/store", "layout");
   }
@@ -105,18 +148,19 @@ export async function storeCheckIn(
 }
 
 /** Kiosk check-out: PIN-confirmed, stamp validated (see storeCheckIn). */
-export async function storeCheckOut(
-  employeeId: string,
-  pin: string,
-): Promise<ActionResult> {
+export async function storeCheckOut(formData: FormData): Promise<ActionResult> {
+  const parsed = parseStampForm(formData);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
   const { locationId, service, bd } = await storeCtx();
-  const emp = await targetEmployee(service, locationId, employeeId);
+  const emp = await targetEmployee(service, locationId, parsed.data.employeeId);
   if (!emp) return { ok: false, error: "That employee isn't at this store." };
-  const bad = pinError(emp, pin);
+  const bad = pinError(emp, parsed.data.pin);
   if (bad) return { ok: false, error: bad };
 
+  const photoPath = await uploadStampPhoto(service, formData, locationId, bd, emp.id, "exit");
   const now = new Date().toISOString();
-  const res = await doCheckOut(service, locationId, bd, emp.id, now);
+  const res = await doCheckOut(service, locationId, bd, emp.id, now, photoPath);
   if (res.ok) {
     revalidatePath("/store", "layout");
   }
