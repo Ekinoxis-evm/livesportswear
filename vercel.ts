@@ -6,8 +6,8 @@ export const config: VercelConfig = {
   installCommand: "pnpm install --frozen-lockfile",
 
   // Daily syncs (each no-ops until its env keys are set). The Vercel plan
-  // only allows once-daily crons, so the intraday Shopify runs (every 3h
-  // through the Miami store day) live in .github/workflows/shopify-sync.yml.
+  // only allows once-daily crons, so the hourly intraday Shopify runs live
+  // in .github/workflows/shopify-sync.yml.
   crons: [
     { path: "/api/cron/shopify-sync", schedule: "0 6 * * *" },
     { path: "/api/cron/meta-sync", schedule: "0 6 * * *" },
