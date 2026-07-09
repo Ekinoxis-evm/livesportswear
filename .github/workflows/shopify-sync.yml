@@ -1,12 +1,13 @@
-# Intraday Shopify sales sync — every 3h from 9:30 to 21:30 plus the 22:30
-# close, Miami time (EDT, UTC-4): 13:30/16:30/19:30/22:30/01:30/02:30 UTC.
-# GitHub cron is UTC, so in winter (EST) the local times shift one hour later.
-# Lives here because the Vercel plan only allows once-daily crons; the daily
-# 06:00 UTC safety-net run stays in vercel.ts.
+# Intraday Shopify sales sync — every 10 minutes, so the dashboard's
+# per-employee and per-store sales track the register near-live (GitHub's
+# scheduler is best-effort, so expect occasional 15–20 min gaps). Offset from
+# :00 to dodge the top-of-hour scheduler congestion; off-hours runs are cheap
+# no-op curls. Lives here because the Vercel plan only allows once-daily
+# crons; the daily 06:00 UTC safety-net run stays in vercel.ts.
 name: shopify-sync
 on:
   schedule:
-    - cron: "30 1,2,13,16,19,22 * * *"
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
 
 jobs:
