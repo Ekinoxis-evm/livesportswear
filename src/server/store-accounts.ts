@@ -65,7 +65,10 @@ export async function resetStorePassword(
   if (!user) return { ok: false, error: "No store account with that email." };
 
   const password = tempPassword();
-  const upd = await service.auth.admin.updateUserById(user.id, { password });
+  const upd = await service.auth.admin.updateUserById(user.id, {
+    password,
+    email_confirm: true,
+  });
   if (upd.error) return { ok: false, error: upd.error.message };
 
   return { ok: true, data: { password } };
