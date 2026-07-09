@@ -3,13 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { LogIn, Hand, Undo2 } from "lucide-react";
+import { LogIn, Hand, Undo2, Plus } from "lucide-react";
 import {
   storeOpenDay,
   storeTakeClient,
   storeStartReturn,
   storeSetAvailable,
   storeMakeUpNext,
+  storeReorderQueue,
   storeFinish,
   type FinishInput,
 } from "@/server/store-floor";
@@ -17,6 +18,7 @@ import {
   FinishDialog,
   type FinishTarget,
 } from "@/components/store/finish-dialog";
+import { QueueLine } from "@/components/store/queue-line";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -34,6 +36,8 @@ export type SalesRow = {
   state: "up" | "waiting" | "attending";
   turn: number | null;
   arrivedLabel: string;
+  walkins: number; // open walk-in customers
+  returns: number; // open returns/exchanges
 };
 
 export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) {
@@ -41,8 +45,6 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
   const [pending, start] = useTransition();
   const [finishTarget, setFinishTarget] = useState<FinishTarget | null>(null);
   const [returnPicker, setReturnPicker] = useState(false);
-  // Which attending employees are on a return (client-side until PR 5 persists it).
-  const [returnFor, setReturnFor] = useState<Set<string>>(new Set());
 
   const line = rows.filter((r) => r.state !== "attending");
   const attending = rows.filter((r) => r.state === "attending");
@@ -64,17 +66,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
     });
   }
 
-  const startReturn = (r: SalesRow) => {
-    setReturnFor((cur) => new Set(cur).add(r.employeeId));
-    run(storeStartReturn(r.employeeId), `${r.name} takes the return.`);
-  };
-
   const submitFinish = (employeeId: string, input: FinishInput) => {
-    setReturnFor((cur) => {
-      const next = new Set(cur);
-      next.delete(employeeId);
-      return next;
-    });
     run(
       storeFinish(employeeId, input),
       input.kind === "return"
@@ -134,9 +126,11 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         </Card>
       )}
 
-      {/* With a client now */}
+      {/* With client(s) now */}
       {attending.map((r) => {
-        const isReturn = returnFor.has(r.employeeId);
+        // Legacy rows can be status-attending with zeroed counters.
+        const openTotal = Math.max(r.walkins + r.returns, 1);
+        const walkins = Math.max(r.walkins, r.returns === 0 ? 1 : r.walkins);
         return (
           <div
             key={r.employeeId}
@@ -144,63 +138,84 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-                {isReturn ? "With a return / exchange" : "With a client"}
+                {openTotal > 1 ? `With ${openTotal} clients` : "With a client"}
+                {r.returns > 0 && ` · ${r.returns} return`}
               </span>
               <span className="text-muted-foreground text-xs tabular-nums">
                 arrived {r.arrivedLabel}
               </span>
             </div>
             <p className="text-2xl font-bold">{r.name}</p>
-            <Button
-              size="lg"
-              className="h-14"
-              disabled={pending}
-              onClick={() =>
-                setFinishTarget({
-                  employeeId: r.employeeId,
-                  name: r.name,
-                  kind: isReturn ? "return" : "walkin",
-                })
-              }
-            >
-              Finish
-            </Button>
+            <div className="flex gap-3">
+              {walkins > 0 && (
+                <Button
+                  size="lg"
+                  className="h-14 flex-1"
+                  disabled={pending}
+                  onClick={() =>
+                    setFinishTarget({
+                      employeeId: r.employeeId,
+                      name: r.name,
+                      kind: "walkin",
+                    })
+                  }
+                >
+                  Finish client
+                </Button>
+              )}
+              {r.returns > 0 && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="h-14 flex-1"
+                  disabled={pending}
+                  onClick={() =>
+                    setFinishTarget({
+                      employeeId: r.employeeId,
+                      name: r.name,
+                      kind: "return",
+                    })
+                  }
+                >
+                  Finish return
+                </Button>
+              )}
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-14"
+                disabled={pending}
+                onClick={() => run(storeTakeClient(r.employeeId), "")}
+                aria-label={`${r.name} takes one more client`}
+              >
+                <Plus className="size-5" />
+                <span className="ml-1 hidden sm:inline">1 client</span>
+              </Button>
+            </div>
           </div>
         );
       })}
 
-      {/* The line */}
+      {/* The line — press and drag to reorder */}
       {line.length > 0 && (
         <Card>
-          <CardContent className="flex flex-col divide-y pt-2">
-            {line.map((r, i) => (
-              <div key={r.employeeId} className="flex items-center justify-between gap-2 py-3">
-                <span className="flex items-center gap-2.5 text-base font-medium">
-                  <span className="text-muted-foreground w-6 text-center tabular-nums">
-                    {i + 1}
-                  </span>
-                  {tile(r.avatarColor)}
-                  {r.name}
-                </span>
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground mr-1 text-xs tabular-nums">
-                    since {r.arrivedLabel}
-                  </span>
-                  {i > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => run(storeMakeUpNext(r.employeeId), `${r.name} is up next.`)}
-                    >
-                      Make up next
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
+          <CardContent className="pt-2">
+            <QueueLine
+              entries={line.map((r) => ({
+                employeeId: r.employeeId,
+                name: r.name,
+                avatarColor: r.avatarColor,
+                arrivedLabel: r.arrivedLabel,
+              }))}
+              pending={pending}
+              onReorder={(ids) => run(storeReorderQueue(ids), "Line reordered.")}
+              onMakeUpNext={(id, name) => run(storeMakeUpNext(id), `${name} is up next.`)}
+            />
             {attending.map((r) => (
-              <div key={r.employeeId} className="flex items-center justify-between gap-2 py-3">
+              <div
+                key={r.employeeId}
+                className="flex items-center justify-between gap-2 border-t py-3"
+              >
                 <span className="flex items-center gap-2.5 text-base font-medium opacity-70">
                   <span className="w-6 text-center text-amber-600">●</span>
                   {tile(r.avatarColor)}
@@ -210,14 +225,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                   variant="ghost"
                   size="sm"
                   disabled={pending}
-                  onClick={() => {
-                    setReturnFor((cur) => {
-                      const next = new Set(cur);
-                      next.delete(r.employeeId);
-                      return next;
-                    });
-                    run(storeSetAvailable(r.employeeId), "");
-                  }}
+                  onClick={() => run(storeSetAvailable(r.employeeId), "")}
                 >
                   Back to line
                 </Button>
@@ -268,7 +276,9 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 size="lg"
                 className="h-14 justify-start gap-2.5"
                 disabled={pending}
-                onClick={() => startReturn(r)}
+                onClick={() =>
+                  run(storeStartReturn(r.employeeId), `${r.name} takes the return.`)
+                }
               >
                 {tile(r.avatarColor)}
                 {r.name}

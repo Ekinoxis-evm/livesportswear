@@ -12,6 +12,9 @@ type CheckinRow = {
   status: string;
   rotation_count: number;
   bumped_at: string | null;
+  manual_pos: number | null;
+  attending_count: number;
+  attending_return_count: number;
 };
 
 export default async function StoreSalesPage() {
@@ -36,7 +39,9 @@ export default async function StoreSalesPage() {
         .maybeSingle(),
       service
         .from("floor_checkins")
-        .select("employee_id, arrived_at, left_at, status, rotation_count, bumped_at")
+        .select(
+          "employee_id, arrived_at, left_at, status, rotation_count, bumped_at, manual_pos, attending_count, attending_return_count",
+        )
         .eq("location_id", locationId)
         .eq("business_date", bd),
       service
@@ -60,6 +65,9 @@ export default async function StoreSalesPage() {
     status: c.status === "attending" ? "attending" : "available",
     rotationCount: c.rotation_count,
     bumpedAt: c.bumped_at,
+    manualPos: c.manual_pos,
+    attendingCount: c.attending_count,
+    returnCount: c.attending_return_count,
   }));
   const rows: SalesRow[] = orderFloor(members).map((r) => ({
     employeeId: r.employeeId,
@@ -68,6 +76,8 @@ export default async function StoreSalesPage() {
     state: r.state,
     turn: r.turn,
     arrivedLabel: formatInTimeZone(new Date(r.arrivedAt), tz, "HH:mm"),
+    walkins: r.attendingCount ?? 0,
+    returns: r.returnCount ?? 0,
   }));
 
   return <SalesBoard open={Boolean(dayRow)} rows={rows} />;

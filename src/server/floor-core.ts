@@ -51,6 +51,9 @@ export async function doCheckIn(
       left_at: null,
       status: "available",
       bumped_at: null,
+      manual_pos: null,
+      attending_count: 0,
+      attending_return_count: 0,
       entry_validated_at: now,
       entry_validated_by: null,
       entry_self: false,
@@ -109,6 +112,63 @@ export async function patchCheckin(
   return { ok: true };
 }
 
+async function readCounts(
+  service: Service,
+  locationId: string,
+  bd: string,
+  employeeId: string,
+) {
+  const { data } = await service
+    .from("floor_checkins")
+    .select("rotation_count, attending_count, attending_return_count")
+    .eq("location_id", locationId)
+    .eq("business_date", bd)
+    .eq("employee_id", employeeId)
+    .maybeSingle();
+  return {
+    rotation: data?.rotation_count ?? 0,
+    walkins: data?.attending_count ?? 0,
+    returns: data?.attending_return_count ?? 0,
+  };
+}
+
+/**
+ * Take one customer (walk-in or return). Increments the open-client counter —
+ * an employee alone in the store can hold several at once. Taking a customer
+ * removes them from the line, so bump and manual position are cleared.
+ * Read-then-write is fine here: the kiosk is the floor's single writer.
+ */
+export async function doTakeClient(
+  service: Service,
+  locationId: string,
+  bd: string,
+  employeeId: string,
+  kind: "walkin" | "return",
+): Promise<ActionResult> {
+  const cur = await readCounts(service, locationId, bd, employeeId);
+  return patchCheckin(service, locationId, bd, employeeId, {
+    status: "attending",
+    attending_count: cur.walkins + (kind === "walkin" ? 1 : 0),
+    attending_return_count: cur.returns + (kind === "return" ? 1 : 0),
+    bumped_at: null,
+    manual_pos: null,
+  });
+}
+
+/** Drop all open customers without recording anything ("back to line"). */
+export async function doClearAttending(
+  service: Service,
+  locationId: string,
+  bd: string,
+  employeeId: string,
+): Promise<ActionResult> {
+  return patchCheckin(service, locationId, bd, employeeId, {
+    status: "available",
+    attending_count: 0,
+    attending_return_count: 0,
+  });
+}
+
 export type FinishResult = {
   kind: "walkin" | "return";
   sold: boolean; // for a return: the customer bought something else
@@ -119,10 +179,11 @@ export type FinishResult = {
 };
 
 /**
- * Finish the current customer: record the event at the time it happened,
- * then free the employee. A walk-in sends them to the back of the line; a
- * return does NOT burn their turn (rotation_count untouched) — the taker is
- * usually the last in line, not the up-next.
+ * Finish ONE open customer: record the event at the time it happened, then
+ * decrement that counter — the employee stays attending until every open
+ * customer is closed. A finished walk-in bumps rotation_count (back of the
+ * line); a return does NOT burn a turn (the taker is usually the last in
+ * line, not the up-next).
  */
 export async function doFinishCustomer(
   service: Service,
@@ -144,23 +205,17 @@ export async function doFinishCustomer(
   });
   if (ins.error) return { ok: false, error: ins.error.message };
 
-  if (result.kind === "return") {
-    return patchCheckin(service, locationId, bd, employeeId, {
-      status: "available",
-      bumped_at: null,
-    });
-  }
+  const cur = await readCounts(service, locationId, bd, employeeId);
+  const walkins =
+    result.kind === "walkin" ? Math.max(0, cur.walkins - 1) : cur.walkins;
+  const returns =
+    result.kind === "return" ? Math.max(0, cur.returns - 1) : cur.returns;
 
-  const { data: cur } = await service
-    .from("floor_checkins")
-    .select("rotation_count")
-    .eq("location_id", locationId)
-    .eq("business_date", bd)
-    .eq("employee_id", employeeId)
-    .maybeSingle();
   return patchCheckin(service, locationId, bd, employeeId, {
-    status: "available",
-    rotation_count: (cur?.rotation_count ?? 0) + 1,
+    status: walkins + returns > 0 ? "attending" : "available",
+    attending_count: walkins,
+    attending_return_count: returns,
+    rotation_count: result.kind === "walkin" ? cur.rotation + 1 : cur.rotation,
     bumped_at: null,
   });
 }

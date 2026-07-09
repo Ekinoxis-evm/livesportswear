@@ -11,6 +11,8 @@ import {
   doCheckIn,
   doCheckOut,
   patchCheckin,
+  doTakeClient,
+  doClearAttending,
   doFinishCustomer,
 } from "@/server/floor-core";
 import {
@@ -211,27 +213,98 @@ async function storePatch(
   return res;
 }
 
-/** The up-next employee takes the walk-in (one tap, no PIN — floor speed). */
-export async function storeTakeClient(employeeId: string): Promise<ActionResult> {
-  return storePatch(employeeId, { status: "attending", bumped_at: null });
+async function storeTake(
+  employeeId: string,
+  kind: "walkin" | "return",
+): Promise<ActionResult> {
+  const { locationId, service, bd } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+  const res = await doTakeClient(service, locationId, bd, emp.id, kind);
+  if (res.ok) {
+    revalidatePath("/store", "layout");
+  }
+  return res;
 }
 
 /**
- * Take a RETURN/EXCHANGE customer. Same attending state — the difference is
+ * Take a walk-in (one tap, no PIN — floor speed). Also serves as "+1 client"
+ * while already attending: each tap opens one more customer.
+ */
+export async function storeTakeClient(employeeId: string): Promise<ActionResult> {
+  return storeTake(employeeId, "walkin");
+}
+
+/**
+ * Take a RETURN/EXCHANGE customer — its own open counter; the difference is
  * recorded at finish time (kind: "return", which doesn't burn a queue turn).
  */
 export async function storeStartReturn(employeeId: string): Promise<ActionResult> {
-  return storePatch(employeeId, { status: "attending" });
+  return storeTake(employeeId, "return");
 }
 
-/** Cancel an attending state without recording a customer. */
+/** Cancel every open customer without recording anything ("back to line"). */
 export async function storeSetAvailable(employeeId: string): Promise<ActionResult> {
-  return storePatch(employeeId, { status: "available" });
+  const { locationId, service, bd } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+  const res = await doClearAttending(service, locationId, bd, emp.id);
+  if (res.ok) {
+    revalidatePath("/store", "layout");
+  }
+  return res;
 }
 
 /** Move an employee to the front of the line (manual reorder). */
 export async function storeMakeUpNext(employeeId: string): Promise<ActionResult> {
   return storePatch(employeeId, { bumped_at: new Date().toISOString() });
+}
+
+const reorderSchema = z.array(uuid).min(1).max(30);
+
+/**
+ * Persist a kiosk drag-reorder of the waiting line. The submitted set must
+ * exactly match today's present available members (a stale drag after the
+ * line changed is rejected). Positions supersede earlier bumps.
+ */
+export async function storeReorderQueue(orderedIds: string[]): Promise<ActionResult> {
+  const parsed = reorderSchema.safeParse(orderedIds);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
+  const { locationId, service, bd } = await storeCtx();
+  const { data: rows } = await service
+    .from("floor_checkins")
+    .select("employee_id, status, attending_count, attending_return_count")
+    .eq("location_id", locationId)
+    .eq("business_date", bd)
+    .is("left_at", null);
+  const available = new Set(
+    (rows ?? [])
+      .filter(
+        (r) =>
+          r.attending_count + r.attending_return_count === 0 &&
+          r.status !== "attending",
+      )
+      .map((r) => r.employee_id),
+  );
+  const submitted = new Set(parsed.data);
+  if (
+    submitted.size !== parsed.data.length ||
+    available.size !== submitted.size ||
+    ![...submitted].every((id) => available.has(id))
+  ) {
+    return { ok: false, error: "The line changed — try again." };
+  }
+
+  for (const [i, employeeId] of parsed.data.entries()) {
+    const res = await patchCheckin(service, locationId, bd, employeeId, {
+      manual_pos: i + 1,
+      bumped_at: null,
+    });
+    if (!res.ok) return res;
+  }
+  revalidatePath("/store", "layout");
+  return { ok: true };
 }
 
 /**

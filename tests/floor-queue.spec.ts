@@ -65,6 +65,60 @@ describe("orderFloor", () => {
   });
 });
 
+describe("orderFloor — manual order (drag-reorder)", () => {
+  it("lets manual positions beat rotation counts", () => {
+    const rows = orderFloor([
+      { ...m("a", "2026-06-30T14:00:00Z", "available", 0), manualPos: 2 },
+      { ...m("b", "2026-06-30T15:00:00Z", "available", 5), manualPos: 1 },
+    ]);
+    expect(rows.map((r) => r.employeeId)).toEqual(["b", "a"]);
+  });
+
+  it("lets a bump beat a manual position", () => {
+    const rows = orderFloor([
+      { ...m("a", "2026-06-30T14:00:00Z", "available", 0), manualPos: 1 },
+      {
+        ...m("b", "2026-06-30T15:00:00Z", "available", 0, null, "2026-06-30T16:00:00Z"),
+        manualPos: 2,
+      },
+    ]);
+    expect(rows.map((r) => r.employeeId)).toEqual(["b", "a"]);
+  });
+
+  it("puts a member whose manual position was cleared behind the dragged ones", () => {
+    // "a" finished a customer (manual_pos cleared, rotation lower than anyone)
+    const rows = orderFloor([
+      { ...m("a", "2026-06-30T14:00:00Z", "available", 0), manualPos: null },
+      { ...m("b", "2026-06-30T15:00:00Z", "available", 3), manualPos: 1 },
+      { ...m("c", "2026-06-30T15:30:00Z", "available", 4), manualPos: 2 },
+    ]);
+    expect(rows.map((r) => r.employeeId)).toEqual(["b", "c", "a"]);
+  });
+});
+
+describe("orderFloor — multi-client counters", () => {
+  it("treats a member with open clients as attending even when status lags", () => {
+    const rows = orderFloor([
+      { ...m("a", "2026-06-30T14:00:00Z", "available", 0), attendingCount: 2 },
+      m("b", "2026-06-30T15:00:00Z", "available", 0),
+    ]);
+    expect(rows.find((r) => r.employeeId === "a")?.state).toBe("attending");
+    expect(rows.find((r) => r.employeeId === "b")?.state).toBe("up");
+  });
+
+  it("counts an open return as attending", () => {
+    const rows = orderFloor([
+      { ...m("a", "2026-06-30T14:00:00Z", "available", 0), returnCount: 1 },
+    ]);
+    expect(rows[0]?.state).toBe("attending");
+  });
+
+  it("keeps plain status-based attending working (pre-migration rows)", () => {
+    const rows = orderFloor([m("a", "2026-06-30T14:00:00Z", "attending", 0)]);
+    expect(rows[0]?.state).toBe("attending");
+  });
+});
+
 describe("upNext", () => {
   it("is the lowest-rotation available member", () => {
     expect(
