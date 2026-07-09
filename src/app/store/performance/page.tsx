@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
 import { workedHours } from "@/lib/attendance";
+import { getDaySalesCached } from "@/lib/shopify-day-cache";
+import { formatMoney } from "@/lib/commission";
 import {
   Card,
   CardContent,
@@ -10,7 +12,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CloseDayMenu, type CloserEntry } from "@/components/store/close-day-menu";
+import {
+  CloseDayDialog,
+  type CloserEntry,
+} from "@/components/store/close-day-dialog";
 
 export default async function StorePerformancePage() {
   const { locationId } = await requireStore();
@@ -92,8 +97,29 @@ export default async function StorePerformancePage() {
     .filter((e) => onShift.has(e.id) && onFloor.has(e.id))
     .map((e) => ({ id: e.id, name: e.name }));
 
+  const daySales = await getDaySalesCached(bd, tz);
+
   return (
     <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-2 gap-3">
+        <Card>
+          <CardHeader>
+            <CardDescription>Sales today</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {daySales ? formatMoney(daySales.total, daySales.currency ?? "USD") : "—"}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Orders today</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {daySales ? daySales.orders : "—"}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
           <CardHeader>
@@ -168,7 +194,7 @@ export default async function StorePerformancePage() {
       <Card>
         <CardContent className="flex items-center justify-between gap-3 py-4">
           <span className="text-sm font-medium">End of day</span>
-          <CloseDayMenu closers={closers} alreadyClosed={Boolean(closeRow)} />
+          <CloseDayDialog closers={closers} alreadyClosed={Boolean(closeRow)} />
         </CardContent>
       </Card>
     </div>

@@ -29,6 +29,7 @@ export type DayReportEmailProps = {
   contacts: number;
   conversionPct: string;
   shopifySales?: string | null; // formatted money, when POS keys are connected
+  shopifyOrders?: number | null;
   perPerson: DayReportRow[];
 };
 
@@ -77,6 +78,7 @@ export function DayReportEmail({
   contacts,
   conversionPct,
   shopifySales,
+  shopifyOrders,
   perPerson,
 }: DayReportEmailProps): React.ReactElement {
   return (
@@ -137,6 +139,12 @@ export function DayReportEmail({
           {shopifySales != null ? (
             <Text style={{ fontSize: "13px", color: muted, margin: "8px 0 0" }}>
               Shopify POS sales: <span style={{ color: text }}>{shopifySales}</span>
+              {shopifyOrders != null && (
+                <>
+                  {" "}
+                  · <span style={{ color: text }}>{shopifyOrders}</span> orders
+                </>
+              )}
             </Text>
           ) : (
             <Text style={{ fontSize: "12px", color: muted, margin: "8px 0 0" }}>
@@ -178,6 +186,11 @@ export function DayReportEmail({
               </Row>
             ))
           )}
+
+          <Hr style={{ borderColor: border, margin: "24px 0 12px" }} />
+          <Text style={{ fontSize: "12px", color: muted, margin: 0 }}>
+            Full detail (every client and check-in) is attached as CSV.
+          </Text>
         </Container>
       </Body>
     </Html>

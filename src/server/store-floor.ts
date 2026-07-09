@@ -13,7 +13,11 @@ import {
   patchCheckin,
   doFinishCustomer,
 } from "@/server/floor-core";
-import { closeDayFor } from "@/server/conversion-core";
+import {
+  closeDayFor,
+  closeDayDraftFor,
+  type CloseDayDraft,
+} from "@/server/conversion-core";
 import type { ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -164,6 +168,19 @@ export async function storeFinish(
     revalidatePath("/store", "layout");
   }
   return res;
+}
+
+/**
+ * Preview the daily report before sending: metrics, recipients, subject, and
+ * attachment row counts — exactly what the confirmed close will send.
+ */
+export async function storeCloseDayDraft(
+  closedById: string,
+): Promise<ActionResult<CloseDayDraft>> {
+  const { locationId, service } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, closedById);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+  return closeDayDraftFor({ id: emp.id, location_id: locationId });
 }
 
 /**
