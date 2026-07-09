@@ -3,28 +3,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, X, LogIn, LogOut, Hand, Lock } from "lucide-react";
+import { Check, X, LogIn, Hand } from "lucide-react";
 import {
   storeOpenDay,
-  storeCheckIn,
-  storeCheckOut,
   storeTakeClient,
   storeSetAvailable,
   storeMakeUpNext,
   storeFinish,
-  storeCloseDay,
 } from "@/server/store-floor";
-import { PinPad } from "@/components/store/pin-pad";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
-export type KioskRow = {
+export type SalesRow = {
   employeeId: string;
   name: string;
   avatarColor: string | null;
@@ -33,35 +23,9 @@ export type KioskRow = {
   arrivedLabel: string;
 };
 
-export type RosterEntry = {
-  id: string;
-  name: string;
-  avatarColor: string | null;
-};
-
-type PinTarget =
-  | { kind: "in"; id: string; name: string }
-  | { kind: "out"; id: string; name: string }
-  | null;
-
-export function KioskBoard({
-  open,
-  rows,
-  offFloor,
-  closers,
-  totals,
-  alreadyClosed,
-}: {
-  open: boolean;
-  rows: KioskRow[];
-  offFloor: RosterEntry[]; // active employees not on the floor
-  closers: RosterEntry[]; // eligible to close (on shift + checked in)
-  totals: { attended: number; sold: number; conversionPct: string };
-  alreadyClosed: boolean;
-}) {
+export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [pinTarget, setPinTarget] = useState<PinTarget>(null);
   const [finishFor, setFinishFor] = useState<string | null>(null); // employeeId in "got contact?" step
 
   const line = rows.filter((r) => r.state !== "attending");
@@ -76,20 +40,10 @@ export function KioskBoard({
         return;
       }
       if (okMsg) toast.success(okMsg);
-      setPinTarget(null);
       setFinishFor(null);
       router.refresh();
     });
   }
-
-  const submitPin = (pin: string) => {
-    if (!pinTarget) return;
-    if (pinTarget.kind === "in") {
-      run(storeCheckIn(pinTarget.id, pin), `${pinTarget.name} checked in.`);
-    } else {
-      run(storeCheckOut(pinTarget.id, pin), `${pinTarget.name} left the floor.`);
-    }
-  };
 
   const tile = (color: string | null) => (
     <span
@@ -133,7 +87,7 @@ export function KioskBoard({
       ) : (
         <Card>
           <CardContent className="text-muted-foreground py-8 text-center">
-            Nobody available in the line — check someone in below.
+            Nobody available in the line — check someone in on the Check-in tab.
           </CardContent>
         </Card>
       )}
@@ -227,29 +181,16 @@ export function KioskBoard({
                   <span className="text-muted-foreground mr-1 text-xs tabular-nums">
                     since {r.arrivedLabel}
                   </span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button variant="ghost" size="sm" disabled={pending}>
-                          Manage
-                        </Button>
-                      }
-                    />
-                    <DropdownMenuContent align="end">
-                      {i > 0 && (
-                        <DropdownMenuItem
-                          onClick={() => run(storeMakeUpNext(r.employeeId), `${r.name} is up next.`)}
-                        >
-                          Make up next
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        onClick={() => setPinTarget({ kind: "out", id: r.employeeId, name: r.name })}
-                      >
-                        <LogOut className="mr-1.5 size-4" /> Check out (PIN)
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {i > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => run(storeMakeUpNext(r.employeeId), `${r.name} is up next.`)}
+                    >
+                      Make up next
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -273,90 +214,6 @@ export function KioskBoard({
           </CardContent>
         </Card>
       )}
-
-      {/* Arrivals — big tiles, PIN to check in */}
-      {offFloor.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-            Not on the floor — tap to check in
-          </span>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {offFloor.map((e) => (
-              <Button
-                key={e.id}
-                variant="outline"
-                disabled={pending}
-                className="h-16 justify-start gap-2.5 text-base"
-                onClick={() => setPinTarget({ kind: "in", id: e.id, name: e.name })}
-              >
-                {tile(e.avatarColor)}
-                <span className="truncate">{e.name}</span>
-                <Lock className="text-muted-foreground ml-auto size-4" />
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Day strip + close */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-          <div className="flex gap-6 text-sm">
-            <span>
-              <span className="text-2xl font-bold tabular-nums">{totals.attended}</span>{" "}
-              <span className="text-muted-foreground">attended</span>
-            </span>
-            <span>
-              <span className="text-2xl font-bold tabular-nums">{totals.sold}</span>{" "}
-              <span className="text-muted-foreground">sold</span>
-            </span>
-            <span>
-              <span className="text-2xl font-bold tabular-nums">{totals.conversionPct}</span>{" "}
-              <span className="text-muted-foreground">conversion</span>
-            </span>
-          </div>
-          {alreadyClosed ? (
-            <span className="text-muted-foreground text-sm">Day closed ✓</span>
-          ) : closers.length === 0 ? (
-            <span className="text-muted-foreground text-sm">
-              Close needs someone on shift &amp; checked in
-            </span>
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="outline" disabled={pending}>
-                    Close day…
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                {closers.map((c) => (
-                  <DropdownMenuItem
-                    key={c.id}
-                    onClick={() => run(storeCloseDay(c.id), "Day closed — report sent.")}
-                  >
-                    Close as {c.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </CardContent>
-      </Card>
-
-      <PinPad
-        open={pinTarget !== null}
-        title={
-          pinTarget?.kind === "out"
-            ? `${pinTarget.name} — check out`
-            : `${pinTarget?.name ?? ""} — check in`
-        }
-        subtitle="Enter your 4-digit PIN"
-        pending={pending}
-        onSubmit={submitPin}
-        onClose={() => setPinTarget(null)}
-      />
     </div>
   );
 }

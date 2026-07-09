@@ -74,7 +74,7 @@ function pinError(emp: StoreEmployee, pin: string): string | null {
 export async function storeOpenDay(): Promise<ActionResult> {
   const { locationId, service, bd } = await storeCtx();
   const res = await doOpenDay(service, locationId, bd, null);
-  if (res.ok) revalidatePath("/store");
+  if (res.ok) revalidatePath("/store", "layout");
   return res;
 }
 
@@ -95,7 +95,7 @@ export async function storeCheckIn(
   const now = new Date().toISOString();
   const res = await doCheckIn(service, locationId, bd, emp.id, now);
   if (res.ok) {
-    revalidatePath("/store");
+    revalidatePath("/store", "layout");
   }
   return res;
 }
@@ -114,7 +114,7 @@ export async function storeCheckOut(
   const now = new Date().toISOString();
   const res = await doCheckOut(service, locationId, bd, emp.id, now);
   if (res.ok) {
-    revalidatePath("/store");
+    revalidatePath("/store", "layout");
   }
   return res;
 }
@@ -128,7 +128,7 @@ async function storePatch(
   if (!emp) return { ok: false, error: "That employee isn't at this store." };
   const res = await patchCheckin(service, locationId, bd, emp.id, patch);
   if (res.ok) {
-    revalidatePath("/store");
+    revalidatePath("/store", "layout");
   }
   return res;
 }
@@ -161,7 +161,7 @@ export async function storeFinish(
 
   const res = await doFinishCustomer(service, locationId, bd, emp.id, parsed.data);
   if (res.ok) {
-    revalidatePath("/store");
+    revalidatePath("/store", "layout");
   }
   return res;
 }
@@ -181,7 +181,7 @@ export async function storeCloseDay(closedById: string): Promise<ActionResult> {
     location_id: locationId,
   });
   if (res.ok) {
-    revalidatePath("/store");
+    revalidatePath("/store", "layout");
   }
   return res;
 }

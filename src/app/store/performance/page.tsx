@@ -1,0 +1,176 @@
+import { requireStore } from "@/lib/auth";
+import { createServiceClient } from "@/lib/supabase/service";
+import { businessDate } from "@/lib/business-date";
+import { totals, byPerson, formatPct } from "@/lib/conversion";
+import { workedHours } from "@/lib/attendance";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { CloseDayMenu, type CloserEntry } from "@/components/store/close-day-menu";
+
+export default async function StorePerformancePage() {
+  const { locationId } = await requireStore();
+  const service = createServiceClient();
+
+  const { data: loc } = await service
+    .from("locations")
+    .select("timezone")
+    .eq("id", locationId)
+    .maybeSingle();
+  const tz = loc?.timezone ?? "UTC";
+  const bd = businessDate(tz);
+
+  const [
+    { data: eventRows },
+    { data: checkinRows },
+    { data: employees },
+    { data: closeRow },
+    { data: shiftRows },
+  ] = await Promise.all([
+    service
+      .from("client_events")
+      .select("employee_id, sold, got_contact")
+      .eq("location_id", locationId)
+      .eq("business_date", bd),
+    service
+      .from("floor_checkins")
+      .select("employee_id, arrived_at, left_at")
+      .eq("location_id", locationId)
+      .eq("business_date", bd),
+    service
+      .from("employees")
+      .select("id, name")
+      .eq("location_id", locationId)
+      .eq("active", true)
+      .order("name"),
+    service
+      .from("store_day_closes")
+      .select("id")
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .maybeSingle(),
+    service
+      .from("shifts")
+      .select("employee_id, schedules!inner(status, location_id)")
+      .eq("date", bd)
+      .eq("schedules.status", "published")
+      .eq("schedules.location_id", locationId),
+  ]);
+
+  const roster = employees ?? [];
+  const nameOf = new Map(roster.map((e) => [e.id, e.name]));
+  const events = eventRows ?? [];
+  const checkins = checkinRows ?? [];
+
+  const t = totals(events);
+  const perPerson = byPerson(events);
+  const hoursOf = new Map(
+    checkins.map((c) => [c.employee_id, workedHours(c.arrived_at, c.left_at)]),
+  );
+
+  // Everyone who checked in today appears, zeros included.
+  const withEvents = new Set(perPerson.map((p) => p.employeeId));
+  const zeroRows = checkins
+    .filter((c) => !withEvents.has(c.employee_id))
+    .map((c) => ({
+      employeeId: c.employee_id,
+      attended: 0,
+      sold: 0,
+      contacts: 0,
+      conversion: 0,
+      contactRate: 0,
+    }));
+  const tableRows = [...perPerson, ...zeroRows];
+
+  const onFloor = new Set(checkins.filter((c) => !c.left_at).map((c) => c.employee_id));
+  const onShift = new Set((shiftRows ?? []).map((s) => s.employee_id));
+  const closers: CloserEntry[] = roster
+    .filter((e) => onShift.has(e.id) && onFloor.has(e.id))
+    .map((e) => ({ id: e.id, name: e.name }));
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Card>
+          <CardHeader>
+            <CardDescription>Attended</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">{t.attended}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Sold</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">{t.sold}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Conversion</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {t.attended > 0 ? formatPct(t.conversion) : "—"}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Contacts</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">{t.contacts}</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Team today</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {tableRows.length === 0 ? (
+            <p className="text-muted-foreground text-sm">Nobody has checked in yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted-foreground border-b text-left">
+                    <th className="py-2 font-medium">Employee</th>
+                    <th className="py-2 text-right font-medium">Attended</th>
+                    <th className="py-2 text-right font-medium">Sold</th>
+                    <th className="py-2 text-right font-medium">Conversion</th>
+                    <th className="py-2 text-right font-medium">Hours</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((p) => (
+                    <tr key={p.employeeId} className="border-b last:border-0">
+                      <td className="py-2 font-medium">
+                        {nameOf.get(p.employeeId) ?? "—"}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">{p.attended}</td>
+                      <td className="py-2 text-right tabular-nums">{p.sold}</td>
+                      <td className="py-2 text-right tabular-nums">
+                        {p.attended > 0 ? formatPct(p.conversion) : "—"}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {hoursOf.get(p.employeeId) ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex items-center justify-between gap-3 py-4">
+          <span className="text-sm font-medium">End of day</span>
+          <CloseDayMenu closers={closers} alreadyClosed={Boolean(closeRow)} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

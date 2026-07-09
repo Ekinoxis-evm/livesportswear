@@ -6,6 +6,7 @@ import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { AutoRefresh } from "@/components/store/auto-refresh";
+import { StoreNav } from "@/components/store/store-nav";
 import { Button } from "@/components/ui/button";
 
 export default async function StoreLayout({
@@ -50,7 +51,10 @@ export default async function StoreLayout({
           </div>
         </div>
       </header>
-      <div className="mx-auto w-full max-w-3xl flex-1 p-4 sm:p-6">{children}</div>
+      <div className="mx-auto w-full max-w-3xl flex-1 p-4 pb-24 sm:p-6 sm:pb-24">
+        {children}
+      </div>
+      <StoreNav />
       <AutoRefresh />
     </div>
   );
