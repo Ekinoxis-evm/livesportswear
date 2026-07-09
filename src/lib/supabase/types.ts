@@ -371,9 +371,11 @@ export type Database = {
           business_date: string
           created_at: string
           employee_id: string
+          entry_photo_path: string | null
           entry_self: boolean
           entry_validated_at: string | null
           entry_validated_by: string | null
+          exit_photo_path: string | null
           exit_self: boolean
           exit_validated_at: string | null
           exit_validated_by: string | null
@@ -389,9 +391,11 @@ export type Database = {
           business_date: string
           created_at?: string
           employee_id: string
+          entry_photo_path?: string | null
           entry_self?: boolean
           entry_validated_at?: string | null
           entry_validated_by?: string | null
+          exit_photo_path?: string | null
           exit_self?: boolean
           exit_validated_at?: string | null
           exit_validated_by?: string | null
@@ -407,9 +411,11 @@ export type Database = {
           business_date?: string
           created_at?: string
           employee_id?: string
+          entry_photo_path?: string | null
           entry_self?: boolean
           entry_validated_at?: string | null
           entry_validated_by?: string | null
+          exit_photo_path?: string | null
           exit_self?: boolean
           exit_validated_at?: string | null
           exit_validated_by?: string | null

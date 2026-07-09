@@ -11,6 +11,7 @@ export const config: VercelConfig = {
   crons: [
     { path: "/api/cron/shopify-sync", schedule: "0 6 * * *" },
     { path: "/api/cron/meta-sync", schedule: "0 6 * * *" },
+    { path: "/api/cron/photo-retention", schedule: "30 6 * * *" },
   ],
 
   headers: [
@@ -19,8 +20,9 @@ export const config: VercelConfig = {
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "X-Frame-Options", value: "DENY" },
       {
+        // camera=(self): the store kiosk takes check-in face photos.
         key: "Permissions-Policy",
-        value: "camera=(), microphone=(), geolocation=()",
+        value: "camera=(self), microphone=(), geolocation=()",
       },
       {
         key: "Content-Security-Policy",
@@ -28,7 +30,7 @@ export const config: VercelConfig = {
           "default-src 'self'",
           "script-src 'self' 'unsafe-inline'",
           "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data:",
+          "img-src 'self' data: blob: https://*.supabase.co",
           "font-src 'self'",
           "connect-src 'self' https://*.supabase.co",
           "frame-ancestors 'none'",

@@ -6,8 +6,10 @@ import { toast } from "sonner";
 import { LogIn, LogOut, Lock } from "lucide-react";
 import { storeCheckIn, storeCheckOut } from "@/server/store-floor";
 import { PinPad } from "@/components/store/pin-pad";
+import { CameraCapture } from "@/components/store/camera-capture";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 export type CheckinRow = {
   employeeId: string;
@@ -16,6 +18,8 @@ export type CheckinRow = {
   arrivedLabel: string;
   leftLabel: string | null;
   hours: number | null;
+  entryPhotoUrl: string | null;
+  exitPhotoUrl: string | null;
 };
 
 export type RosterEntry = {
@@ -24,43 +28,43 @@ export type RosterEntry = {
   avatarColor: string | null;
 };
 
-type PinTarget =
-  | { kind: "in"; id: string; name: string }
-  | { kind: "out"; id: string; name: string }
-  | null;
+type Flow = {
+  kind: "in" | "out";
+  id: string;
+  name: string;
+  pin: string | null; // null while the PIN step is open
+};
 
 export function CheckinBoard({
   checkins,
   offFloor,
 }: {
   checkins: CheckinRow[];
-  offFloor: RosterEntry[]; // active employees who never checked in or already left
+  offFloor: RosterEntry[]; // active employees not currently on the floor
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [pinTarget, setPinTarget] = useState<PinTarget>(null);
+  const [flow, setFlow] = useState<Flow | null>(null);
 
-  function run(action: Promise<{ ok: boolean; error?: string }>, okMsg: string) {
+  function submit(f: Flow, photo: Blob | null) {
     start(async () => {
-      const res = await action;
+      const formData = new FormData();
+      formData.set("employeeId", f.id);
+      formData.set("pin", f.pin ?? "");
+      if (photo) {
+        formData.set("photo", new File([photo], "face.jpg", { type: "image/jpeg" }));
+      }
+      const res = f.kind === "in" ? await storeCheckIn(formData) : await storeCheckOut(formData);
       if (!res.ok) {
         toast.error(res.error ?? "Something went wrong.");
+        setFlow(null);
         return;
       }
-      if (okMsg) toast.success(okMsg);
-      setPinTarget(null);
+      toast.success(f.kind === "in" ? `${f.name} checked in.` : `${f.name} checked out.`);
+      setFlow(null);
       router.refresh();
     });
   }
-
-  const submitPin = (pin: string) => {
-    if (!pinTarget) return;
-    if (pinTarget.kind === "in") {
-      run(storeCheckIn(pinTarget.id, pin), `${pinTarget.name} checked in.`);
-    } else {
-      run(storeCheckOut(pinTarget.id, pin), `${pinTarget.name} checked out.`);
-    }
-  };
 
   const tile = (color: string | null) => (
     <span
@@ -70,9 +74,15 @@ export function CheckinBoard({
     />
   );
 
+  const photoThumb = (url: string | null, alt: string) =>
+    url ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={url} alt={alt} className="size-9 rounded-md object-cover" />
+    ) : null;
+
   return (
     <div className="flex flex-col gap-5">
-      {/* Arrivals — big tiles, PIN to check in */}
+      {/* Arrivals — big tiles: name → PIN → face photo */}
       {offFloor.length > 0 && (
         <div className="flex flex-col gap-2">
           <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
@@ -85,7 +95,7 @@ export function CheckinBoard({
                 variant="outline"
                 disabled={pending}
                 className="h-16 justify-start gap-2.5 text-base"
-                onClick={() => setPinTarget({ kind: "in", id: e.id, name: e.name })}
+                onClick={() => setFlow({ kind: "in", id: e.id, name: e.name, pin: null })}
               >
                 {tile(e.avatarColor)}
                 <span className="truncate">{e.name}</span>
@@ -114,6 +124,10 @@ export function CheckinBoard({
                   <span className="flex items-center gap-2.5 text-base font-medium">
                     {tile(r.avatarColor)}
                     {r.name}
+                    <span className="flex gap-1">
+                      {photoThumb(r.entryPhotoUrl, `${r.name} check-in`)}
+                      {photoThumb(r.exitPhotoUrl, `${r.name} check-out`)}
+                    </span>
                   </span>
                   <span className="flex items-center gap-3">
                     <span className="text-muted-foreground text-sm tabular-nums">
@@ -136,7 +150,7 @@ export function CheckinBoard({
                         size="sm"
                         disabled={pending}
                         onClick={() =>
-                          setPinTarget({ kind: "out", id: r.employeeId, name: r.name })
+                          setFlow({ kind: "out", id: r.employeeId, name: r.name, pin: null })
                         }
                       >
                         <LogOut className="mr-1 size-4" /> Check out
@@ -151,17 +165,34 @@ export function CheckinBoard({
       </Card>
 
       <PinPad
-        open={pinTarget !== null}
+        open={flow !== null && flow.pin === null}
         title={
-          pinTarget?.kind === "out"
-            ? `${pinTarget.name} — check out`
-            : `${pinTarget?.name ?? ""} — check in`
+          flow?.kind === "out" ? `${flow.name} — check out` : `${flow?.name ?? ""} — check in`
         }
         subtitle="Enter your 4-digit PIN"
         pending={pending}
-        onSubmit={submitPin}
-        onClose={() => setPinTarget(null)}
+        onSubmit={(pin) => setFlow((f) => (f ? { ...f, pin } : f))}
+        onClose={() => setFlow(null)}
       />
+
+      <Dialog
+        open={flow !== null && flow.pin !== null}
+        onOpenChange={(o) => {
+          if (!o && !pending) setFlow(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogTitle className="sr-only">Face photo</DialogTitle>
+          {flow && flow.pin !== null && (
+            <CameraCapture
+              title={`${flow.name} — look at the camera`}
+              pending={pending}
+              onCapture={(photo) => submit(flow, photo)}
+              onCancel={() => setFlow(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

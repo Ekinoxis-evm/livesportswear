@@ -24,7 +24,7 @@ export default async function StoreCheckinPage() {
   const [{ data: checkinRows }, { data: employees }] = await Promise.all([
     service
       .from("floor_checkins")
-      .select("employee_id, arrived_at, left_at")
+      .select("employee_id, arrived_at, left_at, entry_photo_path, exit_photo_path")
       .eq("location_id", locationId)
       .eq("business_date", bd)
       .order("arrived_at"),
@@ -40,6 +40,20 @@ export default async function StoreCheckinPage() {
   const nameOf = new Map(roster.map((e) => [e.id, e.name]));
   const colorOf = new Map(roster.map((e) => [e.id, e.avatar_color]));
 
+  // Private bucket — thumbnails only via short-lived signed URLs (today's rows only).
+  const paths = (checkinRows ?? [])
+    .flatMap((c) => [c.entry_photo_path, c.exit_photo_path])
+    .filter((p): p is string => Boolean(p));
+  const signedOf = new Map<string, string>();
+  if (paths.length > 0) {
+    const { data: signed } = await service.storage
+      .from("checkin-photos")
+      .createSignedUrls(paths, 3600);
+    for (const s of signed ?? []) {
+      if (s.signedUrl && s.path) signedOf.set(s.path, s.signedUrl);
+    }
+  }
+
   const checkins: CheckinRow[] = (checkinRows ?? []).map((c) => ({
     employeeId: c.employee_id,
     name: nameOf.get(c.employee_id) ?? "—",
@@ -47,6 +61,8 @@ export default async function StoreCheckinPage() {
     arrivedLabel: formatInTimeZone(new Date(c.arrived_at), tz, "HH:mm"),
     leftLabel: c.left_at ? formatInTimeZone(new Date(c.left_at), tz, "HH:mm") : null,
     hours: workedHours(c.arrived_at, c.left_at),
+    entryPhotoUrl: c.entry_photo_path ? (signedOf.get(c.entry_photo_path) ?? null) : null,
+    exitPhotoUrl: c.exit_photo_path ? (signedOf.get(c.exit_photo_path) ?? null) : null,
   }));
 
   // Anyone not currently on the floor can check in (a re-check-in after
