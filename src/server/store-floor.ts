@@ -22,38 +22,12 @@ import {
 } from "@/server/conversion-core";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { searchProducts, type ProductHit } from "@/lib/shopify";
+import { finishSchema, type FinishInput } from "@/lib/finish-schema";
 import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
 
-const productSchema = z.object({
-  id: z.string().min(1).max(30),
-  title: z.string().min(1).max(200),
-});
-
-// A walk-in that didn't buy REQUIRES at least one reason; a return's `sold`
-// means "the customer bought something else".
-const finishSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("walkin"),
-    sold: z.literal(true),
-    got_contact: z.boolean(),
-  }),
-  z.object({
-    kind: z.literal("walkin"),
-    sold: z.literal(false),
-    got_contact: z.boolean(),
-    reasons: z.array(z.string().trim().min(1).max(60)).min(1).max(6),
-    products: z.array(productSchema).max(5).optional(),
-    note: z.string().trim().max(300).optional(),
-  }),
-  z.object({
-    kind: z.literal("return"),
-    sold: z.boolean(),
-  }),
-]);
-
-export type FinishInput = z.input<typeof finishSchema>;
+export type { FinishInput };
 
 type StoreEmployee = {
   id: string;
