@@ -2,10 +2,13 @@
  * Pure rotation-queue ("up system") ordering. No DB, no time.
  *
  * Whoever is present and available with the fewest customers taken (ties broken
- * by earliest arrival) is "up" — they take the next walk-in. A manual bump
- * ("make up next") overrides that order until the bumped member takes a
- * customer. People currently attending a customer are out of the running until
- * they finish.
+ * by earliest arrival) is "up" — they take the next walk-in. Two overrides,
+ * in precedence order:
+ *   1. bump ("make up next", latest wins) — an explicit "you're up NOW";
+ *   2. manual position (kiosk drag-reorder) — a full-line arrangement.
+ * Taking a walk-in clears both for that member, so rotation fairness resumes
+ * naturally. People currently attending are out of the running until every
+ * one of their open customers is finished.
  */
 
 export type FloorMember = {
@@ -16,6 +19,9 @@ export type FloorMember = {
   status: "available" | "attending";
   rotationCount: number;
   bumpedAt: string | null; // ISO — manual "make up next" override; latest wins
+  manualPos?: number | null; // drag-reorder position; null = rotation order
+  attendingCount?: number; // open walk-in customers
+  returnCount?: number; // open returns/exchanges
 };
 
 export type QueueState = "up" | "waiting" | "attending";
@@ -27,14 +33,30 @@ function byTurn(a: FloorMember, b: FloorMember): number {
     if (!a.bumpedAt) return 1;
     return b.bumpedAt.localeCompare(a.bumpedAt);
   }
+  const am = a.manualPos ?? null;
+  const bm = b.manualPos ?? null;
+  if (am != null || bm != null) {
+    // A member whose manual position was cleared (they took a customer)
+    // falls behind everyone still holding a dragged position.
+    if (bm == null) return -1;
+    if (am == null) return 1;
+    return am - bm;
+  }
   return a.rotationCount - b.rotationCount || a.arrivedAt.localeCompare(b.arrivedAt);
+}
+
+/** Open customers for a member (counts win; `status` is the legacy signal). */
+export function openClients(m: FloorMember): number {
+  const counted = (m.attendingCount ?? 0) + (m.returnCount ?? 0);
+  if (counted > 0) return counted;
+  return m.status === "attending" ? 1 : 0;
 }
 
 /** Ordered present members: the available line (in turn order) then attending. */
 export function orderFloor(members: FloorMember[]): QueueRow[] {
   const present = members.filter((m) => !m.leftAt);
-  const available = present.filter((m) => m.status === "available").sort(byTurn);
-  const attending = present.filter((m) => m.status === "attending");
+  const available = present.filter((m) => openClients(m) === 0).sort(byTurn);
+  const attending = present.filter((m) => openClients(m) > 0);
 
   const rows: QueueRow[] = [];
   available.forEach((m, i) =>

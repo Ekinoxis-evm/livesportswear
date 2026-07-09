@@ -379,6 +379,8 @@ export type Database = {
       floor_checkins: {
         Row: {
           arrived_at: string
+          attending_count: number
+          attending_return_count: number
           bumped_at: string | null
           business_date: string
           created_at: string
@@ -394,11 +396,14 @@ export type Database = {
           id: string
           left_at: string | null
           location_id: string
+          manual_pos: number | null
           rotation_count: number
           status: string
         }
         Insert: {
           arrived_at?: string
+          attending_count?: number
+          attending_return_count?: number
           bumped_at?: string | null
           business_date: string
           created_at?: string
@@ -414,11 +419,14 @@ export type Database = {
           id?: string
           left_at?: string | null
           location_id: string
+          manual_pos?: number | null
           rotation_count?: number
           status?: string
         }
         Update: {
           arrived_at?: string
+          attending_count?: number
+          attending_return_count?: number
           bumped_at?: string | null
           business_date?: string
           created_at?: string
@@ -434,6 +442,7 @@ export type Database = {
           id?: string
           left_at?: string | null
           location_id?: string
+          manual_pos?: number | null
           rotation_count?: number
           status?: string
         }
