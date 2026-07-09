@@ -38,8 +38,10 @@ function LineRow({
   pending: boolean;
   onMakeUpNext?: () => void;
 }) {
+  // disabled while an action is in flight — two concurrent reorders would
+  // race each other and the last DB write would silently win
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: entry.employeeId });
+    useSortable({ id: entry.employeeId, disabled: pending });
 
   return (
     <div
@@ -97,7 +99,7 @@ export function QueueLine({
 }: {
   entries: LineEntry[];
   pending: boolean;
-  onReorder: (orderedIds: string[]) => void;
+  onReorder: (orderedIds: string[]) => Promise<boolean>;
   onMakeUpNext: (employeeId: string, name: string) => void;
 }) {
   // Non-null while a local reorder is awaiting the server.
@@ -124,7 +126,12 @@ export function QueueLine({
       ids.indexOf(String(over.id)),
     );
     setLocalOrder(next);
-    onReorder(next);
+    // A rejected save (e.g. "the line changed") must drop the optimistic
+    // order immediately — otherwise the kiosk keeps showing an order the
+    // server refused, and calls up the wrong person until a hard reload.
+    void onReorder(next).then((ok) => {
+      if (!ok) setLocalOrder(null);
+    });
   };
 
   // Server order arrived (entries changed while no drag pending) — drop the overlay.

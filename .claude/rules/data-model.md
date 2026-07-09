@@ -179,9 +179,15 @@ customer increments `rotation_count` (→ back of the line). See
   (device + PIN); the earlier peer/QR flow (`attendance_validations`) is
   legacy history. Hours math stays pure in `src/lib/attendance.ts`
   (`workedHours`, `stampStatus`).
+- `entry_photo_path`, `exit_photo_path` (added 0020) — face-photo evidence in
+  the private `checkin-photos` bucket, 30-day retention (photo-retention cron)
+- `attending_count`, `attending_return_count`, `manual_pos` (added 0022) —
+  multi-client counters + kiosk drag order (see floor-queue.ts precedence)
 - `unique (location_id, business_date, employee_id)`
-- RLS: admin location-scoped; any employee at the location can read/write the
-  store's floor (shared shop-floor data).
+- RLS: admin location-scoped; employees at the location can READ the store's
+  floor (shared shop-floor data). All writes are service-role only via the
+  kiosk server actions since 0023 (employee write policies dropped — a portal
+  JWT must not be able to forge validated stamps or counters).
 
 ### `employee_credentials` (added 0016)
 Admin-issued temporary password, retrievable on the employee page until the

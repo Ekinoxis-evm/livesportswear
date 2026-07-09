@@ -155,7 +155,11 @@ export async function doTakeClient(
   });
 }
 
-/** Drop all open customers without recording anything ("back to line"). */
+/**
+ * Drop all open customers without recording anything ("back to line").
+ * Bump and manual position are cleared too — re-entering the line with a
+ * leftover bump would jump the queue without having served anyone.
+ */
 export async function doClearAttending(
   service: Service,
   locationId: string,
@@ -166,6 +170,8 @@ export async function doClearAttending(
     status: "available",
     attending_count: 0,
     attending_return_count: 0,
+    bumped_at: null,
+    manual_pos: null,
   });
 }
 

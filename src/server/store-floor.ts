@@ -144,10 +144,27 @@ export async function storeCheckIn(formData: FormData): Promise<ActionResult> {
   const bad = pinError(emp, parsed.data.pin);
   if (bad) return { ok: false, error: bad };
 
+  // A same-day re-check-in resets the row's photo pointers; the previous
+  // cycle's files must go too, or retention can never find them (it deletes
+  // by the paths still referenced on the row).
+  const { data: prev } = await service
+    .from("floor_checkins")
+    .select("entry_photo_path, exit_photo_path")
+    .eq("location_id", locationId)
+    .eq("business_date", bd)
+    .eq("employee_id", emp.id)
+    .maybeSingle();
+
   const photoPath = await uploadStampPhoto(service, formData, locationId, bd, emp.id, "entry");
   const now = new Date().toISOString();
   const res = await doCheckIn(service, locationId, bd, emp.id, now, photoPath);
   if (res.ok) {
+    const stale = [prev?.entry_photo_path, prev?.exit_photo_path].filter(
+      (p): p is string => Boolean(p) && p !== photoPath,
+    );
+    if (stale.length > 0) {
+      await service.storage.from("checkin-photos").remove(stale); // best-effort
+    }
     revalidatePath("/store", "layout");
   }
   return res;
@@ -167,20 +184,6 @@ export async function storeCheckOut(formData: FormData): Promise<ActionResult> {
   const photoPath = await uploadStampPhoto(service, formData, locationId, bd, emp.id, "exit");
   const now = new Date().toISOString();
   const res = await doCheckOut(service, locationId, bd, emp.id, now, photoPath);
-  if (res.ok) {
-    revalidatePath("/store", "layout");
-  }
-  return res;
-}
-
-async function storePatch(
-  employeeId: string,
-  patch: Parameters<typeof patchCheckin>[4],
-): Promise<ActionResult> {
-  const { locationId, service, bd } = await storeCtx();
-  const emp = await targetEmployee(service, locationId, employeeId);
-  if (!emp) return { ok: false, error: "That employee isn't at this store." };
-  const res = await patchCheckin(service, locationId, bd, emp.id, patch);
   if (res.ok) {
     revalidatePath("/store", "layout");
   }
@@ -231,7 +234,34 @@ export async function storeSetAvailable(employeeId: string): Promise<ActionResul
 
 /** Move an employee to the front of the line (manual reorder). */
 export async function storeMakeUpNext(employeeId: string): Promise<ActionResult> {
-  return storePatch(employeeId, { bumped_at: new Date().toISOString() });
+  const { locationId, service, bd } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+
+  // A stale tap must not bump someone who is (or just became) attending — the
+  // leftover bump would put them at the front of the line when they finish.
+  const { data: row } = await service
+    .from("floor_checkins")
+    .select("status, attending_count, attending_return_count")
+    .eq("location_id", locationId)
+    .eq("business_date", bd)
+    .eq("employee_id", emp.id)
+    .maybeSingle();
+  if (
+    !row ||
+    row.status === "attending" ||
+    row.attending_count + row.attending_return_count > 0
+  ) {
+    return { ok: false, error: "They're with a client — try again after." };
+  }
+
+  const res = await patchCheckin(service, locationId, bd, emp.id, {
+    bumped_at: new Date().toISOString(),
+  });
+  if (res.ok) {
+    revalidatePath("/store", "layout");
+  }
+  return res;
 }
 
 const reorderSchema = z.array(uuid).min(1).max(30);
@@ -270,13 +300,20 @@ export async function storeReorderQueue(orderedIds: string[]): Promise<ActionRes
     return { ok: false, error: "The line changed — try again." };
   }
 
-  for (const [i, employeeId] of parsed.data.entries()) {
-    const res = await patchCheckin(service, locationId, bd, employeeId, {
+  // One statement so the reorder is all-or-nothing — a partial loop failure
+  // would leave an interleaved order. On conflict only the listed columns
+  // update; the set check above guarantees every row already exists.
+  const { error } = await service.from("floor_checkins").upsert(
+    parsed.data.map((employeeId, i) => ({
+      location_id: locationId,
+      business_date: bd,
+      employee_id: employeeId,
       manual_pos: i + 1,
       bumped_at: null,
-    });
-    if (!res.ok) return res;
-  }
+    })),
+    { onConflict: "location_id,business_date,employee_id" },
+  );
+  if (error) return { ok: false, error: error.message };
   revalidatePath("/store", "layout");
   return { ok: true };
 }
