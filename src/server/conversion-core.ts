@@ -2,10 +2,10 @@ import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
-import { totals, byPerson, formatPct } from "@/lib/conversion";
-import { isShopifyConfigured } from "@/lib/shopify-config";
-import { fetchDaySales } from "@/lib/shopify";
-import { dayRangeInTz } from "@/lib/shopify-range";
+import { totals, byPerson, formatPct, type ConversionTotals } from "@/lib/conversion";
+import { getDaySalesCached } from "@/lib/shopify-day-cache";
+import type { DaySales } from "@/lib/shopify";
+import { buildDayReportCsv } from "@/lib/day-report-csv";
 import { formatMoney } from "@/lib/commission";
 import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
@@ -27,31 +27,126 @@ async function reportRecipients(): Promise<string[]> {
   return emails.length ? emails : fallback ? [fallback] : [];
 }
 
-/**
- * Close the store day as `closer`: same eligibility rule regardless of the
- * caller (portal button or store kiosk) — the closer must be on today's
- * published schedule AND checked in on the floor. Snapshots conversion (and
- * the day's Shopify sales) into store_day_closes and emails the daily report.
- * Idempotent on (location, business_date).
- */
-export async function closeDayFor(closer: {
-  id: string;
-  name: string;
-  location_id: string;
-}): Promise<ActionResult> {
+/** What the kiosk shows in the draft dialog before confirming the close. */
+export type CloseDayDraft = {
+  businessDateLabel: string;
+  subject: string;
+  recipients: string[];
+  attended: number;
+  sold: number;
+  contacts: number;
+  conversionPct: string;
+  shopifySales: string | null; // formatted money-in for the day
+  shopifyOrders: number | null;
+  eventCount: number;
+  checkinCount: number;
+};
+
+type DayReportData = {
+  locName: string;
+  tz: string;
+  bd: string;
+  t: ConversionTotals;
+  perPerson: DayReportRow[];
+  shopify: DaySales | null;
+  recipients: string[];
+  subject: string;
+  csv: string;
+  eventCount: number;
+  checkinCount: number;
+};
+
+async function buildDayReportData(locationId: string): Promise<DayReportData> {
   const service = createServiceClient();
 
   const { data: loc } = await service
     .from("locations")
     .select("name, timezone")
-    .eq("id", closer.location_id)
+    .eq("id", locationId)
     .maybeSingle();
   const tz = loc?.timezone ?? "UTC";
   const locName = loc?.name ?? "Store";
   const bd = businessDate(tz);
 
-  // Only someone on today's published schedule who is checked in on the floor
-  // may close the day (usually the evening shift).
+  const [{ data: eventRows }, { data: checkinRows }, shopify, recipients] =
+    await Promise.all([
+      service
+        .from("client_events")
+        .select("employee_id, attended_at, sold, got_contact, employees(name)")
+        .eq("location_id", locationId)
+        .eq("business_date", bd)
+        .order("attended_at"),
+      service
+        .from("floor_checkins")
+        .select(
+          "employee_id, arrived_at, left_at, entry_validated_at, entry_self, exit_validated_at, exit_self, employees(name)",
+        )
+        .eq("location_id", locationId)
+        .eq("business_date", bd)
+        .order("arrived_at"),
+      getDaySalesCached(bd, tz),
+      reportRecipients(),
+    ]);
+
+  const events = eventRows ?? [];
+  const checkins = checkinRows ?? [];
+  const nameOf = (row: { employees: { name: string } | null }) =>
+    row.employees?.name ?? "Unknown";
+
+  const t = totals(events);
+  const personName = new Map<string, string>();
+  for (const e of events) personName.set(e.employee_id, nameOf(e));
+  const perPerson: DayReportRow[] = byPerson(events).map((p) => ({
+    name: personName.get(p.employeeId) ?? "Unknown",
+    attended: p.attended,
+    sold: p.sold,
+    conversionPct: formatPct(p.conversion),
+  }));
+
+  const csv = buildDayReportCsv({
+    businessDate: bd,
+    tz,
+    events: events.map((e) => ({
+      employeeName: nameOf(e),
+      attended_at: e.attended_at,
+      sold: e.sold,
+      got_contact: e.got_contact,
+    })),
+    checkins: checkins.map((c) => ({
+      employeeName: nameOf(c),
+      arrived_at: c.arrived_at,
+      left_at: c.left_at,
+      entry_validated_at: c.entry_validated_at,
+      entry_self: c.entry_self,
+      exit_validated_at: c.exit_validated_at,
+      exit_self: c.exit_self,
+    })),
+  });
+
+  return {
+    locName,
+    tz,
+    bd,
+    t,
+    perPerson,
+    shopify,
+    recipients,
+    subject: `Daily Report — ${locName} · ${weekdayName(bd)} ${shortDate(bd)}`,
+    csv,
+    eventCount: events.length,
+    checkinCount: checkins.length,
+  };
+}
+
+/**
+ * Only someone on today's published schedule who is checked in on the floor
+ * may close the day (usually the evening shift).
+ */
+async function closerEligibility(
+  closer: { id: string; location_id: string },
+  bd: string,
+): Promise<string | null> {
+  const service = createServiceClient();
   const [{ data: closerShift }, { data: closerCheckin }] = await Promise.all([
     service
       .from("shifts")
@@ -70,82 +165,108 @@ export async function closeDayFor(closer: {
       .is("left_at", null)
       .maybeSingle(),
   ]);
-  if (!closerShift) {
-    return { ok: false, error: "Only someone with a shift today can close the day." };
-  }
-  if (!closerCheckin) {
-    return { ok: false, error: "Mark your entry before closing the day." };
-  }
+  if (!closerShift) return "Only someone with a shift today can close the day.";
+  if (!closerCheckin) return "Mark your entry before closing the day.";
+  return null;
+}
 
-  const { data: rows } = await service
-    .from("client_events")
-    .select("employee_id, sold, got_contact, employees(name)")
-    .eq("location_id", closer.location_id)
-    .eq("business_date", bd);
-  const events = rows ?? [];
+/** The draft the kiosk previews before confirming — same data the send will use. */
+export async function closeDayDraftFor(closer: {
+  id: string;
+  location_id: string;
+}): Promise<ActionResult<CloseDayDraft>> {
+  const service = createServiceClient();
+  const { data: loc } = await service
+    .from("locations")
+    .select("timezone")
+    .eq("id", closer.location_id)
+    .maybeSingle();
+  const bd = businessDate(loc?.timezone ?? "UTC");
 
-  const t = totals(events);
-  const nameOf = new Map<string, string>();
-  for (const e of events) {
-    const n = (e.employees as { name: string } | null)?.name;
-    if (n) nameOf.set(e.employee_id, n);
-  }
-  const perPerson: DayReportRow[] = byPerson(events).map((p) => ({
-    name: nameOf.get(p.employeeId) ?? "Unknown",
-    attended: p.attended,
-    sold: p.sold,
-    conversionPct: formatPct(p.conversion),
-  }));
+  const ineligible = await closerEligibility(closer, bd);
+  if (ineligible) return { ok: false, error: ineligible };
 
-  // The day's Shopify money line, captured at close. Shopify being down must
-  // never block closing the day.
-  let shopifySales: number | null = null;
-  let currency: string | null = null;
-  if (isShopifyConfigured()) {
-    try {
-      const range = dayRangeInTz(bd, tz);
-      const day = await fetchDaySales(range.start, range.endExclusive);
-      shopifySales = day.total;
-      currency = day.currency;
-    } catch {
-      // report email simply omits the money line
-    }
-  }
+  const d = await buildDayReportData(closer.location_id);
+  return {
+    ok: true,
+    data: {
+      businessDateLabel: `${weekdayName(d.bd)} · ${shortDate(d.bd)}`,
+      subject: d.subject,
+      recipients: d.recipients,
+      attended: d.t.attended,
+      sold: d.t.sold,
+      contacts: d.t.contacts,
+      conversionPct: formatPct(d.t.conversion),
+      shopifySales:
+        d.shopify != null ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD") : null,
+      shopifyOrders: d.shopify?.orders ?? null,
+      eventCount: d.eventCount,
+      checkinCount: d.checkinCount,
+    },
+  };
+}
+
+/**
+ * Close the store day as `closer`: same eligibility rule regardless of the
+ * caller (portal button or store kiosk) — the closer must be on today's
+ * published schedule AND checked in on the floor. Snapshots conversion (and
+ * the day's Shopify sales) into store_day_closes and emails the daily report
+ * with the full-detail CSV attached. Idempotent on (location, business_date).
+ */
+export async function closeDayFor(closer: {
+  id: string;
+  name: string;
+  location_id: string;
+}): Promise<ActionResult> {
+  const service = createServiceClient();
+
+  const { data: loc } = await service
+    .from("locations")
+    .select("timezone")
+    .eq("id", closer.location_id)
+    .maybeSingle();
+  const bd = businessDate(loc?.timezone ?? "UTC");
+
+  const ineligible = await closerEligibility(closer, bd);
+  if (ineligible) return { ok: false, error: ineligible };
+
+  const d = await buildDayReportData(closer.location_id);
 
   const { error: upErr } = await service.from("store_day_closes").upsert(
     {
       location_id: closer.location_id,
-      business_date: bd,
+      business_date: d.bd,
       closed_by: closer.id,
-      attended_count: t.attended,
-      sold_count: t.sold,
-      contact_count: t.contacts,
-      shopify_sales: shopifySales,
-      currency,
+      attended_count: d.t.attended,
+      sold_count: d.t.sold,
+      contact_count: d.t.contacts,
+      shopify_sales: d.shopify?.total ?? null,
+      currency: d.shopify?.currency ?? null,
     },
     { onConflict: "location_id,business_date" },
   );
   if (upErr) return { ok: false, error: upErr.message };
 
-  const recipients = await reportRecipients();
-  for (const to of recipients) {
+  for (const to of d.recipients) {
     await sendSafe({
       to,
-      subject: `Daily report — ${locName} · ${weekdayName(bd)} ${shortDate(bd)}`,
+      subject: d.subject,
       react: DayReportEmail({
-        locationName: locName,
-        businessDate: `${weekdayName(bd)} · ${shortDate(bd)}`,
+        locationName: d.locName,
+        businessDate: `${weekdayName(d.bd)} · ${shortDate(d.bd)}`,
         closedByName: closer.name,
-        attended: t.attended,
-        sold: t.sold,
-        contacts: t.contacts,
-        conversionPct: formatPct(t.conversion),
+        attended: d.t.attended,
+        sold: d.t.sold,
+        contacts: d.t.contacts,
+        conversionPct: formatPct(d.t.conversion),
         shopifySales:
-          shopifySales != null
-            ? formatMoney(shopifySales, currency ?? "USD")
+          d.shopify != null
+            ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD")
             : null,
-        perPerson,
+        shopifyOrders: d.shopify?.orders ?? null,
+        perPerson: d.perPerson,
       }),
+      attachments: [{ filename: `daily-report-${d.bd}.csv`, content: d.csv }],
     });
   }
 
