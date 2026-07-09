@@ -109,25 +109,47 @@ export async function patchCheckin(
   return { ok: true };
 }
 
+export type FinishResult = {
+  kind: "walkin" | "return";
+  sold: boolean; // for a return: the customer bought something else
+  got_contact: boolean;
+  reasons?: string[]; // mandatory (app layer) when a walk-in didn't buy
+  products?: { id: string; title: string }[];
+  note?: string;
+};
+
 /**
- * Finish the current customer: record the conversion (sold / got-contact) at
- * the time it happened, then send the employee to the back of the line.
+ * Finish the current customer: record the event at the time it happened,
+ * then free the employee. A walk-in sends them to the back of the line; a
+ * return does NOT burn their turn (rotation_count untouched) — the taker is
+ * usually the last in line, not the up-next.
  */
 export async function doFinishCustomer(
   service: Service,
   locationId: string,
   bd: string,
   employeeId: string,
-  result: { sold: boolean; got_contact: boolean },
+  result: FinishResult,
 ): Promise<ActionResult> {
   const ins = await service.from("client_events").insert({
     location_id: locationId,
     employee_id: employeeId,
     business_date: bd,
+    kind: result.kind,
     sold: result.sold,
     got_contact: result.got_contact,
+    reasons: result.reasons ?? null,
+    products: result.products ?? null,
+    note: result.note ?? null,
   });
   if (ins.error) return { ok: false, error: ins.error.message };
+
+  if (result.kind === "return") {
+    return patchCheckin(service, locationId, bd, employeeId, {
+      status: "available",
+      bumped_at: null,
+    });
+  }
 
   const { data: cur } = await service
     .from("floor_checkins")

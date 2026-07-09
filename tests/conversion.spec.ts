@@ -33,6 +33,8 @@ describe("totals", () => {
       contacts: 1,
       conversion: 2 / 3,
       contactRate: 0.5,
+      returns: 0,
+      returnExtraSales: 0,
     });
   });
 
@@ -43,7 +45,29 @@ describe("totals", () => {
       contacts: 0,
       conversion: 0,
       contactRate: 0,
+      returns: 0,
+      returnExtraSales: 0,
     });
+  });
+
+  it("keeps returns out of the walk-in conversion rate", () => {
+    const t = totals([
+      ev("a", true),
+      ev("a", false),
+      { employee_id: "a", sold: false, got_contact: false, kind: "return" },
+      { employee_id: "a", sold: true, got_contact: false, kind: "return" },
+    ]);
+    expect(t.attended).toBe(2);
+    expect(t.sold).toBe(1);
+    expect(t.conversion).toBe(0.5); // unchanged by the two returns
+    expect(t.returns).toBe(2);
+    expect(t.returnExtraSales).toBe(1); // the return that bought more
+  });
+
+  it("treats events without a kind as walk-ins", () => {
+    const t = totals([ev("a", true), { ...ev("a", true), kind: null }]);
+    expect(t.attended).toBe(2);
+    expect(t.returns).toBe(0);
   });
 });
 

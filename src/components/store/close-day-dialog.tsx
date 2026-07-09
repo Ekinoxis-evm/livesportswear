@@ -128,6 +128,12 @@ export function CloseDayDialog({
                 <Metric label="Contacts" value={draft.contacts} />
                 <Metric label="Shopify sales" value={draft.shopifySales ?? "—"} />
                 <Metric label="Orders" value={draft.shopifyOrders ?? "—"} />
+                {draft.returns > 0 && (
+                  <>
+                    <Metric label="Returns" value={draft.returns} />
+                    <Metric label="Returns → sale" value={draft.returnExtraSales} />
+                  </>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm">

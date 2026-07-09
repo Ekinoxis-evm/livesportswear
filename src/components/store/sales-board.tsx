@@ -3,16 +3,29 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, X, LogIn, Hand } from "lucide-react";
+import { LogIn, Hand, Undo2 } from "lucide-react";
 import {
   storeOpenDay,
   storeTakeClient,
+  storeStartReturn,
   storeSetAvailable,
   storeMakeUpNext,
   storeFinish,
+  type FinishInput,
 } from "@/server/store-floor";
+import {
+  FinishDialog,
+  type FinishTarget,
+} from "@/components/store/finish-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type SalesRow = {
   employeeId: string;
@@ -26,11 +39,16 @@ export type SalesRow = {
 export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [finishFor, setFinishFor] = useState<string | null>(null); // employeeId in "got contact?" step
+  const [finishTarget, setFinishTarget] = useState<FinishTarget | null>(null);
+  const [returnPicker, setReturnPicker] = useState(false);
+  // Which attending employees are on a return (client-side until PR 5 persists it).
+  const [returnFor, setReturnFor] = useState<Set<string>>(new Set());
 
   const line = rows.filter((r) => r.state !== "attending");
   const attending = rows.filter((r) => r.state === "attending");
   const up = line[0] ?? null;
+  // A return shouldn't burn the up-next's turn — the LAST in line is suggested.
+  const returnSuggestion = line[line.length - 1] ?? null;
 
   function run(action: Promise<{ ok: boolean; error?: string }>, okMsg: string) {
     start(async () => {
@@ -40,10 +58,34 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         return;
       }
       if (okMsg) toast.success(okMsg);
-      setFinishFor(null);
+      setFinishTarget(null);
+      setReturnPicker(false);
       router.refresh();
     });
   }
+
+  const startReturn = (r: SalesRow) => {
+    setReturnFor((cur) => new Set(cur).add(r.employeeId));
+    run(storeStartReturn(r.employeeId), `${r.name} takes the return.`);
+  };
+
+  const submitFinish = (employeeId: string, input: FinishInput) => {
+    setReturnFor((cur) => {
+      const next = new Set(cur);
+      next.delete(employeeId);
+      return next;
+    });
+    run(
+      storeFinish(employeeId, input),
+      input.kind === "return"
+        ? input.sold
+          ? "Logged: return + extra sale"
+          : "Logged: return"
+        : input.sold
+          ? "Logged: sold"
+          : "Logged: no sale",
+    );
+  };
 
   const tile = (color: string | null) => (
     <span
@@ -93,76 +135,39 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
       )}
 
       {/* With a client now */}
-      {attending.map((r) => (
-        <div
-          key={r.employeeId}
-          className="flex flex-col gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-              With a client
-            </span>
-            <span className="text-muted-foreground text-xs tabular-nums">
-              arrived {r.arrivedLabel}
-            </span>
+      {attending.map((r) => {
+        const isReturn = returnFor.has(r.employeeId);
+        return (
+          <div
+            key={r.employeeId}
+            className="flex flex-col gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-5"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+                {isReturn ? "With a return / exchange" : "With a client"}
+              </span>
+              <span className="text-muted-foreground text-xs tabular-nums">
+                arrived {r.arrivedLabel}
+              </span>
+            </div>
+            <p className="text-2xl font-bold">{r.name}</p>
+            <Button
+              size="lg"
+              className="h-14"
+              disabled={pending}
+              onClick={() =>
+                setFinishTarget({
+                  employeeId: r.employeeId,
+                  name: r.name,
+                  kind: isReturn ? "return" : "walkin",
+                })
+              }
+            >
+              Finish
+            </Button>
           </div>
-          <p className="text-2xl font-bold">{r.name}</p>
-          {finishFor === r.employeeId ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">Got contact?</span>
-              <Button
-                size="lg"
-                variant="outline"
-                className="flex-1"
-                disabled={pending}
-                onClick={() =>
-                  run(storeFinish(r.employeeId, { sold: true, got_contact: false }), "Logged: sold")
-                }
-              >
-                No
-              </Button>
-              <Button
-                size="lg"
-                className="flex-1"
-                disabled={pending}
-                onClick={() =>
-                  run(
-                    storeFinish(r.employeeId, { sold: true, got_contact: true }),
-                    "Logged: sold + contact",
-                  )
-                }
-              >
-                Yes
-              </Button>
-            </div>
-          ) : (
-            <div className="flex gap-3">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-destructive/40 text-destructive h-14 flex-1"
-                disabled={pending}
-                onClick={() =>
-                  run(
-                    storeFinish(r.employeeId, { sold: false, got_contact: false }),
-                    "Logged: no sale",
-                  )
-                }
-              >
-                <X className="mr-1.5 size-5" /> No sale
-              </Button>
-              <Button
-                size="lg"
-                className="h-14 flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
-                disabled={pending}
-                onClick={() => setFinishFor(r.employeeId)}
-              >
-                <Check className="mr-1.5 size-5" /> Sold
-              </Button>
-            </div>
-          )}
-        </div>
-      ))}
+        );
+      })}
 
       {/* The line */}
       {line.length > 0 && (
@@ -205,7 +210,14 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                   variant="ghost"
                   size="sm"
                   disabled={pending}
-                  onClick={() => run(storeSetAvailable(r.employeeId), "")}
+                  onClick={() => {
+                    setReturnFor((cur) => {
+                      const next = new Set(cur);
+                      next.delete(r.employeeId);
+                      return next;
+                    });
+                    run(storeSetAvailable(r.employeeId), "");
+                  }}
                 >
                   Back to line
                 </Button>
@@ -214,6 +226,60 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           </CardContent>
         </Card>
       )}
+
+      {/* Return / exchange entry point */}
+      {line.length > 0 && (
+        <Button
+          variant="outline"
+          size="lg"
+          className="h-14"
+          disabled={pending}
+          onClick={() => setReturnPicker(true)}
+        >
+          <Undo2 className="mr-2 size-5" /> Return / Exchange
+        </Button>
+      )}
+
+      <FinishDialog
+        target={finishTarget}
+        pending={pending}
+        onSubmit={submitFinish}
+        onClose={() => setFinishTarget(null)}
+      />
+
+      <Dialog
+        open={returnPicker}
+        onOpenChange={(o) => {
+          if (!o && !pending) setReturnPicker(false);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Who takes the return?</DialogTitle>
+            <DialogDescription>
+              A return doesn&apos;t burn a turn — the last in line is suggested.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            {[...line].reverse().map((r) => (
+              <Button
+                key={r.employeeId}
+                variant={r.employeeId === returnSuggestion?.employeeId ? "default" : "outline"}
+                size="lg"
+                className="h-14 justify-start gap-2.5"
+                disabled={pending}
+                onClick={() => startReturn(r)}
+              >
+                {tile(r.avatarColor)}
+                {r.name}
+                {r.employeeId === returnSuggestion?.employeeId && (
+                  <span className="ml-auto text-xs opacity-80">suggested</span>
+                )}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

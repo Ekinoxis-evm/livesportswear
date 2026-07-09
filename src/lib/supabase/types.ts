@@ -165,7 +165,11 @@ export type Database = {
           employee_id: string
           got_contact: boolean
           id: string
+          kind: string
           location_id: string
+          note: string | null
+          products: Json | null
+          reasons: string[] | null
           sold: boolean
         }
         Insert: {
@@ -175,7 +179,11 @@ export type Database = {
           employee_id: string
           got_contact?: boolean
           id?: string
+          kind?: string
           location_id: string
+          note?: string | null
+          products?: Json | null
+          reasons?: string[] | null
           sold?: boolean
         }
         Update: {
@@ -185,7 +193,11 @@ export type Database = {
           employee_id?: string
           got_contact?: boolean
           id?: string
+          kind?: string
           location_id?: string
+          note?: string | null
+          products?: Json | null
+          reasons?: string[] | null
           sold?: boolean
         }
         Relationships: [

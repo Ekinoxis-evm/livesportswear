@@ -38,7 +38,7 @@ export default async function StorePerformancePage() {
   ] = await Promise.all([
     service
       .from("client_events")
-      .select("employee_id, sold, got_contact")
+      .select("employee_id, kind, sold, got_contact")
       .eq("location_id", locationId)
       .eq("business_date", bd),
     service
@@ -88,6 +88,8 @@ export default async function StorePerformancePage() {
       contacts: 0,
       conversion: 0,
       contactRate: 0,
+      returns: 0,
+      returnExtraSales: 0,
     }));
   const tableRows = [...perPerson, ...zeroRows];
 
@@ -149,6 +151,20 @@ export default async function StorePerformancePage() {
         </Card>
       </div>
 
+      {t.returns > 0 && (
+        <Card>
+          <CardContent className="text-muted-foreground py-3 text-sm">
+            Returns today:{" "}
+            <span className="text-foreground font-semibold tabular-nums">{t.returns}</span>
+            {" · "}
+            <span className="text-foreground font-semibold tabular-nums">
+              {t.returnExtraSales}
+            </span>{" "}
+            converted to an extra sale
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Team today</CardTitle>
@@ -165,6 +181,7 @@ export default async function StorePerformancePage() {
                     <th className="py-2 text-right font-medium">Attended</th>
                     <th className="py-2 text-right font-medium">Sold</th>
                     <th className="py-2 text-right font-medium">Conversion</th>
+                    <th className="py-2 text-right font-medium">Returns</th>
                     <th className="py-2 text-right font-medium">Hours</th>
                   </tr>
                 </thead>
@@ -178,6 +195,9 @@ export default async function StorePerformancePage() {
                       <td className="py-2 text-right tabular-nums">{p.sold}</td>
                       <td className="py-2 text-right tabular-nums">
                         {p.attended > 0 ? formatPct(p.conversion) : "—"}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {p.returns > 0 ? p.returns : "—"}
                       </td>
                       <td className="py-2 text-right tabular-nums">
                         {hoursOf.get(p.employeeId) ?? "—"}
