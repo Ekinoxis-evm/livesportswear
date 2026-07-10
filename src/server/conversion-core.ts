@@ -92,7 +92,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
       service
         .from("floor_checkins")
         .select(
-          "employee_id, arrived_at, left_at, entry_validated_at, entry_self, exit_validated_at, exit_self, employees(name)",
+          "employee_id, arrived_at, left_at, entry_validated_at, entry_self, exit_validated_at, exit_self, exit_missed, employees(name)",
         )
         .eq("location_id", locationId)
         .eq("business_date", bd)
@@ -137,6 +137,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
       entry_self: c.entry_self,
       exit_validated_at: c.exit_validated_at,
       exit_self: c.exit_self,
+      exit_missed: c.exit_missed,
     })),
   });
 
