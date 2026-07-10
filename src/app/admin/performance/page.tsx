@@ -46,6 +46,7 @@ type HoursRow = {
   exit_validated_at: string | null;
   exit_validated_by: string | null;
   exit_self: boolean;
+  exit_missed: boolean;
   employees: { name: string } | null;
 };
 
@@ -107,7 +108,7 @@ export default async function PerformancePage({
       supabase
         .from("floor_checkins")
         .select(
-          "employee_id, arrived_at, left_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, employees!employee_id(name)",
+          "employee_id, arrived_at, left_at, entry_validated_at, entry_validated_by, entry_self, exit_validated_at, exit_validated_by, exit_self, exit_missed, employees!employee_id(name)",
         )
         .eq("location_id", location.id)
         .eq("business_date", date)
@@ -141,6 +142,9 @@ export default async function PerformancePage({
           ⚑ {kind === "entry" ? "first in" : "last out"}
         </span>
       );
+    }
+    if (status === "missed") {
+      return <span className="text-destructive">✗ missed check-out</span>;
     }
     return <span className="text-muted-foreground">⏳ pending</span>;
   };
@@ -346,6 +350,7 @@ export default async function PerformancePage({
                                   at: c.left_at,
                                   validatedAt: c.exit_validated_at,
                                   self: c.exit_self,
+                                  missed: c.exit_missed,
                                 },
                                 c.exit_validated_by,
                                 "exit",

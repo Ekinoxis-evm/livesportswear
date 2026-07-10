@@ -28,6 +28,7 @@ export type ReportCheckin = {
   entry_self: boolean;
   exit_validated_at: string | null;
   exit_self: boolean;
+  exit_missed?: boolean;
 };
 
 export function buildDayReportCsv({
@@ -60,7 +61,12 @@ export function buildDayReportCsv({
     c.left_at ? time(c.left_at) : "",
     workedHours(c.arrived_at, c.left_at) ?? "",
     stampStatus({ at: c.arrived_at, validatedAt: c.entry_validated_at, self: c.entry_self }),
-    stampStatus({ at: c.left_at, validatedAt: c.exit_validated_at, self: c.exit_self }),
+    stampStatus({
+      at: c.left_at,
+      validatedAt: c.exit_validated_at,
+      self: c.exit_self,
+      missed: c.exit_missed,
+    }),
   ]);
 
   return toCsv([

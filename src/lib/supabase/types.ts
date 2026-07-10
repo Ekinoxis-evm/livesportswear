@@ -389,6 +389,7 @@ export type Database = {
           entry_self: boolean
           entry_validated_at: string | null
           entry_validated_by: string | null
+          exit_missed: boolean
           exit_photo_path: string | null
           exit_self: boolean
           exit_validated_at: string | null
@@ -412,6 +413,7 @@ export type Database = {
           entry_self?: boolean
           entry_validated_at?: string | null
           entry_validated_by?: string | null
+          exit_missed?: boolean
           exit_photo_path?: string | null
           exit_self?: boolean
           exit_validated_at?: string | null
@@ -435,6 +437,7 @@ export type Database = {
           entry_self?: boolean
           entry_validated_at?: string | null
           entry_validated_by?: string | null
+          exit_missed?: boolean
           exit_photo_path?: string | null
           exit_self?: boolean
           exit_validated_at?: string | null

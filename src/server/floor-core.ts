@@ -61,6 +61,7 @@ export async function doCheckIn(
       exit_validated_at: null,
       exit_validated_by: null,
       exit_self: false,
+      exit_missed: false,
       exit_photo_path: null,
     },
     { onConflict: "location_id,business_date,employee_id" },

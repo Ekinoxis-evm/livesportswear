@@ -12,6 +12,8 @@ export const config: VercelConfig = {
     { path: "/api/cron/shopify-sync", schedule: "0 6 * * *" },
     { path: "/api/cron/meta-sync", schedule: "0 6 * * *" },
     { path: "/api/cron/photo-retention", schedule: "30 6 * * *" },
+    // 06:45 UTC = deep night in Miami — closes the previous day's stragglers.
+    { path: "/api/cron/stale-checkins", schedule: "45 6 * * *" },
   ],
 
   headers: [
