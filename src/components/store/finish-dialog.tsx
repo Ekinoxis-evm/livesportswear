@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Search, X } from "lucide-react";
-import { storeSearchProducts, type FinishInput } from "@/server/store-floor";
+import { storeSearchProducts } from "@/server/store-floor";
+import type { FinishInput } from "@/lib/finish-schema";
 import type { ProductHit } from "@/lib/shopify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";

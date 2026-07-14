@@ -22,9 +22,10 @@ export type FloorMember = {
   manualPos?: number | null; // drag-reorder position; null = rotation order
   attendingCount?: number; // open walk-in customers
   returnCount?: number; // open returns/exchanges
+  onBreak?: boolean; // open break — off the line, rotation position kept
 };
 
-export type QueueState = "up" | "waiting" | "attending";
+export type QueueState = "up" | "waiting" | "attending" | "break";
 export type QueueRow = FloorMember & { state: QueueState; turn: number | null };
 
 function byTurn(a: FloorMember, b: FloorMember): number {
@@ -52,17 +53,23 @@ export function openClients(m: FloorMember): number {
   return m.status === "attending" ? 1 : 0;
 }
 
-/** Ordered present members: the available line (in turn order) then attending. */
+/** Ordered present members: the available line (in turn order), attending, then on break. */
 export function orderFloor(members: FloorMember[]): QueueRow[] {
   const present = members.filter((m) => !m.leftAt);
-  const available = present.filter((m) => openClients(m) === 0).sort(byTurn);
+  const available = present
+    .filter((m) => openClients(m) === 0 && !m.onBreak)
+    .sort(byTurn);
   const attending = present.filter((m) => openClients(m) > 0);
+  // Rotation/manual position untouched while away — ending the break drops
+  // them back into their exact former spot in the line.
+  const onBreak = present.filter((m) => openClients(m) === 0 && m.onBreak);
 
   const rows: QueueRow[] = [];
   available.forEach((m, i) =>
     rows.push({ ...m, state: i === 0 ? "up" : "waiting", turn: i + 1 }),
   );
   attending.forEach((m) => rows.push({ ...m, state: "attending", turn: null }));
+  onBreak.forEach((m) => rows.push({ ...m, state: "break", turn: null }));
   return rows;
 }
 

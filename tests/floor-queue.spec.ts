@@ -119,6 +119,57 @@ describe("orderFloor — multi-client counters", () => {
   });
 });
 
+describe("orderFloor — breaks", () => {
+  it("keeps an on-break member out of the line and never 'up'", () => {
+    const rows = orderFloor([
+      { ...m("a", "2026-07-10T14:00:00Z", "available", 0), onBreak: true },
+      m("b", "2026-07-10T15:00:00Z", "available", 3),
+    ]);
+    expect(rows.find((r) => r.employeeId === "b")?.state).toBe("up");
+    expect(rows.find((r) => r.employeeId === "a")?.state).toBe("break");
+  });
+
+  it("restores the exact former position when the break ends", () => {
+    const before = orderFloor([
+      m("a", "2026-07-10T14:00:00Z", "available", 0),
+      m("b", "2026-07-10T14:30:00Z", "available", 0),
+      m("c", "2026-07-10T15:00:00Z", "available", 1),
+    ]).map((r) => r.employeeId);
+    const after = orderFloor([
+      m("a", "2026-07-10T14:00:00Z", "available", 0), // came back from break
+      m("b", "2026-07-10T14:30:00Z", "available", 0),
+      m("c", "2026-07-10T15:00:00Z", "available", 1),
+    ]).map((r) => r.employeeId);
+    expect(after).toEqual(before);
+  });
+
+  it("treats an attending member with an inconsistent break flag as attending", () => {
+    const rows = orderFloor([
+      { ...m("a", "2026-07-10T14:00:00Z", "attending", 0), onBreak: true },
+    ]);
+    expect(rows[0]?.state).toBe("attending");
+  });
+
+  it("excludes an on-break member who has left the floor", () => {
+    const rows = orderFloor([
+      {
+        ...m("a", "2026-07-10T14:00:00Z", "available", 0, "2026-07-10T18:00:00Z"),
+        onBreak: true,
+      },
+    ]);
+    expect(rows).toEqual([]);
+  });
+
+  it("upNext skips on-break members", () => {
+    expect(
+      upNext([
+        { ...m("a", "2026-07-10T14:00:00Z", "available", 0), onBreak: true },
+        m("b", "2026-07-10T15:00:00Z", "available", 5),
+      ])?.employeeId,
+    ).toBe("b");
+  });
+});
+
 describe("upNext", () => {
   it("is the lowest-rotation available member", () => {
     expect(

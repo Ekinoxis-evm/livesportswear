@@ -33,6 +33,7 @@ describe("buildDayReportCsv", () => {
           entry_self: false,
           exit_validated_at: "2026-07-09T21:30:00Z",
           exit_self: false,
+          breakMinutes: 25,
         },
       ],
     });
@@ -41,7 +42,7 @@ describe("buildDayReportCsv", () => {
     expect(lines[0]).toBe("Daily Report 2026-07-09");
     expect(lines).toContain("11:30,Maryna,walkin,sold,,,,yes");
     expect(lines).toContain("12:00,Veriana,walkin,no sale,No size; No color,,wanted the blue one,no");
-    expect(lines).toContain("Maryna,09:30,17:30,8,validated,validated");
+    expect(lines).toContain("Maryna,09:30,17:30,8,25,validated,validated");
   });
 
   it("leaves out-time and hours empty while still on the floor", () => {
@@ -61,7 +62,7 @@ describe("buildDayReportCsv", () => {
         },
       ],
     });
-    expect(csv.split("\r\n")).toContain("Estefani,10:00,,,validated,none");
+    expect(csv.split("\r\n")).toContain("Estefani,10:00,,,,validated,none");
   });
 
   it("quotes fields containing commas", () => {

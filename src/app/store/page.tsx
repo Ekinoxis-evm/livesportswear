@@ -3,6 +3,7 @@ import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { orderFloor, type FloorMember } from "@/lib/floor-queue";
+import { openBreak, breakMinutes, type BreakRow } from "@/lib/breaks";
 import { SalesBoard, type SalesRow } from "@/components/store/sales-board";
 
 type CheckinRow = {
@@ -29,7 +30,7 @@ export default async function StoreSalesPage() {
   const tz = loc?.timezone ?? "UTC";
   const bd = businessDate(tz);
 
-  const [{ data: dayRow }, { data: checkinRows }, { data: employees }] =
+  const [{ data: dayRow }, { data: checkinRows }, { data: employees }, { data: breakRows }] =
     await Promise.all([
       service
         .from("floor_days")
@@ -50,11 +51,25 @@ export default async function StoreSalesPage() {
         .eq("location_id", locationId)
         .eq("active", true)
         .order("name"),
+      service
+        .from("floor_breaks")
+        .select("employee_id, started_at, ended_at")
+        .eq("location_id", locationId)
+        .eq("business_date", bd)
+        .order("started_at"),
     ]);
 
   const roster = employees ?? [];
   const nameOf = new Map(roster.map((e) => [e.id, e.name]));
   const colorOf = new Map(roster.map((e) => [e.id, e.avatar_color]));
+
+  const breaksOf = new Map<string, BreakRow[]>();
+  for (const b of breakRows ?? []) {
+    const arr = breaksOf.get(b.employee_id) ?? [];
+    arr.push({ startedAt: b.started_at, endedAt: b.ended_at });
+    breaksOf.set(b.employee_id, arr);
+  }
+  const nowIso = new Date().toISOString();
 
   const checkins = (checkinRows ?? []) as CheckinRow[];
   const members: FloorMember[] = checkins.map((c) => ({
@@ -68,17 +83,28 @@ export default async function StoreSalesPage() {
     manualPos: c.manual_pos,
     attendingCount: c.attending_count,
     returnCount: c.attending_return_count,
+    onBreak: openBreak(breaksOf.get(c.employee_id) ?? []) !== null,
   }));
-  const rows: SalesRow[] = orderFloor(members).map((r) => ({
-    employeeId: r.employeeId,
-    name: r.name,
-    avatarColor: colorOf.get(r.employeeId) ?? null,
-    state: r.state,
-    turn: r.turn,
-    arrivedLabel: formatInTimeZone(new Date(r.arrivedAt), tz, "HH:mm"),
-    walkins: r.attendingCount ?? 0,
-    returns: r.returnCount ?? 0,
-  }));
+  const rows: SalesRow[] = orderFloor(members).map((r) => {
+    const memberBreaks = breaksOf.get(r.employeeId) ?? [];
+    const open = openBreak(memberBreaks);
+    return {
+      employeeId: r.employeeId,
+      name: r.name,
+      avatarColor: colorOf.get(r.employeeId) ?? null,
+      state: r.state,
+      turn: r.turn,
+      arrivedLabel: formatInTimeZone(new Date(r.arrivedAt), tz, "HH:mm"),
+      walkins: r.attendingCount ?? 0,
+      returns: r.returnCount ?? 0,
+      breakStartedAt: open?.startedAt ?? null,
+      // closed breaks only — the open one is clocked live by the timer
+      breakPriorMinutes: breakMinutes(
+        memberBreaks.filter((b) => b.endedAt !== null),
+        nowIso,
+      ),
+    };
+  });
 
   return <SalesBoard open={Boolean(dayRow)} rows={rows} />;
 }

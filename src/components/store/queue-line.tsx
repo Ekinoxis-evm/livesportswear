@@ -17,7 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { Coffee, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type LineEntry = {
@@ -32,11 +32,13 @@ function LineRow({
   index,
   pending,
   onMakeUpNext,
+  onStartBreak,
 }: {
   entry: LineEntry;
   index: number;
   pending: boolean;
   onMakeUpNext?: () => void;
+  onStartBreak: () => void;
 }) {
   // disabled while an action is in flight — two concurrent reorders would
   // race each other and the last DB write would silently win
@@ -81,6 +83,15 @@ function LineRow({
             Make up next
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          aria-label={`${entry.name} starts a break`}
+          onClick={onStartBreak}
+        >
+          <Coffee className="size-4" />
+        </Button>
       </div>
     </div>
   );
@@ -96,11 +107,13 @@ export function QueueLine({
   pending,
   onReorder,
   onMakeUpNext,
+  onStartBreak,
 }: {
   entries: LineEntry[];
   pending: boolean;
   onReorder: (orderedIds: string[]) => Promise<boolean>;
   onMakeUpNext: (employeeId: string, name: string) => void;
+  onStartBreak: (employeeId: string, name: string) => void;
 }) {
   // Non-null while a local reorder is awaiting the server.
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
@@ -156,6 +169,7 @@ export function QueueLine({
               index={i}
               pending={pending}
               onMakeUpNext={i > 0 ? () => onMakeUpNext(e.employeeId, e.name) : undefined}
+              onStartBreak={() => onStartBreak(e.employeeId, e.name)}
             />
           ))}
         </div>

@@ -376,6 +376,51 @@ export type Database = {
           },
         ]
       }
+      floor_breaks: {
+        Row: {
+          business_date: string
+          created_at: string
+          employee_id: string
+          ended_at: string | null
+          id: string
+          location_id: string
+          started_at: string
+        }
+        Insert: {
+          business_date: string
+          created_at?: string
+          employee_id: string
+          ended_at?: string | null
+          id?: string
+          location_id: string
+          started_at?: string
+        }
+        Update: {
+          business_date?: string
+          created_at?: string
+          employee_id?: string
+          ended_at?: string | null
+          id?: string
+          location_id?: string
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_breaks_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "floor_breaks_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       floor_checkins: {
         Row: {
           arrived_at: string
@@ -737,6 +782,7 @@ export type Database = {
         Row: {
           attended_count: number
           business_date: string
+          cash_sales: number | null
           closed_at: string
           closed_by: string | null
           contact_count: number
@@ -750,6 +796,7 @@ export type Database = {
         Insert: {
           attended_count?: number
           business_date: string
+          cash_sales?: number | null
           closed_at?: string
           closed_by?: string | null
           contact_count?: number
@@ -763,6 +810,7 @@ export type Database = {
         Update: {
           attended_count?: number
           business_date?: string
+          cash_sales?: number | null
           closed_at?: string
           closed_by?: string | null
           contact_count?: number

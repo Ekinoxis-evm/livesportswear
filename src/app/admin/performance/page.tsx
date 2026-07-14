@@ -6,6 +6,7 @@ import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
 import { stampStatus, workedHours, type AttendanceStamp } from "@/lib/attendance";
+import { breakMinutes, overBreakBudget, type BreakRow } from "@/lib/breaks";
 import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
 import { formatMoney } from "@/lib/commission";
@@ -92,7 +93,7 @@ export default async function PerformancePage({
   const href = (d: string, loc = location.id) =>
     `/admin/performance?location=${loc}&date=${d}`;
 
-  const [{ data: eventRows }, { data: closeRow }, { data: checkinRows }, { data: staffRows }] =
+  const [{ data: eventRows }, { data: closeRow }, { data: checkinRows }, { data: staffRows }, { data: breakRows }] =
     await Promise.all([
       supabase
         .from("client_events")
@@ -114,6 +115,11 @@ export default async function PerformancePage({
         .eq("business_date", date)
         .order("arrived_at"),
       supabase.from("employees").select("id, name").eq("location_id", location.id),
+      supabase
+        .from("floor_breaks")
+        .select("employee_id, started_at, ended_at")
+        .eq("location_id", location.id)
+        .eq("business_date", date),
     ]);
 
   const events = (eventRows ?? []) as EventRow[];
@@ -152,6 +158,18 @@ export default async function PerformancePage({
     (sum, c) => sum + (workedHours(c.arrived_at, c.left_at) ?? 0),
     0,
   );
+
+  // Past days have no open breaks (the nightly sweep closes them), so the
+  // render-time now only matters when viewing today.
+  const breaksOf = new Map<string, BreakRow[]>();
+  for (const b of breakRows ?? []) {
+    const arr = breaksOf.get(b.employee_id) ?? [];
+    arr.push({ startedAt: b.started_at, endedAt: b.ended_at });
+    breaksOf.set(b.employee_id, arr);
+  }
+  const nowIso = new Date().toISOString();
+  const breakOf = (employeeId: string) =>
+    breakMinutes(breaksOf.get(employeeId) ?? [], nowIso);
 
   // Day's Shopify money: the close-time snapshot when the day was closed,
   // otherwise a live read (today, or a day closed before Shopify connected).
@@ -315,6 +333,7 @@ export default async function PerformancePage({
                   <TableHead>Employee</TableHead>
                   <TableHead>Entry</TableHead>
                   <TableHead>Exit</TableHead>
+                  <TableHead className="text-right">Break</TableHead>
                   <TableHead className="text-right">Hours</TableHead>
                 </TableRow>
               </TableHeader>
@@ -360,6 +379,23 @@ export default async function PerformancePage({
                         ) : (
                           <span className="text-muted-foreground">on floor</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {(() => {
+                          const bm = breakOf(c.employee_id);
+                          if (bm === 0) return "—";
+                          return (
+                            <span
+                              className={
+                                overBreakBudget(bm)
+                                  ? "text-destructive font-semibold"
+                                  : undefined
+                              }
+                            >
+                              {bm}m{overBreakBudget(bm) && " ⚑"}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {hours != null ? hours.toFixed(1) : "—"}
