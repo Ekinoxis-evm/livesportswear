@@ -71,11 +71,13 @@
   --border: #dcd6cf;
   --input: #dcd6cf;
   --ring: #1f5240;
-  --chart-1: #1f5240;
-  --chart-2: #5e9179;
-  --chart-3: #a3c4b1;
-  --chart-4: #8c8378;
-  --chart-5: #2d2926;
+  /* Categorical series slots — green leads for the brand, then hue-distinct
+     steps; ordering CVD-validated on the white card surface (dataviz skill). */
+  --chart-1: #008300;
+  --chart-2: #2a78d6;
+  --chart-3: #eda100;
+  --chart-4: #4a3aa7;
+  --chart-5: #e34948;
   --radius: 0.625rem;
   --sidebar: #16352a;
   --sidebar-foreground: #f4f0f0;
@@ -108,11 +110,12 @@
   --border: rgb(244 240 240 / 0.1);
   --input: rgb(244 240 240 / 0.14);
   --ring: #5ca987;
-  --chart-1: #5ca987;
-  --chart-2: #7fb89e;
-  --chart-3: #a3c4b1;
-  --chart-4: #a89f95;
-  --chart-5: #f4f0f0;
+  /* Same hues stepped for the dark card surface, validated as a set. */
+  --chart-1: #008300;
+  --chart-2: #3987e5;
+  --chart-3: #c98500;
+  --chart-4: #9085e9;
+  --chart-5: #e66767;
   --sidebar: #16352a;
   --sidebar-foreground: #f4f0f0;
   --sidebar-primary: #5ca987;
