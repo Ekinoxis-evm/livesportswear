@@ -4,7 +4,13 @@ import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
 import { workedHours } from "@/lib/attendance";
 import { getDaySalesCached } from "@/lib/shopify-day-cache";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { resolveDateRange, spanDays } from "@/lib/date-range";
+import { customRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
+import { getStaffSalesCached } from "@/lib/shopify-range-cache";
 import { formatMoney } from "@/lib/commission";
+import { shortDate } from "@/lib/format-date";
+import { DateRangeForm } from "@/components/shared/date-range-form";
 import {
   Card,
   CardContent,
@@ -17,7 +23,12 @@ import {
   type CloserEntry,
 } from "@/components/store/close-day-dialog";
 
-export default async function StorePerformancePage() {
+export default async function StorePerformancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const sp = await searchParams;
   const { locationId } = await requireStore();
   const service = createServiceClient();
 
@@ -100,6 +111,34 @@ export default async function StorePerformancePage() {
     .map((e) => ({ id: e.id, name: e.name }));
 
   const daySales = await getDaySalesCached(bd, tz);
+
+  // Range section only fetches when the kiosk asked for a range — the default
+  // 45s auto-refresh loop must not add Shopify calls.
+  const hasRange = Boolean(sp.from || sp.to);
+  const { from, to } = resolveDateRange(sp, bd);
+  let rangeRows: { name: string; amount: number }[] | null = null;
+  if (hasRange && isShopifyConfigured()) {
+    const range = customRangeInTz(from, to, tz);
+    const [entries, { data: mapped }] = await Promise.all([
+      getStaffSalesCached(range.start, range.endExclusive),
+      service
+        .from("employees")
+        .select("name, shopify_staff_id")
+        .eq("location_id", locationId)
+        .eq("active", true)
+        .not("shopify_staff_id", "is", null),
+    ]);
+    if (entries) {
+      const byStaff = new Map(entries);
+      rangeRows = (mapped ?? [])
+        .map((e) => ({
+          name: e.name,
+          amount: byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ?? 0,
+        }))
+        .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
+    }
+  }
+  const rangeTotal = (rangeRows ?? []).reduce((a, r) => a + r.amount, 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -208,6 +247,50 @@ export default async function StorePerformancePage() {
               </table>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sales for a range</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <DateRangeForm from={from} to={to} action="/store/performance" />
+          {hasRange &&
+            (rangeRows === null ? (
+              <p className="text-muted-foreground text-sm">
+                Sales are unavailable right now.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm">
+                  <span className="text-muted-foreground">
+                    {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d:
+                  </span>{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatMoney(rangeTotal, daySales?.currency ?? "USD")}
+                  </span>
+                </p>
+                <ul className="flex flex-col divide-y">
+                  {rangeRows.map((r, i) => (
+                    <li
+                      key={r.name}
+                      className="flex items-center justify-between py-1.5 text-sm"
+                    >
+                      <span>
+                        <span className="text-muted-foreground mr-2 tabular-nums">
+                          {i + 1}.
+                        </span>
+                        {r.name}
+                      </span>
+                      <span className="font-medium tabular-nums">
+                        {formatMoney(r.amount, daySales?.currency ?? "USD")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
         </CardContent>
       </Card>
 

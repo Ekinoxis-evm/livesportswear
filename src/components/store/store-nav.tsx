@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Hand, UserCheck, ChartColumn } from "lucide-react";
+import { Hand, UserCheck, ChartColumn, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
   { href: "/store", label: "Sales", icon: Hand },
   { href: "/store/checkin", label: "Check-in", icon: UserCheck },
   { href: "/store/performance", label: "Performance", icon: ChartColumn },
+  { href: "/store/rewards", label: "Rewards", icon: Trophy },
 ];
 
 export function StoreNav() {

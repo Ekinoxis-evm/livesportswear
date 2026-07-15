@@ -20,6 +20,7 @@ import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales, type DaySales } from "@/lib/shopify";
 import { monthRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
 import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
+import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -158,7 +159,10 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <SyncSalesButton />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
         <Card>

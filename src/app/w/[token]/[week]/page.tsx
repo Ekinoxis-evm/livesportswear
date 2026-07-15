@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { unstable_cache } from "next/cache";
 import { ChevronLeft, ChevronRight, Crown, Trophy } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
@@ -8,26 +7,16 @@ import { weekStart, weekDays, addDays, isoWeekday, formatWeekRange } from "@/lib
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { SHIFT_SLOTS, templateForSlot, shiftMatchesSlot } from "@/lib/shift-slots";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { fetchStaffSales } from "@/lib/shopify";
-import { weekRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
+import { normalizeStaffId } from "@/lib/shopify-range";
+import { getShareWeekSales } from "@/lib/share-sales-cache";
 import { formatMoney } from "@/lib/commission";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
+import { RefreshSalesButton } from "@/components/shared/refresh-sales-button";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hhmm = (t: string) => t.slice(0, 5);
-
-// One Shopify read per (location, week) per 10 minutes — this page is public.
-const cachedWeekSales = unstable_cache(
-  async (monday: string, tz: string): Promise<[string, number][]> => {
-    const range = weekRangeInTz(monday, tz);
-    const { totals } = await fetchStaffSales(range.start, range.endExclusive);
-    return [...totals.entries()];
-  },
-  ["share-week-sales"],
-  { revalidate: 600 },
-);
 
 // Same fallback colors as the admin board's slot rows.
 const SLOT_COLOR: Record<string, string> = {
@@ -119,8 +108,8 @@ export default async function StoreWeekPage({
   let weekRanking: { name: string; amount: number }[] = [];
   if (schedule && isShopifyConfigured()) {
     try {
-      const [entries, { data: emps }] = await Promise.all([
-        cachedWeekSales(monday, loc.timezone),
+      const [{ entries }, { data: emps }] = await Promise.all([
+        getShareWeekSales(loc.id, monday, loc.timezone),
         supabase
           .from("employees")
           .select("name, shopify_staff_id")
@@ -306,6 +295,7 @@ export default async function StoreWeekPage({
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-sm font-semibold">
                 <Trophy className="size-4 text-amber-500" /> Sales this week
+                <RefreshSalesButton token={token} week={monday} />
               </span>
               <span className="text-sm font-semibold tabular-nums">
                 {formatMoney(weekTotal)}
