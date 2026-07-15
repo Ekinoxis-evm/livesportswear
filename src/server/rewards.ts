@@ -4,11 +4,34 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { GARMENT_KINDS } from "@/lib/rewards";
 import { type ActionResult, dbError, firstError } from "@/server/shared";
 
+const prizeItemSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("cash"),
+    amount: z.coerce.number().positive("Cash needs an amount.").max(1_000_000),
+    requires_goal: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("clothing"),
+    garments: z.array(z.enum(GARMENT_KINDS)).min(1, "Pick at least one garment."),
+    qty: z.coerce.number().int().min(1).max(20),
+    requires_goal: z.boolean(),
+  }),
+  z.object({
+    type: z.literal("other"),
+    label: z.string().trim().min(1, "Describe the prize.").max(120),
+    requires_goal: z.boolean(),
+  }),
+]);
+
 const prizeSchema = z.object({
-  prize: z.string().trim().min(1, "Every place needs a prize.").max(120),
   min_sales: z.coerce.number().min(0).nullable(),
+  items: z
+    .array(prizeItemSchema)
+    .min(1, "Every place needs at least one prize item.")
+    .max(8),
 });
 
 const contestSchema = z

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import {
   GateProgress,
+  MyPlaceProgress,
   ResultsBoard,
   StandingsBoard,
 } from "@/components/rewards/standings";
@@ -112,6 +113,11 @@ export default async function PortalRewardsPage() {
                     threshold={Number(c.store_threshold)}
                     currency={currency}
                   />
+                  <MyPlaceProgress
+                    standings={standings}
+                    employeeId={employee.id}
+                    currency={currency}
+                  />
                   <StandingsBoard
                     standings={standings}
                     currency={currency}
@@ -154,7 +160,7 @@ export default async function PortalRewardsPage() {
                 <CardContent className="flex flex-col gap-3">
                   {mine?.won && (
                     <p className="text-primary text-sm font-semibold">
-                      You won: {mine.prize} 🎉
+                      You won: {mine.prizes.join(" + ")} 🎉
                     </p>
                   )}
                   {results ? (

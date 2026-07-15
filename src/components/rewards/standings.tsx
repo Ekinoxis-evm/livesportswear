@@ -1,6 +1,6 @@
 import { Trophy, Medal, Award, Lock, Check } from "lucide-react";
 import { formatMoney } from "@/lib/commission";
-import type { ContestResults, ContestStandings } from "@/lib/rewards";
+import { prizeLabel, type ContestResults, type ContestStandings } from "@/lib/rewards";
 import { cn } from "@/lib/utils";
 
 const PLACE_ICONS = [Trophy, Medal, Award];
@@ -68,40 +68,74 @@ export function StandingsBoard({
           <li
             key={r.employeeId}
             className={cn(
-              "flex items-center justify-between gap-3 py-2 text-sm",
+              "flex items-start justify-between gap-3 py-2 text-sm",
               me && "font-semibold",
             )}
           >
-            <span className="flex items-center gap-2">
-              {place ? (
-                <PlaceIcon place={r.place} />
-              ) : (
-                <span className="text-muted-foreground w-4 text-center tabular-nums">
-                  {r.place}
-                </span>
-              )}
-              {r.name}
-              {me && <span className="text-primary text-xs">(you)</span>}
-            </span>
-            <span className="flex items-center gap-3">
-              {place && (
-                <span
-                  className={cn(
-                    "text-xs",
-                    place.winning ? "text-primary" : "text-muted-foreground line-through",
-                  )}
-                >
-                  {place.prize}
-                  {place.holder && !place.thresholdMet && place.min_sales !== null && (
-                    <span className="text-muted-foreground ml-1 no-underline">
-                      (needs {formatMoney(place.min_sales, currency)})
-                    </span>
-                  )}
-                </span>
-              )}
-              <span className="font-medium tabular-nums">
-                {formatMoney(r.amount, currency)}
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="flex items-center gap-2">
+                {place ? (
+                  <PlaceIcon place={r.place} />
+                ) : (
+                  <span className="text-muted-foreground w-4 text-center tabular-nums">
+                    {r.place}
+                  </span>
+                )}
+                {r.name}
+                {me && <span className="text-primary text-xs">(you)</span>}
               </span>
+              {place && (
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6">
+                  {place.items.map((item, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "flex items-center gap-1 text-xs",
+                        item.unlocked ? "text-primary" : "text-muted-foreground",
+                      )}
+                    >
+                      {item.unlocked ? (
+                        <Check className="size-3" />
+                      ) : (
+                        <Lock className="size-3" />
+                      )}
+                      {prizeLabel(item, currency)}
+                      {!item.unlocked && (
+                        <span className="text-muted-foreground">
+                          (
+                          {place.holder && !place.thresholdMet && place.min_sales !== null
+                            ? `needs ${formatMoney(place.min_sales, currency)}`
+                            : "needs store goal"}
+                          )
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </span>
+              )}
+              {place &&
+                place.holder &&
+                !place.thresholdMet &&
+                place.min_sales !== null &&
+                place.min_sales > 0 && (
+                  <span className="flex items-center gap-2 pl-6">
+                    <span className="bg-muted h-1.5 w-24 overflow-hidden rounded-full">
+                      <span
+                        className="bg-primary block h-full rounded-full"
+                        style={{
+                          width: `${Math.round(Math.min(1, place.holder.amount / place.min_sales) * 100)}%`,
+                        }}
+                      />
+                    </span>
+                    <span className="text-muted-foreground text-xs tabular-nums">
+                      {formatMoney(Math.max(0, place.min_sales - place.holder.amount), currency)}{" "}
+                      to the minimum
+                    </span>
+                  </span>
+                )}
+            </div>
+            <span className="font-medium tabular-nums">
+              {formatMoney(r.amount, currency)}
             </span>
           </li>
         );
@@ -155,7 +189,9 @@ export function ResultsBoard({
                 {me && <span className="text-primary text-xs">(you)</span>}
               </span>
               <span className="flex items-center gap-3">
-                {r.won && <span className="text-primary text-xs">{r.prize}</span>}
+                {r.won && (
+                  <span className="text-primary text-xs">{r.prizes.join(" + ")}</span>
+                )}
                 <span className="font-medium tabular-nums">
                   {formatMoney(r.amount, currency)}
                 </span>
@@ -164,6 +200,52 @@ export function ResultsBoard({
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The employee's own second bar: distance to the minimum attached to the
+ * place they currently hold (the store-goal bar is GateProgress).
+ */
+export function MyPlaceProgress({
+  standings,
+  employeeId,
+  currency,
+}: {
+  standings: ContestStandings;
+  employeeId: string;
+  currency: string;
+}) {
+  const me = standings.ranking.find((r) => r.employeeId === employeeId);
+  if (!me) return null;
+  const place = standings.places.find((p) => p.place === me.place);
+  if (!place || place.min_sales === null || place.min_sales <= 0) return null;
+
+  const met = me.amount >= place.min_sales;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-1.5">
+          {met ? (
+            <Check className="text-primary size-4" />
+          ) : (
+            <Lock className="text-muted-foreground size-4" />
+          )}
+          Your minimum for {me.place === 1 ? "1st" : me.place === 2 ? "2nd" : me.place === 3 ? "3rd" : `${me.place}th`} place
+        </span>
+        <span className="text-muted-foreground tabular-nums">
+          {met
+            ? "done"
+            : `${formatMoney(place.min_sales - me.amount, currency)} to go`}
+        </span>
+      </div>
+      <div className="bg-muted h-2 overflow-hidden rounded-full">
+        <div
+          className="bg-primary h-full rounded-full"
+          style={{ width: `${Math.round(Math.min(1, me.amount / place.min_sales) * 100)}%` }}
+        />
+      </div>
     </div>
   );
 }
