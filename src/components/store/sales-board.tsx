@@ -3,11 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { LogIn, Hand, Undo2, Plus } from "lucide-react";
+import { LogIn, Hand, Undo2, Plus, RotateCcw } from "lucide-react";
 import {
   storeOpenDay,
   storeTakeClient,
   storeStartReturn,
+  storeUndoTake,
   storeSetAvailable,
   storeMakeUpNext,
   storeReorderQueue,
@@ -224,6 +225,42 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 <Plus className="size-5" />
                 <span className="ml-1 hidden sm:inline">1 client</span>
               </Button>
+            </div>
+            {/* Mis-tap escape hatch: closes one client as if it never
+                happened — no event recorded, no turn burned. */}
+            <div className="flex gap-2">
+              {walkins > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  disabled={pending}
+                  onClick={() =>
+                    run(
+                      storeUndoTake(r.employeeId, "walkin"),
+                      "Removed — nothing recorded.",
+                    )
+                  }
+                >
+                  <RotateCcw className="mr-1 size-4" /> Undo client
+                </Button>
+              )}
+              {r.returns > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  disabled={pending}
+                  onClick={() =>
+                    run(
+                      storeUndoTake(r.employeeId, "return"),
+                      "Removed — nothing recorded.",
+                    )
+                  }
+                >
+                  <RotateCcw className="mr-1 size-4" /> Undo return
+                </Button>
+              )}
             </div>
           </div>
         );
