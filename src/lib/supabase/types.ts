@@ -629,6 +629,53 @@ export type Database = {
           },
         ]
       }
+      sales_contests: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          location_id: string
+          name: string
+          prizes: Json
+          results: Json | null
+          start_date: string
+          store_threshold: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          location_id: string
+          name: string
+          prizes?: Json
+          results?: Json | null
+          start_date: string
+          store_threshold?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          location_id?: string
+          name?: string
+          prizes?: Json
+          results?: Json | null
+          start_date?: string
+          store_threshold?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_contests_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       schedules: {
         Row: {
           created_at: string

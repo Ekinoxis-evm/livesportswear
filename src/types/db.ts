@@ -24,6 +24,7 @@ export type AuditLog = Tables<"audit_log">;
 export type ClientEvent = Tables<"client_events">;
 export type StoreDayClose = Tables<"store_day_closes">;
 export type StoreGoal = Tables<"store_goals">;
+export type SalesContest = Tables<"sales_contests">;
 export type AdminLocation = Tables<"admin_locations">;
 export type FloorCheckin = Tables<"floor_checkins">;
 export type FloorDay = Tables<"floor_days">;

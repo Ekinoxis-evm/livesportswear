@@ -4,6 +4,7 @@ import {
   monthRangeInTz,
   dayRangeInTz,
   weekRangeInTz,
+  customRangeInTz,
   normalizeStaffId,
 } from "@/lib/shopify-range";
 import { weekdayName } from "@/lib/weekdays";
@@ -53,6 +54,23 @@ describe("weekRangeInTz", () => {
     const r = weekRangeInTz("2026-07-06", "America/New_York");
     expect(r.start).toBe("2026-07-06T04:00:00.000Z");
     expect(r.endExclusive).toBe("2026-07-13T04:00:00.000Z");
+  });
+});
+
+describe("customRangeInTz", () => {
+  it("spans an inclusive range in the store's timezone", () => {
+    const r = customRangeInTz("2026-07-01", "2026-07-14", "America/New_York");
+    expect(r.start).toBe("2026-07-01T04:00:00.000Z");
+    expect(r.endExclusive).toBe("2026-07-15T04:00:00.000Z");
+  });
+  it("treats from == to as a single day", () => {
+    const r = customRangeInTz("2026-07-07", "2026-07-07", "America/New_York");
+    expect(r).toEqual(dayRangeInTz("2026-07-07", "America/New_York"));
+  });
+  it("crosses months and DST transitions", () => {
+    const r = customRangeInTz("2026-10-25", "2026-11-05", "America/New_York");
+    expect(r.start).toBe("2026-10-25T04:00:00.000Z"); // EDT
+    expect(r.endExclusive).toBe("2026-11-06T05:00:00.000Z"); // EST after Nov 1
   });
 });
 

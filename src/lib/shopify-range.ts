@@ -56,6 +56,21 @@ export function dayRangeInTz(
   };
 }
 
+/** A store-local inclusive [fromDate, toDate] span as UTC ISO [start, endExclusive). */
+export function customRangeInTz(
+  fromDate: string,
+  toDate: string,
+  tz: string,
+): { start: string; endExclusive: string } {
+  const d = new Date(`${toDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  const next = d.toISOString().slice(0, 10);
+  return {
+    start: fromZonedTime(`${fromDate}T00:00:00`, tz).toISOString(),
+    endExclusive: fromZonedTime(`${next}T00:00:00`, tz).toISOString(),
+  };
+}
+
 /**
  * Canonical staff id: the numeric tail. REST gives numeric user_id; GraphQL
  * gives gid://shopify/StaffMember/<n> — mappings must compare equal either way.

@@ -27,6 +27,7 @@ import {
 import { CommissionConfigForm } from "@/components/commission/config-form";
 import { monthLabel } from "@/lib/format-date";
 import { StoreMonthForm, type GoalsByLocation } from "@/components/commission/store-month-form";
+import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 
 export default async function CommissionPage() {
   const supabase = await createServerClient();
@@ -93,12 +94,15 @@ export default async function CommissionPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sales &amp; commission</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Monthly goals and commission tiers per store, and this month&apos;s sales
           ({monthLabel(month)}).
         </p>
+        </div>
+        <SyncSalesButton />
       </div>
 
       <Card>

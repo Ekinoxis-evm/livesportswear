@@ -3,12 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  syncMonthlySales,
-  listShopifyStaff,
-  setShopifyStaffId,
-} from "@/server/shopify";
+import { listShopifyStaff, setShopifyStaffId } from "@/server/shopify";
 import { Button } from "@/components/ui/button";
+import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 import {
   Select,
   SelectContent,
@@ -28,7 +25,6 @@ export function ShopifyPanel({
   employees: Emp[];
 }) {
   const router = useRouter();
-  const [syncing, setSyncing] = useState(false);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [staff, setStaff] = useState<Staff[] | null>(null);
 
@@ -45,21 +41,6 @@ export function ShopifyPanel({
         </p>
       </div>
     );
-  }
-
-  async function sync() {
-    setSyncing(true);
-    const res = await syncMonthlySales();
-    setSyncing(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success(
-      `Synced ${res.updated} employee${res.updated === 1 ? "" : "s"}` +
-        (res.unmatched ? ` · ${res.unmatched} unmatched staff` : ""),
-    );
-    router.refresh();
   }
 
   async function loadStaff() {
@@ -96,9 +77,7 @@ export function ShopifyPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-2">
-        <Button size="sm" onClick={sync} disabled={syncing}>
-          {syncing ? "Syncing…" : "Sync this month"}
-        </Button>
+        <SyncSalesButton label="Sync this month" />
         <Button
           size="sm"
           variant="outline"

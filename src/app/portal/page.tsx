@@ -11,6 +11,11 @@ import {
   asTiers,
   resolveTiers,
 } from "@/lib/commission";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { resolveDateRange, spanDays } from "@/lib/date-range";
+import { customRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
+import { getStaffSalesCached } from "@/lib/shopify-range-cache";
+import { shortDate } from "@/lib/format-date";
 import {
   Card,
   CardContent,
@@ -18,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DateRangeForm } from "@/components/shared/date-range-form";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -28,7 +34,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default async function PortalPage() {
+export default async function PortalPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const sp = await searchParams;
   const { employee } = await requireEmployee();
   const supabase = await createServerClient();
 
@@ -95,6 +106,19 @@ export default async function PortalPage() {
   const rank =
     (peerSales ?? []).filter((s) => Number(s.amount) > mySales).length + 1;
 
+  // Personal custom-range sales — fetched only when a range was requested.
+  const hasRange = Boolean(sp.from || sp.to);
+  const { from, to } = resolveDateRange(sp, today);
+  const myStaffId = employee.shopify_staff_id
+    ? normalizeStaffId(employee.shopify_staff_id)
+    : null;
+  let rangeSales: number | null = null;
+  if (hasRange && myStaffId && isShopifyConfigured()) {
+    const range = customRangeInTz(from, to, location?.timezone ?? "UTC");
+    const entries = await getStaffSalesCached(range.start, range.endExclusive);
+    if (entries) rangeSales = new Map(entries).get(myStaffId) ?? 0;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -152,6 +176,38 @@ export default async function PortalPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">My sales — custom range</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {myStaffId === null ? (
+            <p className="text-muted-foreground text-sm">
+              Ask your admin to link your Shopify profile to see your sales here.
+            </p>
+          ) : (
+            <>
+              <DateRangeForm from={from} to={to} action="/portal" />
+              {hasRange &&
+                (rangeSales === null ? (
+                  <p className="text-muted-foreground text-sm">
+                    Sales are unavailable right now.
+                  </p>
+                ) : (
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">
+                      {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d:
+                    </span>{" "}
+                    <span className="font-semibold tabular-nums">
+                      {formatMoney(rangeSales, currency)}
+                    </span>
+                  </p>
+                ))}
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
