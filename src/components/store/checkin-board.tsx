@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LogIn, LogOut, Lock } from "lucide-react";
 import { storeCheckIn, storeCheckOut } from "@/server/store-floor";
+import { overBreakBudget } from "@/lib/breaks";
 import { PinPad } from "@/components/store/pin-pad";
 import { CameraCapture } from "@/components/store/camera-capture";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ export type CheckinRow = {
   arrivedLabel: string;
   leftLabel: string | null;
   hours: number | null;
+  breakMinutes: number;
   entryPhotoUrl: string | null;
   exitPhotoUrl: string | null;
 };
@@ -142,6 +144,17 @@ export function CheckinBoard({
                       )}
                       {r.hours != null && (
                         <span className="ml-2 font-medium">{r.hours}h</span>
+                      )}
+                      {r.breakMinutes > 0 && (
+                        <span
+                          className={
+                            overBreakBudget(r.breakMinutes)
+                              ? "text-destructive ml-2 font-semibold"
+                              : "ml-2"
+                          }
+                        >
+                          · {r.breakMinutes}m break
+                        </span>
                       )}
                     </span>
                     {!r.leftLabel && (

@@ -17,6 +17,7 @@ export type Location = Tables<"locations">;
 export type Employee = Tables<"employees">;
 export type ShiftTemplate = Tables<"shift_templates">;
 export type Schedule = Tables<"schedules">;
+export type FloorBreak = Tables<"floor_breaks">;
 export type Shift = Tables<"shifts">;
 export type TimeOffRequest = Tables<"time_off_requests">;
 export type AuditLog = Tables<"audit_log">;

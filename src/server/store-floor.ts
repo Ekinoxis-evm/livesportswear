@@ -14,6 +14,8 @@ import {
   doTakeClient,
   doClearAttending,
   doFinishCustomer,
+  doStartBreak,
+  doEndBreak,
 } from "@/server/floor-core";
 import {
   closeDayFor,
@@ -26,8 +28,6 @@ import { finishSchema, type FinishInput } from "@/lib/finish-schema";
 import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
-
-export type { FinishInput };
 
 type StoreEmployee = {
   id: string;
@@ -232,6 +232,57 @@ export async function storeSetAvailable(employeeId: string): Promise<ActionResul
   return res;
 }
 
+/**
+ * Start a break: PIN-confirmed (break time is reviewed data). Rejected while
+ * attending — finish or hand off the client first.
+ */
+export async function storeStartBreak(formData: FormData): Promise<ActionResult> {
+  const parsed = parseStampForm(formData);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
+  const { locationId, service, bd } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, parsed.data.employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+  const bad = pinError(emp, parsed.data.pin);
+  if (bad) return { ok: false, error: bad };
+
+  const { data: row } = await service
+    .from("floor_checkins")
+    .select("left_at, status, attending_count, attending_return_count")
+    .eq("location_id", locationId)
+    .eq("business_date", bd)
+    .eq("employee_id", emp.id)
+    .maybeSingle();
+  if (!row || row.left_at) return { ok: false, error: "They're not on the floor." };
+  if (row.status === "attending" || row.attending_count + row.attending_return_count > 0) {
+    return { ok: false, error: "They're with a client — finish first." };
+  }
+
+  const res = await doStartBreak(service, locationId, bd, emp.id, new Date().toISOString());
+  if (res.ok) {
+    revalidatePath("/store", "layout");
+  }
+  return res;
+}
+
+/** End a break: PIN-confirmed; the member re-enters at their former position. */
+export async function storeEndBreak(formData: FormData): Promise<ActionResult> {
+  const parsed = parseStampForm(formData);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
+  const { locationId, service, bd } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, parsed.data.employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+  const bad = pinError(emp, parsed.data.pin);
+  if (bad) return { ok: false, error: bad };
+
+  const res = await doEndBreak(service, locationId, bd, emp.id, new Date().toISOString());
+  if (res.ok) {
+    revalidatePath("/store", "layout");
+  }
+  return res;
+}
+
 /** Move an employee to the front of the line (manual reorder). */
 export async function storeMakeUpNext(employeeId: string): Promise<ActionResult> {
   const { locationId, service, bd } = await storeCtx();
@@ -276,18 +327,30 @@ export async function storeReorderQueue(orderedIds: string[]): Promise<ActionRes
   if (!parsed.success) return { ok: false, error: "Invalid input." };
 
   const { locationId, service, bd } = await storeCtx();
-  const { data: rows } = await service
-    .from("floor_checkins")
-    .select("employee_id, status, attending_count, attending_return_count")
-    .eq("location_id", locationId)
-    .eq("business_date", bd)
-    .is("left_at", null);
+  const [{ data: rows }, { data: openBreaks }] = await Promise.all([
+    service
+      .from("floor_checkins")
+      .select("employee_id, status, attending_count, attending_return_count")
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .is("left_at", null),
+    service
+      .from("floor_breaks")
+      .select("employee_id")
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .is("ended_at", null),
+  ]);
+  // On-break members aren't in the visible line, so they can't be in the
+  // submitted order — exclude them from the expected set too.
+  const onBreak = new Set((openBreaks ?? []).map((b) => b.employee_id));
   const available = new Set(
     (rows ?? [])
       .filter(
         (r) =>
           r.attending_count + r.attending_return_count === 0 &&
-          r.status !== "attending",
+          r.status !== "attending" &&
+          !onBreak.has(r.employee_id),
       )
       .map((r) => r.employee_id),
   );

@@ -70,7 +70,7 @@ export async function doCheckIn(
   return { ok: true };
 }
 
-/** Take an employee off the floor (shift ended). */
+/** Take an employee off the floor (shift ended). Auto-ends an open break. */
 export async function doCheckOut(
   service: Service,
   locationId: string,
@@ -93,6 +93,51 @@ export async function doCheckOut(
     .eq("business_date", bd)
     .eq("employee_id", employeeId);
   if (error) return { ok: false, error: error.message };
+
+  // Leaving the floor ends the break too; zero rows matched is fine.
+  await doEndBreak(service, locationId, bd, employeeId, now);
+  return { ok: true };
+}
+
+/** Start a break — the partial unique index makes a double tap a clean error. */
+export async function doStartBreak(
+  service: Service,
+  locationId: string,
+  bd: string,
+  employeeId: string,
+  now: string,
+): Promise<ActionResult> {
+  const { error } = await service.from("floor_breaks").insert({
+    location_id: locationId,
+    business_date: bd,
+    employee_id: employeeId,
+    started_at: now,
+  });
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "Already on a break." };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/** End the open break at `at`. Zero matched rows means there wasn't one. */
+export async function doEndBreak(
+  service: Service,
+  locationId: string,
+  bd: string,
+  employeeId: string,
+  at: string,
+): Promise<ActionResult> {
+  const { data, error } = await service
+    .from("floor_breaks")
+    .update({ ended_at: at })
+    .eq("location_id", locationId)
+    .eq("business_date", bd)
+    .eq("employee_id", employeeId)
+    .is("ended_at", null)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: "Not on a break." };
   return { ok: true };
 }
 

@@ -69,6 +69,28 @@ export async function closeStaleCheckins(): Promise<StaleCheckinsResult> {
       if (upErr) return { ok: false, error: upErr.message };
       closed += 1;
     }
+
+    // Any open break from a previous day ends with its day. The CHECK
+    // constraint forbids ended_at < started_at, so clamp per break.
+    const { data: staleBreaks, error: brErr } = await service
+      .from("floor_breaks")
+      .select("id, started_at, business_date")
+      .eq("location_id", loc.id)
+      .is("ended_at", null)
+      .lt("business_date", today);
+    if (brErr) return { ok: false, error: brErr.message };
+    for (const b of staleBreaks ?? []) {
+      const endOfDay = missedExitInstant(b.business_date, loc.timezone, null, b.started_at);
+      const endedAt =
+        new Date(endOfDay).getTime() >= new Date(b.started_at).getTime()
+          ? endOfDay
+          : b.started_at;
+      const { error: endErr } = await service
+        .from("floor_breaks")
+        .update({ ended_at: endedAt })
+        .eq("id", b.id);
+      if (endErr) return { ok: false, error: endErr.message };
+    }
   }
 
   return { ok: true, closed };

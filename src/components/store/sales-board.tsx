@@ -11,14 +11,18 @@ import {
   storeSetAvailable,
   storeMakeUpNext,
   storeReorderQueue,
+  storeStartBreak,
+  storeEndBreak,
   storeFinish,
-  type FinishInput,
 } from "@/server/store-floor";
+import type { FinishInput } from "@/lib/finish-schema";
 import {
   FinishDialog,
   type FinishTarget,
 } from "@/components/store/finish-dialog";
 import { QueueLine } from "@/components/store/queue-line";
+import { BreakTimer } from "@/components/store/break-timer";
+import { PinPad } from "@/components/store/pin-pad";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -33,21 +37,27 @@ export type SalesRow = {
   employeeId: string;
   name: string;
   avatarColor: string | null;
-  state: "up" | "waiting" | "attending";
+  state: "up" | "waiting" | "attending" | "break";
   turn: number | null;
   arrivedLabel: string;
   walkins: number; // open walk-in customers
   returns: number; // open returns/exchanges
+  breakStartedAt: string | null; // open break, if any
+  breakPriorMinutes: number; // closed breaks earlier today
 };
+
+type BreakPinFlow = { kind: "start" | "end"; id: string; name: string } | null;
 
 export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [finishTarget, setFinishTarget] = useState<FinishTarget | null>(null);
   const [returnPicker, setReturnPicker] = useState(false);
+  const [breakPin, setBreakPin] = useState<BreakPinFlow>(null);
 
-  const line = rows.filter((r) => r.state !== "attending");
+  const line = rows.filter((r) => r.state === "up" || r.state === "waiting");
   const attending = rows.filter((r) => r.state === "attending");
+  const onBreak = rows.filter((r) => r.state === "break");
   const up = line[0] ?? null;
   // A return shouldn't burn the up-next's turn — the LAST in line is suggested.
   const returnSuggestion = line[line.length - 1] ?? null;
@@ -74,6 +84,20 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
       });
     });
   }
+
+  const submitBreakPin = (pin: string) => {
+    if (!breakPin) return;
+    const formData = new FormData();
+    formData.set("employeeId", breakPin.id);
+    formData.set("pin", pin);
+    const action = breakPin.kind === "start" ? storeStartBreak : storeEndBreak;
+    void run(
+      action(formData),
+      breakPin.kind === "start"
+        ? `${breakPin.name} is on break.`
+        : `${breakPin.name} is back in the line.`,
+    ).then(() => setBreakPin(null));
+  };
 
   const submitFinish = (employeeId: string, input: FinishInput) => {
     run(
@@ -205,6 +229,36 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         );
       })}
 
+      {/* On break — live timers, PIN to come back */}
+      {onBreak.map((r) => (
+        <div
+          key={r.employeeId}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-sky-500/40 bg-sky-500/10 p-4"
+        >
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-600">
+              On break
+            </span>
+            <span className="text-xl font-bold">{r.name}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {r.breakStartedAt && (
+              <BreakTimer
+                startedAt={r.breakStartedAt}
+                priorMinutes={r.breakPriorMinutes}
+              />
+            )}
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setBreakPin({ kind: "end", id: r.employeeId, name: r.name })}
+            >
+              Back (PIN)
+            </Button>
+          </div>
+        </div>
+      ))}
+
       {/* The line — press and drag to reorder */}
       {line.length > 0 && (
         <Card>
@@ -219,6 +273,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
               pending={pending}
               onReorder={(ids) => run(storeReorderQueue(ids), "Line reordered.")}
               onMakeUpNext={(id, name) => run(storeMakeUpNext(id), `${name} is up next.`)}
+              onStartBreak={(id, name) => setBreakPin({ kind: "start", id, name })}
             />
             {attending.map((r) => (
               <div
@@ -262,6 +317,19 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         pending={pending}
         onSubmit={submitFinish}
         onClose={() => setFinishTarget(null)}
+      />
+
+      <PinPad
+        open={breakPin !== null}
+        title={
+          breakPin?.kind === "start"
+            ? `${breakPin.name} — start break`
+            : `${breakPin?.name ?? ""} — back from break`
+        }
+        subtitle="Enter your 4-digit PIN"
+        pending={pending}
+        onSubmit={submitBreakPin}
+        onClose={() => setBreakPin(null)}
       />
 
       <Dialog

@@ -3,6 +3,7 @@ import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { workedHours } from "@/lib/attendance";
+import { breakMinutes, type BreakRow } from "@/lib/breaks";
 import {
   CheckinBoard,
   type CheckinRow,
@@ -21,20 +22,26 @@ export default async function StoreCheckinPage() {
   const tz = loc?.timezone ?? "UTC";
   const bd = businessDate(tz);
 
-  const [{ data: checkinRows }, { data: employees }] = await Promise.all([
-    service
-      .from("floor_checkins")
-      .select("employee_id, arrived_at, left_at, entry_photo_path, exit_photo_path")
-      .eq("location_id", locationId)
-      .eq("business_date", bd)
-      .order("arrived_at"),
-    service
-      .from("employees")
-      .select("id, name, avatar_color")
-      .eq("location_id", locationId)
-      .eq("active", true)
-      .order("name"),
-  ]);
+  const [{ data: checkinRows }, { data: employees }, { data: breakRows }] =
+    await Promise.all([
+      service
+        .from("floor_checkins")
+        .select("employee_id, arrived_at, left_at, entry_photo_path, exit_photo_path")
+        .eq("location_id", locationId)
+        .eq("business_date", bd)
+        .order("arrived_at"),
+      service
+        .from("employees")
+        .select("id, name, avatar_color")
+        .eq("location_id", locationId)
+        .eq("active", true)
+        .order("name"),
+      service
+        .from("floor_breaks")
+        .select("employee_id, started_at, ended_at")
+        .eq("location_id", locationId)
+        .eq("business_date", bd),
+    ]);
 
   const roster = employees ?? [];
   const nameOf = new Map(roster.map((e) => [e.id, e.name]));
@@ -54,6 +61,14 @@ export default async function StoreCheckinPage() {
     }
   }
 
+  const breaksOf = new Map<string, BreakRow[]>();
+  for (const b of breakRows ?? []) {
+    const arr = breaksOf.get(b.employee_id) ?? [];
+    arr.push({ startedAt: b.started_at, endedAt: b.ended_at });
+    breaksOf.set(b.employee_id, arr);
+  }
+  const nowIso = new Date().toISOString();
+
   const checkins: CheckinRow[] = (checkinRows ?? []).map((c) => ({
     employeeId: c.employee_id,
     name: nameOf.get(c.employee_id) ?? "—",
@@ -61,6 +76,7 @@ export default async function StoreCheckinPage() {
     arrivedLabel: formatInTimeZone(new Date(c.arrived_at), tz, "HH:mm"),
     leftLabel: c.left_at ? formatInTimeZone(new Date(c.left_at), tz, "HH:mm") : null,
     hours: workedHours(c.arrived_at, c.left_at),
+    breakMinutes: breakMinutes(breaksOf.get(c.employee_id) ?? [], nowIso),
     entryPhotoUrl: c.entry_photo_path ? (signedOf.get(c.entry_photo_path) ?? null) : null,
     exitPhotoUrl: c.exit_photo_path ? (signedOf.get(c.exit_photo_path) ?? null) : null,
   }));
