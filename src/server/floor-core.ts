@@ -1,5 +1,14 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  afterClose,
+  afterTake,
+  canClose,
+  openOfKind,
+  rotationAfterFinish,
+  statusAfter,
+  type FloorStatus,
+} from "@/lib/floor-state";
 import type { TablesUpdate } from "@/types/db";
 import type { ActionResult } from "@/server/shared";
 
@@ -70,7 +79,12 @@ export async function doCheckIn(
   return { ok: true };
 }
 
-/** Take an employee off the floor (shift ended). Auto-ends an open break. */
+/**
+ * Take an employee off the floor (shift ended). Auto-ends an open break.
+ * Refuses while they hold open customers — a payroll stamp must not silently
+ * drop a client; the rep is at the kiosk and can finish, undo, or clear.
+ * (The stale-checkin cron closes forgotten rows with its own update.)
+ */
 export async function doCheckOut(
   service: Service,
   locationId: string,
@@ -79,6 +93,16 @@ export async function doCheckOut(
   now: string,
   photoPath: string | null = null,
 ): Promise<ActionResult> {
+  const cur = await readCounts(service, locationId, bd, employeeId);
+  const open =
+    openOfKind(cur, cur.status, "walkin") + openOfKind(cur, cur.status, "return");
+  if (open > 0) {
+    return {
+      ok: false,
+      error: "They're with a client — finish or undo it first.",
+    };
+  }
+
   const { error } = await service
     .from("floor_checkins")
     .update({
@@ -166,7 +190,7 @@ async function readCounts(
 ) {
   const { data } = await service
     .from("floor_checkins")
-    .select("rotation_count, attending_count, attending_return_count")
+    .select("rotation_count, attending_count, attending_return_count, status")
     .eq("location_id", locationId)
     .eq("business_date", bd)
     .eq("employee_id", employeeId)
@@ -175,6 +199,7 @@ async function readCounts(
     rotation: data?.rotation_count ?? 0,
     walkins: data?.attending_count ?? 0,
     returns: data?.attending_return_count ?? 0,
+    status: (data?.status ?? "available") as FloorStatus,
   };
 }
 
@@ -192,12 +217,38 @@ export async function doTakeClient(
   kind: "walkin" | "return",
 ): Promise<ActionResult> {
   const cur = await readCounts(service, locationId, bd, employeeId);
+  const next = afterTake(cur, kind);
   return patchCheckin(service, locationId, bd, employeeId, {
-    status: "attending",
-    attending_count: cur.walkins + (kind === "walkin" ? 1 : 0),
-    attending_return_count: cur.returns + (kind === "return" ? 1 : 0),
+    status: statusAfter(next),
+    attending_count: next.walkins,
+    attending_return_count: next.returns,
     bumped_at: null,
     manual_pos: null,
+  });
+}
+
+/**
+ * Undo a mistaken take: close ONE open customer of `kind` as if it never
+ * happened — no client_events row, no rotation_count change. The bump/manual
+ * position the take cleared can't be restored (not persisted anywhere); the
+ * member re-enters the line at plain rotation order.
+ */
+export async function doUndoTake(
+  service: Service,
+  locationId: string,
+  bd: string,
+  employeeId: string,
+  kind: "walkin" | "return",
+): Promise<ActionResult> {
+  const cur = await readCounts(service, locationId, bd, employeeId);
+  if (!canClose(cur, cur.status, kind)) {
+    return { ok: false, error: "No open client to undo." };
+  }
+  const next = afterClose(cur, kind);
+  return patchCheckin(service, locationId, bd, employeeId, {
+    status: statusAfter(next),
+    attending_count: next.walkins,
+    attending_return_count: next.returns,
   });
 }
 
@@ -244,6 +295,13 @@ export async function doFinishCustomer(
   employeeId: string,
   result: FinishResult,
 ): Promise<ActionResult> {
+  // Guard before the event insert — a finish with nothing open must not
+  // record a phantom customer or burn a rotation turn.
+  const cur = await readCounts(service, locationId, bd, employeeId);
+  if (!canClose(cur, cur.status, result.kind)) {
+    return { ok: false, error: "No open client to finish." };
+  }
+
   const ins = await service.from("client_events").insert({
     location_id: locationId,
     employee_id: employeeId,
@@ -257,17 +315,12 @@ export async function doFinishCustomer(
   });
   if (ins.error) return { ok: false, error: ins.error.message };
 
-  const cur = await readCounts(service, locationId, bd, employeeId);
-  const walkins =
-    result.kind === "walkin" ? Math.max(0, cur.walkins - 1) : cur.walkins;
-  const returns =
-    result.kind === "return" ? Math.max(0, cur.returns - 1) : cur.returns;
-
+  const next = afterClose(cur, result.kind);
   return patchCheckin(service, locationId, bd, employeeId, {
-    status: walkins + returns > 0 ? "attending" : "available",
-    attending_count: walkins,
-    attending_return_count: returns,
-    rotation_count: result.kind === "walkin" ? cur.rotation + 1 : cur.rotation,
+    status: statusAfter(next),
+    attending_count: next.walkins,
+    attending_return_count: next.returns,
+    rotation_count: rotationAfterFinish(cur.rotation, result.kind),
     bumped_at: null,
   });
 }

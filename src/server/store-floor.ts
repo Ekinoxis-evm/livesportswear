@@ -12,6 +12,7 @@ import {
   doCheckOut,
   patchCheckin,
   doTakeClient,
+  doUndoTake,
   doClearAttending,
   doFinishCustomer,
   doStartBreak,
@@ -197,6 +198,29 @@ async function storeTake(
   const { locationId, service, bd } = await storeCtx();
   const emp = await targetEmployee(service, locationId, employeeId);
   if (!emp) return { ok: false, error: "That employee isn't at this store." };
+
+  // The UI hides Take for off-floor/on-break members, but a stale screen can
+  // still submit one — the server is the guard, not the render.
+  const [{ data: row }, { data: openBreak }] = await Promise.all([
+    service
+      .from("floor_checkins")
+      .select("left_at")
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .eq("employee_id", emp.id)
+      .maybeSingle(),
+    service
+      .from("floor_breaks")
+      .select("id")
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .eq("employee_id", emp.id)
+      .is("ended_at", null)
+      .maybeSingle(),
+  ]);
+  if (!row || row.left_at) return { ok: false, error: "They're not on the floor." };
+  if (openBreak) return { ok: false, error: "They're on a break — end it first." };
+
   const res = await doTakeClient(service, locationId, bd, emp.id, kind);
   if (res.ok) {
     revalidatePath("/store", "layout");
@@ -218,6 +242,29 @@ export async function storeTakeClient(employeeId: string): Promise<ActionResult>
  */
 export async function storeStartReturn(employeeId: string): Promise<ActionResult> {
   return storeTake(employeeId, "return");
+}
+
+const clientKindSchema = z.enum(["walkin", "return"]);
+
+/**
+ * Undo a mistaken take (one tap, no PIN — floor speed): closes ONE open
+ * customer of `kind` as if it never happened. Nothing is recorded and no
+ * rotation turn is burned.
+ */
+export async function storeUndoTake(
+  employeeId: string,
+  kind: "walkin" | "return",
+): Promise<ActionResult> {
+  const parsedKind = clientKindSchema.safeParse(kind);
+  if (!parsedKind.success) return { ok: false, error: "Invalid input." };
+  const { locationId, service, bd } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+  const res = await doUndoTake(service, locationId, bd, emp.id, parsedKind.data);
+  if (res.ok) {
+    revalidatePath("/store", "layout");
+  }
+  return res;
 }
 
 /** Cancel every open customer without recording anything ("back to line"). */
