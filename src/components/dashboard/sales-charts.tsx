@@ -40,10 +40,10 @@ export function SalesCharts({
   year: number;
   currency: string;
   series: RepSeriesMeta[];
-  repData: Record<string, number | string>[];
-  storeData: { month: string; total: number; goal: number | null }[];
+  repData: Record<string, number | string | null>[];
+  storeData: { month: string; total: number | null; goal: number | null }[];
 }) {
-  const empty = storeData.every((m) => m.total === 0);
+  const empty = storeData.every((m) => (m.total ?? 0) === 0);
   if (empty) {
     return (
       <Card>
@@ -107,7 +107,7 @@ export function SalesCharts({
                 className="tabular-nums"
               />
               <ChartTooltip content={<ChartTooltipContent formatter={moneyRow} />} />
-              <ChartLegend content={<ChartLegendContent />} />
+              <ChartLegend content={<ChartLegendContent className="flex-wrap" />} />
               {series.map((s, i) => (
                 <Line
                   key={s.key}
@@ -143,7 +143,7 @@ export function SalesCharts({
                 className="tabular-nums"
               />
               <ChartTooltip content={<ChartTooltipContent formatter={moneyRow} />} />
-              {hasGoal && <ChartLegend content={<ChartLegendContent />} />}
+              {hasGoal && <ChartLegend content={<ChartLegendContent className="flex-wrap" />} />}
               <Line
                 dataKey="total"
                 name="Sales"

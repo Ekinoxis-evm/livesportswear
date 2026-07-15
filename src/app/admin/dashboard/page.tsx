@@ -161,10 +161,14 @@ export default async function DashboardPage({
     month: r.month,
     amount: Number(r.amount),
   }));
+  // Lines end at the current month for the current year — a month that
+  // hasn't happened isn't $0.
+  const throughMonth = chartYear === currentYear ? monthNum : 12;
   const { series: repSeries, data: repData } = repMonthlyData(
     yearRows,
     chartYear,
     monthEmployees,
+    throughMonth,
   );
   const storeData = storeMonthlyData(
     yearRows,
@@ -173,6 +177,7 @@ export default async function DashboardPage({
       month: g.month,
       goal_amount: Number(g.goal_amount),
     })),
+    throughMonth,
   );
 
   const evs = eventsRes.data ?? [];
