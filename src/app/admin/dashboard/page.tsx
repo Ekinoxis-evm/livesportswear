@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createServerClient } from "@/lib/supabase/server";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
@@ -20,9 +21,16 @@ import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales, type DaySales } from "@/lib/shopify";
 import { monthRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
 import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
+import { repMonthlyData, storeMonthlyData } from "@/lib/monthly-series";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
+import { SalesCharts } from "@/components/dashboard/sales-charts";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createServerClient();
   const today = businessDate(await primaryTimezone());
   const { anchor } = await getPayPeriod();
@@ -79,7 +87,15 @@ export default async function DashboardPage() {
   const nextMonthStart = new Date(Date.UTC(year, monthNum, 1))
     .toISOString()
     .slice(0, 10);
-  const [salesRes, goalsRes, employeesRes, eventsRes, adsRes, cfgRes] = await Promise.all([
+  // The ?year param scopes only the two year charts; every other card stays
+  // on the current month.
+  const currentYear = year;
+  const chartYear =
+    sp.year && /^\d{4}$/.test(sp.year)
+      ? Math.min(Math.max(Number(sp.year), 2024), currentYear)
+      : currentYear;
+
+  const [salesRes, goalsRes, employeesRes, eventsRes, adsRes, cfgRes, yearSalesRes, yearGoalsRes] = await Promise.all([
     supabase.from("monthly_sales").select("employee_id, amount").eq("month", month),
     supabase
       .from("store_goals")
@@ -88,7 +104,7 @@ export default async function DashboardPage() {
       .eq("month", monthNum),
     supabase
       .from("employees")
-      .select("id, name, location_id")
+      .select("id, name, location_id, avatar_color")
       .eq("active", true),
     supabase
       .from("client_events")
@@ -101,6 +117,14 @@ export default async function DashboardPage() {
       .gte("date", monthStart)
       .lt("date", nextMonthStart),
     supabase.from("commission_config").select("currency").eq("id", 1).maybeSingle(),
+    supabase
+      .from("monthly_sales")
+      .select("employee_id, month, amount")
+      .like("month", `${chartYear}-%`),
+    supabase
+      .from("store_goals")
+      .select("month, goal_amount")
+      .eq("year", chartYear),
   ]);
   const currency = cfgRes.data?.currency ?? "USD";
 
@@ -131,6 +155,25 @@ export default async function DashboardPage() {
     .map((e) => ({ name: e.name, amount: salesByEmployee.get(e.id) ?? 0 }))
     .sort((a, b) => b.amount - a.amount);
   const salesTotal = salesRanking.reduce((a, r) => a + r.amount, 0);
+
+  const yearRows = (yearSalesRes.data ?? []).map((r) => ({
+    employee_id: r.employee_id,
+    month: r.month,
+    amount: Number(r.amount),
+  }));
+  const { series: repSeries, data: repData } = repMonthlyData(
+    yearRows,
+    chartYear,
+    monthEmployees,
+  );
+  const storeData = storeMonthlyData(
+    yearRows,
+    chartYear,
+    (yearGoalsRes.data ?? []).map((g) => ({
+      month: g.month,
+      goal_amount: Number(g.goal_amount),
+    })),
+  );
 
   const evs = eventsRes.data ?? [];
   const convMTD = evs.length === 0 ? null : evs.filter((e) => e.sold).length / evs.length;
@@ -294,6 +337,45 @@ export default async function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide">
+          Sales · {chartYear}
+        </h2>
+        <div className="flex items-center gap-1">
+          <Link
+            href={`/admin/dashboard?year=${chartYear - 1}`}
+            aria-label="Previous year"
+            className="hover:bg-muted rounded-md border p-1.5"
+          >
+            <ChevronLeft className="size-4" />
+          </Link>
+          {chartYear !== currentYear && (
+            <Link
+              href="/admin/dashboard"
+              className="px-1 text-sm underline-offset-4 hover:underline"
+            >
+              This year
+            </Link>
+          )}
+          {chartYear < currentYear && (
+            <Link
+              href={`/admin/dashboard?year=${chartYear + 1}`}
+              aria-label="Next year"
+              className="hover:bg-muted rounded-md border p-1.5"
+            >
+              <ChevronRight className="size-4" />
+            </Link>
+          )}
+        </div>
+      </div>
+      <SalesCharts
+        year={chartYear}
+        currency={currency}
+        series={repSeries}
+        repData={repData}
+        storeData={storeData}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
