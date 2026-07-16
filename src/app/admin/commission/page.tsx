@@ -1,13 +1,12 @@
+import Link from "next/link";
+import { Plus, Pencil } from "lucide-react";
 import { createServerClient } from "@/lib/supabase/server";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
-import {
-  commissionFor,
-  formatMoney,
-  asTiers,
-  resolveTiers,
-  type CommissionTier,
-} from "@/lib/commission";
+import { asTiers, type CommissionTier } from "@/lib/commission";
+import { contestStatus, asPrizes, asResults } from "@/lib/rewards";
+import { shortDate } from "@/lib/format-date";
+import type { SalesContest } from "@/types/db";
 import {
   Card,
   CardContent,
@@ -16,23 +15,31 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { CommissionConfigForm } from "@/components/commission/config-form";
-import { monthLabel } from "@/lib/format-date";
 import { StoreMonthForm, type GoalsByLocation } from "@/components/commission/store-month-form";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
+import {
+  ContestFormSheet,
+  type ContestFormValues,
+} from "@/components/rewards/contest-form";
+import { DeleteContestDialog } from "@/components/rewards/delete-contest-dialog";
+
+function toFormValues(row: SalesContest): ContestFormValues {
+  return {
+    id: row.id,
+    location_id: row.location_id,
+    name: row.name,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    store_threshold: Number(row.store_threshold),
+    prizes: asPrizes(row.prizes),
+  };
+}
 
 export default async function CommissionPage() {
   const supabase = await createServerClient();
   const today = businessDate(await primaryTimezone());
-  const month = today.slice(0, 7);
   const year = Number(today.slice(0, 4));
   const monthNum = Number(today.slice(5, 7));
 
@@ -46,10 +53,12 @@ export default async function CommissionPage() {
 
   const { data: locationRows } = await supabase
     .from("locations")
-    .select("id, name")
+    .select("id, name, timezone")
     .eq("active", true)
     .order("name");
   const locations = locationRows ?? [];
+  const tzOf = new Map(locations.map((l) => [l.id, l.timezone]));
+  const nameOf = new Map(locations.map((l) => [l.id, l.name]));
 
   const { data: goalRows } = await supabase
     .from("store_goals")
@@ -57,49 +66,35 @@ export default async function CommissionPage() {
     .in("year", [year, year + 1]);
   const goalsByLocation: GoalsByLocation = {};
   const tiersByKey: Record<string, CommissionTier[]> = {};
-  const monthTiersByLoc: Record<string, CommissionTier[]> = {};
   for (const g of goalRows ?? []) {
     (goalsByLocation[g.location_id] ??= {})[`${g.year}-${g.month}`] = Number(g.goal_amount);
     const t = asTiers(g.tiers);
     if (t.length) tiersByKey[`${g.location_id}-${g.year}-${g.month}`] = t;
-    if (g.year === year && g.month === monthNum) {
-      monthTiersByLoc[g.location_id] = resolveTiers(g.tiers, globalTiers);
-    }
   }
 
-  const { data: employees } = await supabase
-    .from("employees")
-    .select("id, name, location_id, locations(name)")
-    .eq("active", true)
-    .order("name");
-  const { data: sales } = await supabase
-    .from("monthly_sales")
-    .select("employee_id, amount")
-    .eq("month", month);
-  const salesBy = new Map((sales ?? []).map((s) => [s.employee_id, Number(s.amount)]));
-
-  const ranking = (employees ?? [])
-    .map((e) => {
-      const amount = salesBy.get(e.id) ?? 0;
-      const tiers = monthTiersByLoc[e.location_id] ?? globalTiers;
-      return {
-        id: e.id,
-        name: e.name,
-        store: (e.locations as { name: string } | null)?.name ?? "—",
-        amount,
-        ...commissionFor(amount, tiers),
-      };
-    })
-    .sort((a, b) => b.amount - a.amount);
+  const { data: contestRows } = await supabase
+    .from("sales_contests")
+    .select("*")
+    .order("start_date", { ascending: false });
+  const contests = (contestRows ?? []) as SalesContest[];
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Sales &amp; commission</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Sales &amp; Rewards setup
+        </h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Monthly goals and commission tiers per store, and this month&apos;s sales
-          ({monthLabel(month)}).
+          Goals, commission tiers, and sales contests. Rankings and standings
+          live under{" "}
+          <Link
+            href="/admin/performance/sales"
+            className="underline underline-offset-4"
+          >
+            Performance
+          </Link>
+          .
         </p>
         </div>
         <SyncSalesButton />
@@ -140,54 +135,72 @@ export default async function CommissionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Ranking</CardTitle>
-          <CardDescription>
-            By sales this month — rate uses each rep&apos;s store tiers.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Sales contests</CardTitle>
+              <CardDescription>
+                Date-range contests with ranked prizes. Standings live on the{" "}
+                <Link
+                  href="/admin/performance/rewards"
+                  className="underline underline-offset-4"
+                >
+                  Rewards tab
+                </Link>
+                .
+              </CardDescription>
+            </div>
+            {locations.length > 0 && (
+              <ContestFormSheet
+                locations={locations.map((l) => ({ id: l.id, name: l.name }))}
+                currency={currency}
+              >
+                <Button size="sm">
+                  <Plus className="mr-1 size-4" /> New contest
+                </Button>
+              </ContestFormSheet>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
-          {ranking.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No active employees.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead className="hidden sm:table-cell">Store</TableHead>
-                  <TableHead>Sales</TableHead>
-                  <TableHead>Rate</TableHead>
-                  <TableHead>Commission</TableHead>
-                  <TableHead className="hidden md:table-cell">To next tier</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ranking.map((r, i) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="tabular-nums">{i + 1}</TableCell>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell className="text-muted-foreground hidden sm:table-cell">
-                      {r.store}
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {formatMoney(r.amount, currency)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{(r.rate * 100).toFixed(1)}%</Badge>
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {formatMoney(r.earned, currency)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
-                      {r.nextTier
-                        ? `${formatMoney(r.nextTier.remaining, currency)} → ${(r.nextTier.rate * 100).toFixed(1)}%`
-                        : "Top tier"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        <CardContent className="flex flex-col gap-2">
+          {contests.length === 0 && (
+            <p className="text-muted-foreground text-sm">No contests yet.</p>
           )}
+          {contests.map((c) => {
+            const today = businessDate(tzOf.get(c.location_id) ?? "UTC");
+            const status = contestStatus(c, today);
+            const finalized = asResults(c.results) !== null;
+            return (
+              <div
+                key={c.id}
+                className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+              >
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm font-medium">{c.name}</span>
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {nameOf.get(c.location_id)} · {shortDate(c.start_date)} –{" "}
+                    {shortDate(c.end_date)}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {status === "active" && <Badge>Live</Badge>}
+                  {status === "upcoming" && <Badge variant="secondary">Upcoming</Badge>}
+                  {status === "ended" && <Badge variant="outline">Ended</Badge>}
+                  {!finalized && (
+                    <ContestFormSheet
+                      locations={locations.map((l) => ({ id: l.id, name: l.name }))}
+                      currency={currency}
+                      contest={toFormValues(c)}
+                    >
+                      <Button variant="ghost" size="icon-sm" aria-label="Edit contest">
+                        <Pencil className="size-4" />
+                      </Button>
+                    </ContestFormSheet>
+                  )}
+                  <DeleteContestDialog id={c.id} name={c.name} />
+                </div>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>

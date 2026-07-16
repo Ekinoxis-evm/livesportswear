@@ -21,14 +21,20 @@ import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales, type DaySales } from "@/lib/shopify";
 import { monthRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
 import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
-import { repMonthlyData, storeMonthlyData } from "@/lib/monthly-series";
+import { storeMonthlyData } from "@/lib/monthly-series";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
-import { SalesCharts } from "@/components/dashboard/sales-charts";
+import { StoreSalesChart } from "@/components/dashboard/sales-charts";
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return d.toISOString().slice(0, 7);
+}
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{ year?: string; month?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = await createServerClient();
@@ -79,21 +85,39 @@ export default async function DashboardPage({
   });
   const openTotal = coverage.reduce((a, c) => a + c.open, 0);
 
-  // This-month business metrics (all degrade gracefully before keys connect).
-  const month = today.slice(0, 7);
-  const year = Number(today.slice(0, 4));
-  const monthNum = Number(today.slice(5, 7));
+  // Month-scoped business metrics follow ?month (‹ › pager); day cards and
+  // the schedule/coverage cards always stay on today.
+  const currentMonth = today.slice(0, 7);
+  const month =
+    sp.month &&
+    /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month) &&
+    sp.month <= currentMonth &&
+    sp.month >= "2024-01"
+      ? sp.month
+      : currentMonth;
+  const year = Number(month.slice(0, 4));
+  const monthNum = Number(month.slice(5, 7));
   const monthStart = `${month}-01`;
   const nextMonthStart = new Date(Date.UTC(year, monthNum, 1))
     .toISOString()
     .slice(0, 10);
-  // The ?year param scopes only the two year charts; every other card stays
-  // on the current month.
-  const currentYear = year;
+  // The ?year param scopes only the year chart.
+  const currentYear = Number(today.slice(0, 4));
   const chartYear =
     sp.year && /^\d{4}$/.test(sp.year)
       ? Math.min(Math.max(Number(sp.year), 2024), currentYear)
       : currentYear;
+  // Links merge both params so the month pager and year pager can't clobber
+  // each other.
+  const qs = (next: Partial<{ month: string; year: number }>) => {
+    const p = new URLSearchParams();
+    const m = next.month ?? month;
+    const y = next.year ?? chartYear;
+    if (m !== currentMonth) p.set("month", m);
+    if (y !== currentYear) p.set("year", String(y));
+    const s = p.toString();
+    return s ? `/admin/dashboard?${s}` : "/admin/dashboard";
+  };
 
   const [salesRes, goalsRes, employeesRes, eventsRes, adsRes, cfgRes, yearSalesRes, yearGoalsRes] = await Promise.all([
     supabase.from("monthly_sales").select("employee_id, amount").eq("month", month),
@@ -161,15 +185,10 @@ export default async function DashboardPage({
     month: r.month,
     amount: Number(r.amount),
   }));
-  // Lines end at the current month for the current year — a month that
-  // hasn't happened isn't $0.
-  const throughMonth = chartYear === currentYear ? monthNum : 12;
-  const { series: repSeries, data: repData } = repMonthlyData(
-    yearRows,
-    chartYear,
-    monthEmployees,
-    throughMonth,
-  );
+  // Lines end at TODAY's month for the current year (not the ?month being
+  // browsed) — a month that hasn't happened isn't $0.
+  const throughMonth =
+    chartYear === currentYear ? Number(today.slice(5, 7)) : 12;
   const storeData = storeMonthlyData(
     yearRows,
     chartYear,
@@ -247,6 +266,38 @@ export default async function DashboardPage({
             </CardHeader>
           </Card>
         </Link>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide">
+          {monthLabel(month)}
+        </h2>
+        <div className="flex items-center gap-1">
+          <Link
+            href={qs({ month: shiftMonth(month, -1) })}
+            aria-label="Previous month"
+            className="hover:bg-muted rounded-md border p-1.5"
+          >
+            <ChevronLeft className="size-4" />
+          </Link>
+          {month !== currentMonth && (
+            <Link
+              href={qs({ month: currentMonth })}
+              className="px-1 text-sm underline-offset-4 hover:underline"
+            >
+              This month
+            </Link>
+          )}
+          {month < currentMonth && (
+            <Link
+              href={qs({ month: shiftMonth(month, 1) })}
+              aria-label="Next month"
+              className="hover:bg-muted rounded-md border p-1.5"
+            >
+              <ChevronRight className="size-4" />
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -349,7 +400,7 @@ export default async function DashboardPage({
         </h2>
         <div className="flex items-center gap-1">
           <Link
-            href={`/admin/dashboard?year=${chartYear - 1}`}
+            href={qs({ year: chartYear - 1 })}
             aria-label="Previous year"
             className="hover:bg-muted rounded-md border p-1.5"
           >
@@ -357,7 +408,7 @@ export default async function DashboardPage({
           </Link>
           {chartYear !== currentYear && (
             <Link
-              href="/admin/dashboard"
+              href={qs({ year: currentYear })}
               className="px-1 text-sm underline-offset-4 hover:underline"
             >
               This year
@@ -365,7 +416,7 @@ export default async function DashboardPage({
           )}
           {chartYear < currentYear && (
             <Link
-              href={`/admin/dashboard?year=${chartYear + 1}`}
+              href={qs({ year: chartYear + 1 })}
               aria-label="Next year"
               className="hover:bg-muted rounded-md border p-1.5"
             >
@@ -374,13 +425,7 @@ export default async function DashboardPage({
           )}
         </div>
       </div>
-      <SalesCharts
-        year={chartYear}
-        currency={currency}
-        series={repSeries}
-        repData={repData}
-        storeData={storeData}
-      />
+      <StoreSalesChart year={chartYear} currency={currency} data={storeData} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
