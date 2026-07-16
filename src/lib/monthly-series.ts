@@ -24,12 +24,18 @@ function monthIndex(month: string, year: number): number | null {
   return m >= 1 && m <= 12 ? m - 1 : null;
 }
 
-/** Zero-filled per-rep dataset; only employees with sales in the year get a series. */
+/**
+ * Zero-filled per-rep dataset; only employees with sales in the year get a
+ * series. Months after `throughMonth` (1-12; pass the current month for the
+ * current year) become null so lines END there instead of diving to $0 for
+ * months that haven't happened yet.
+ */
 export function repMonthlyData(
   rows: MonthlySaleRow[],
   year: number,
   employees: { id: string; name: string; avatar_color: string | null }[],
-): { series: RepSeriesMeta[]; data: Record<string, number | string>[] } {
+  throughMonth = 12,
+): { series: RepSeriesMeta[]; data: Record<string, number | string | null>[] } {
   const byEmployee = new Map<string, number[]>();
   for (const r of rows) {
     const i = monthIndex(r.month, year);
@@ -44,20 +50,27 @@ export function repMonthlyData(
     .map((e) => ({ key: e.id, name: e.name, color: e.avatar_color }));
 
   const data = MONTH_LABELS.map((label, i) => {
-    const row: Record<string, number | string> = { month: label };
-    for (const s of series) row[s.key] = byEmployee.get(s.key)?.[i] ?? 0;
+    const row: Record<string, number | string | null> = { month: label };
+    for (const s of series) {
+      row[s.key] = i + 1 > throughMonth ? null : (byEmployee.get(s.key)?.[i] ?? 0);
+    }
     return row;
   });
 
   return { series, data };
 }
 
-/** Zero-filled store totals per month, with the monthly goal when one is set. */
+/**
+ * Zero-filled store totals per month, with the monthly goal when one is set.
+ * Totals after `throughMonth` are null (see repMonthlyData); goals stay — a
+ * future target is real information.
+ */
 export function storeMonthlyData(
   rows: MonthlySaleRow[],
   year: number,
   goals: { month: number; goal_amount: number }[],
-): { month: string; total: number; goal: number | null }[] {
+  throughMonth = 12,
+): { month: string; total: number | null; goal: number | null }[] {
   const totals = Array(12).fill(0) as number[];
   for (const r of rows) {
     const i = monthIndex(r.month, year);
@@ -73,7 +86,7 @@ export function storeMonthlyData(
 
   return MONTH_LABELS.map((label, i) => ({
     month: label,
-    total: totals[i],
+    total: i + 1 > throughMonth ? null : totals[i],
     goal: goalByMonth.get(i + 1) ?? null,
   }));
 }

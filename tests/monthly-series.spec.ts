@@ -55,6 +55,18 @@ describe("repMonthlyData", () => {
     expect(series).toEqual([]);
   });
 
+  it("nulls months after throughMonth so lines end instead of plotting $0", () => {
+    const { data } = repMonthlyData(
+      [{ employee_id: "e1", month: "2026-06", amount: 500 }],
+      2026,
+      EMPS,
+      7,
+    );
+    expect(data[6].e1).toBe(0); // July happened, just no sales yet
+    expect(data[7].e1).toBeNull(); // August hasn't happened
+    expect(data[11].e1).toBeNull();
+  });
+
   it("carries the avatar color into the series metadata", () => {
     const { series } = repMonthlyData(
       [
@@ -80,6 +92,17 @@ describe("storeMonthlyData", () => {
     expect(data[5]).toEqual({ month: "Jun", total: 500, goal: null });
     expect(data[6]).toEqual({ month: "Jul", total: 50, goal: null });
     expect(data[0]).toEqual({ month: "Jan", total: 0, goal: null });
+  });
+
+  it("nulls future totals but keeps future goals", () => {
+    const data = storeMonthlyData(
+      [{ employee_id: "e1", month: "2026-06", amount: 100 }],
+      2026,
+      [{ month: 12, goal_amount: 9000 }],
+      7,
+    );
+    expect(data[7].total).toBeNull();
+    expect(data[11]).toEqual({ month: "Dec", total: null, goal: 9000 });
   });
 
   it("maps goals by month number and sums across locations", () => {
