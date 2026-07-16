@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  asPersonalGoals,
   asPrizes,
   asResults,
   buildResults,
@@ -11,16 +12,22 @@ import {
   type PrizeItem,
 } from "@/lib/rewards";
 
-const cash = (amount: number, requires_goal = false): PrizeItem => ({
-  type: "cash",
-  amount,
-  requires_goal,
-});
+const cash = (
+  amount: number,
+  requires_goal = false,
+  requires_personal = false,
+): PrizeItem => ({ type: "cash", amount, requires_goal, requires_personal });
 const clothing = (
-  garments: PrizeItem extends never ? never : ("bra" | "t-shirt" | "shorts")[],
+  garments: ("bra" | "t-shirt" | "shorts")[],
   qty = 1,
   requires_goal = false,
-): PrizeItem => ({ type: "clothing", garments, qty, requires_goal });
+): PrizeItem => ({
+  type: "clothing",
+  garments,
+  qty,
+  requires_goal,
+  requires_personal: false,
+});
 
 const CONTEST: Contest = {
   id: "c1",
@@ -28,6 +35,8 @@ const CONTEST: Contest = {
   start_date: "2026-07-01",
   end_date: "2026-07-14",
   store_threshold: 10000,
+  goal_source: "custom",
+  personal_goals: {},
   prizes: [
     {
       place: 1,
@@ -38,7 +47,14 @@ const CONTEST: Contest = {
     {
       place: 3,
       min_sales: 1000,
-      items: [{ type: "other", label: "Free day off", requires_goal: false }],
+      items: [
+        {
+          type: "other",
+          label: "Free day off",
+          requires_goal: false,
+          requires_personal: false,
+        },
+      ],
     },
   ],
 };
@@ -112,6 +128,76 @@ describe("computeStandings — per-item gating", () => {
   });
 });
 
+describe("computeStandings — personal goals", () => {
+  const personal: Contest = {
+    ...CONTEST,
+    store_threshold: 0,
+    personal_goals: { e1: 6000, e2: 4000 },
+    prizes: [
+      { place: 1, min_sales: null, items: [cash(200, false, true)] },
+      { place: 2, min_sales: null, items: [cash(100, false, true), cash(50)] },
+    ],
+  };
+
+  it("locks a personal-conditioned item until the holder beats their own goal", () => {
+    const s = computeStandings(personal, SALES, "2026-07-10");
+    // Maryna 5200 < her 6000 goal — the $200 stays locked
+    expect(s.ranking[0].personalGoal).toBe(6000);
+    expect(s.ranking[0].personalMet).toBe(false);
+    expect(s.places[0].items[0].unlocked).toBe(false);
+    // Veriana 4100 >= her 4000 goal — the $100 unlocks; the $50 was never conditioned
+    expect(s.ranking[1].personalMet).toBe(true);
+    expect(s.places[1].items[0].unlocked).toBe(true);
+    expect(s.places[1].items[1].unlocked).toBe(true);
+  });
+
+  it("treats a rep with no personal goal as passing the condition", () => {
+    const s = computeStandings(
+      { ...personal, personal_goals: {} },
+      SALES,
+      "2026-07-10",
+    );
+    expect(s.ranking[0].personalGoal).toBeNull();
+    expect(s.places[0].items[0].unlocked).toBe(true);
+  });
+
+  it("requires BOTH conditions when an item is store- and personal-gated", () => {
+    const both: Contest = {
+      ...personal,
+      store_threshold: 20000, // gate NOT reached
+      prizes: [{ place: 1, min_sales: null, items: [cash(200, true, true)] }],
+      personal_goals: { e1: 1000 }, // personal met (5200 >= 1000)
+    };
+    const s = computeStandings(both, SALES, "2026-07-10");
+    expect(s.places[0].items[0].unlocked).toBe(false); // store gate still blocks
+    const gateOk = computeStandings(
+      { ...both, store_threshold: 10000 },
+      SALES,
+      "2026-07-10",
+    );
+    expect(gateOk.places[0].items[0].unlocked).toBe(true);
+  });
+});
+
+describe("computeStandings — monthly gate override", () => {
+  it("gates on the override while the board keeps contest-window amounts", () => {
+    const monthly: Contest = { ...CONTEST, goal_source: "monthly" };
+    const s = computeStandings(monthly, SALES, "2026-07-10", {
+      total: 60000,
+      threshold: 50000,
+    });
+    expect(s.gate).toEqual({ source: "monthly", total: 60000, threshold: 50000 });
+    expect(s.gatePassed).toBe(true);
+    expect(s.storeTotal).toBe(10200); // ranking still the contest window
+    const short = computeStandings(monthly, SALES, "2026-07-10", {
+      total: 40000,
+      threshold: 50000,
+    });
+    expect(short.gatePassed).toBe(false);
+    expect(short.gateRemaining).toBe(10000);
+  });
+});
+
 describe("buildResults", () => {
   it("freezes only unlocked items' labels and derives won from them", () => {
     const s = computeStandings(CONTEST, SALES, "2026-07-15");
@@ -134,7 +220,15 @@ describe("prizeLabel", () => {
     );
     expect(prizeLabel(clothing(["shorts"], 1), "USD")).toBe("shorts");
     expect(
-      prizeLabel({ type: "other", label: "Free day off", requires_goal: true }, "USD"),
+      prizeLabel(
+        {
+          type: "other",
+          label: "Free day off",
+          requires_goal: true,
+          requires_personal: false,
+        },
+        "USD",
+      ),
     ).toBe("Free day off");
   });
 });
@@ -146,7 +240,14 @@ describe("jsonb coercers", () => {
       {
         place: 1,
         min_sales: 3000,
-        items: [{ type: "other", label: "$300 bonus", requires_goal: true }],
+        items: [
+          {
+            type: "other",
+            label: "$300 bonus",
+            requires_goal: true,
+            requires_personal: false,
+          },
+        ],
       },
     ]);
   });
@@ -197,5 +298,20 @@ describe("jsonb coercers", () => {
   it("rejects malformed snapshots", () => {
     expect(asResults(null)).toBeNull();
     expect(asResults({ finalized_on: "2026-07-15" })).toBeNull();
+  });
+
+  it("defaults requires_personal to false on items written before it existed", () => {
+    const out = asPrizes([
+      { place: 1, min_sales: null, items: [{ type: "cash", amount: 100, requires_goal: true }] },
+    ]);
+    expect(out[0].items[0]).toMatchObject({ requires_personal: false });
+  });
+
+  it("asPersonalGoals keeps positive numbers and drops garbage", () => {
+    expect(
+      asPersonalGoals({ e1: 6000, e2: 0, e3: "nope", e4: -5 }),
+    ).toEqual({ e1: 6000 });
+    expect(asPersonalGoals(null)).toEqual({});
+    expect(asPersonalGoals([1, 2])).toEqual({});
   });
 });

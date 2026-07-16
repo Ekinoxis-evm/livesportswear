@@ -80,7 +80,6 @@ export default async function StoreRewardsPage() {
                 <>
                   <GateProgress
                     standings={standings}
-                    threshold={Number(c.store_threshold)}
                     currency={currency}
                   />
                   <StandingsBoard standings={standings} currency={currency} />

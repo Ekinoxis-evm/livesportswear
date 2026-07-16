@@ -21,6 +21,7 @@ export type ItemDraft = {
   qty: string;
   label: string;
   requires_goal: boolean;
+  requires_personal: boolean;
 };
 
 export const emptyItemDraft = (): ItemDraft => ({
@@ -30,6 +31,7 @@ export const emptyItemDraft = (): ItemDraft => ({
   qty: "1",
   label: "",
   requires_goal: false,
+  requires_personal: false,
 });
 
 export function toItemDrafts(items: PrizeItem[]): ItemDraft[] {
@@ -40,24 +42,29 @@ export function toItemDrafts(items: PrizeItem[]): ItemDraft[] {
     qty: i.type === "clothing" ? String(i.qty) : "1",
     label: i.type === "other" ? i.label : "",
     requires_goal: i.requires_goal,
+    requires_personal: i.requires_personal,
   }));
 }
 
 /** Drafts → payload items; incomplete drafts pass through for the server to reject with a message. */
 export function fromItemDrafts(drafts: ItemDraft[]): unknown[] {
   return drafts.map((d) => {
+    const conditions = {
+      requires_goal: d.requires_goal,
+      requires_personal: d.requires_personal,
+    };
     if (d.type === "cash") {
-      return { type: "cash", amount: Number(d.amount), requires_goal: d.requires_goal };
+      return { type: "cash", amount: Number(d.amount), ...conditions };
     }
     if (d.type === "clothing") {
       return {
         type: "clothing",
         garments: d.garments,
         qty: Number(d.qty) || 1,
-        requires_goal: d.requires_goal,
+        ...conditions,
       };
     }
-    return { type: "other", label: d.label, requires_goal: d.requires_goal };
+    return { type: "other", label: d.label, ...conditions };
   });
 }
 
@@ -166,15 +173,26 @@ export function PrizeItemsEditor({
             </div>
           )}
 
-          <label className="text-muted-foreground flex w-fit items-center gap-1.5 text-xs">
-            <input
-              type="checkbox"
-              checked={item.requires_goal}
-              onChange={(e) => patch(i, { requires_goal: e.target.checked })}
-              className="size-3.5"
-            />
-            Only if the store reaches its goal
-          </label>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <label className="text-muted-foreground flex w-fit items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={item.requires_goal}
+                onChange={(e) => patch(i, { requires_goal: e.target.checked })}
+                className="size-3.5"
+              />
+              Only if the store reaches its goal
+            </label>
+            <label className="text-muted-foreground flex w-fit items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={item.requires_personal}
+                onChange={(e) => patch(i, { requires_personal: e.target.checked })}
+                className="size-3.5"
+              />
+              Only if they beat their personal goal
+            </label>
+          </div>
         </div>
       ))}
       {items.length < 8 && (

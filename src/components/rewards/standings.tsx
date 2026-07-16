@@ -14,13 +14,12 @@ function PlaceIcon({ place, className }: { place: number; className?: string }) 
 
 export function GateProgress({
   standings,
-  threshold,
   currency,
 }: {
   standings: ContestStandings;
-  threshold: number;
   currency: string;
 }) {
+  const { source, total, threshold } = standings.gate;
   if (threshold <= 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
@@ -32,9 +31,12 @@ export function GateProgress({
             <Lock className="text-muted-foreground size-4" />
           )}
           Store goal {formatMoney(threshold, currency)}
+          {source === "monthly" && (
+            <span className="text-muted-foreground text-xs">(monthly goal)</span>
+          )}
         </span>
         <span className="text-muted-foreground tabular-nums">
-          {formatMoney(standings.storeTotal, currency)}
+          {formatMoney(total, currency)}
           {!standings.gatePassed &&
             ` · ${formatMoney(standings.gateRemaining, currency)} to unlock prizes`}
         </span>
@@ -105,7 +107,9 @@ export function StandingsBoard({
                           (
                           {place.holder && !place.thresholdMet && place.min_sales !== null
                             ? `needs ${formatMoney(place.min_sales, currency)}`
-                            : "needs store goal"}
+                            : item.requires_personal && place.holder && !place.holder.personalMet
+                              ? "needs their personal goal"
+                              : "needs store goal"}
                           )
                         </span>
                       )}
@@ -133,6 +137,22 @@ export function StandingsBoard({
                     </span>
                   </span>
                 )}
+              {r.personalGoal !== null && !r.personalMet && (
+                <span className="flex items-center gap-2 pl-6">
+                  <span className="bg-muted h-1.5 w-24 overflow-hidden rounded-full">
+                    <span
+                      className="bg-primary block h-full rounded-full"
+                      style={{
+                        width: `${Math.round(Math.min(1, r.amount / r.personalGoal) * 100)}%`,
+                      }}
+                    />
+                  </span>
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {formatMoney(Math.max(0, r.personalGoal - r.amount), currency)} to
+                    their goal
+                  </span>
+                </span>
+              )}
             </div>
             <span className="font-medium tabular-nums">
               {formatMoney(r.amount, currency)}
@@ -247,6 +267,47 @@ export function MyPlaceProgress({
         <div
           className="bg-primary h-full rounded-full"
           style={{ width: `${Math.round(Math.min(1, me.amount / place.min_sales) * 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The employee's personal-goal bar (third bar on the portal). */
+export function MyPersonalProgress({
+  standings,
+  employeeId,
+  currency,
+}: {
+  standings: ContestStandings;
+  employeeId: string;
+  currency: string;
+}) {
+  const me = standings.ranking.find((r) => r.employeeId === employeeId);
+  if (!me || me.personalGoal === null) return null;
+
+  const met = me.personalMet;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-1.5">
+          {met ? (
+            <Check className="text-primary size-4" />
+          ) : (
+            <Lock className="text-muted-foreground size-4" />
+          )}
+          Your personal goal {formatMoney(me.personalGoal, currency)}
+        </span>
+        <span className="text-muted-foreground tabular-nums">
+          {met ? "done" : `${formatMoney(me.personalGoal - me.amount, currency)} to go`}
+        </span>
+      </div>
+      <div className="bg-muted h-2 overflow-hidden rounded-full">
+        <div
+          className="bg-primary h-full rounded-full"
+          style={{
+            width: `${Math.round(Math.min(1, me.amount / me.personalGoal) * 100)}%`,
+          }}
         />
       </div>
     </div>

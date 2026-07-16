@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import {
   GateProgress,
+  MyPersonalProgress,
   MyPlaceProgress,
   ResultsBoard,
   StandingsBoard,
@@ -110,7 +111,11 @@ export default async function PortalRewardsPage() {
                   )}
                   <GateProgress
                     standings={standings}
-                    threshold={Number(c.store_threshold)}
+                    currency={currency}
+                  />
+                  <MyPersonalProgress
+                    standings={standings}
+                    employeeId={employee.id}
                     currency={currency}
                   />
                   <MyPlaceProgress

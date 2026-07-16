@@ -7,22 +7,27 @@ import { createServerClient } from "@/lib/supabase/server";
 import { GARMENT_KINDS } from "@/lib/rewards";
 import { type ActionResult, dbError, firstError } from "@/server/shared";
 
+const itemConditions = {
+  requires_goal: z.boolean(),
+  requires_personal: z.boolean(),
+};
+
 const prizeItemSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("cash"),
     amount: z.coerce.number().positive("Cash needs an amount.").max(1_000_000),
-    requires_goal: z.boolean(),
+    ...itemConditions,
   }),
   z.object({
     type: z.literal("clothing"),
     garments: z.array(z.enum(GARMENT_KINDS)).min(1, "Pick at least one garment."),
     qty: z.coerce.number().int().min(1).max(20),
-    requires_goal: z.boolean(),
+    ...itemConditions,
   }),
   z.object({
     type: z.literal("other"),
     label: z.string().trim().min(1, "Describe the prize.").max(120),
-    requires_goal: z.boolean(),
+    ...itemConditions,
   }),
 ]);
 
@@ -41,6 +46,8 @@ const contestSchema = z
     start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     store_threshold: z.coerce.number().min(0),
+    goal_source: z.enum(["custom", "monthly"]),
+    personal_goals: z.record(z.string().uuid(), z.coerce.number().min(0)),
     prizes: z.array(prizeSchema).min(1, "Add at least one place.").max(10),
   })
   .refine((c) => c.end_date >= c.start_date, {
