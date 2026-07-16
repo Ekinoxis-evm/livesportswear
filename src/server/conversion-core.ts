@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct, type ConversionTotals } from "@/lib/conversion";
+import { breakMinutes, type BreakRow } from "@/lib/breaks";
 import { getDaySalesCached } from "@/lib/shopify-day-cache";
 import type { DaySales } from "@/lib/shopify";
 import { buildDayReportCsv } from "@/lib/day-report-csv";
@@ -79,7 +80,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
   const locName = loc?.name ?? "Store";
   const bd = businessDate(tz);
 
-  const [{ data: eventRows }, { data: checkinRows }, shopify, recipients] =
+  const [{ data: eventRows }, { data: checkinRows }, { data: breakRows }, shopify, recipients] =
     await Promise.all([
       service
         .from("client_events")
@@ -97,12 +98,26 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
         .eq("location_id", locationId)
         .eq("business_date", bd)
         .order("arrived_at"),
+      service
+        .from("floor_breaks")
+        .select("employee_id, started_at, ended_at")
+        .eq("location_id", locationId)
+        .eq("business_date", bd),
       getDaySalesCached(bd, tz),
       reportRecipients(locationId),
     ]);
 
   const events = eventRows ?? [];
   const checkins = checkinRows ?? [];
+  // Break minutes per employee; an open break is clocked to "now" so a report
+  // built before the break ends still counts the time so far.
+  const now = new Date().toISOString();
+  const breaksBy = new Map<string, BreakRow[]>();
+  for (const b of breakRows ?? []) {
+    const list = breaksBy.get(b.employee_id) ?? [];
+    list.push({ startedAt: b.started_at, endedAt: b.ended_at });
+    breaksBy.set(b.employee_id, list);
+  }
   const nameOf = (row: { employees: { name: string } | null }) =>
     row.employees?.name ?? "Unknown";
 
@@ -138,6 +153,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
       exit_validated_at: c.exit_validated_at,
       exit_self: c.exit_self,
       exit_missed: c.exit_missed,
+      breakMinutes: breakMinutes(breaksBy.get(c.employee_id) ?? [], now),
     })),
   });
 
