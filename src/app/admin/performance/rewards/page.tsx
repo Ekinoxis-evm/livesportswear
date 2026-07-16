@@ -121,7 +121,6 @@ export default async function RewardsTabPage() {
                           <>
                             <GateProgress
                               standings={standings}
-                              threshold={contest.store_threshold}
                               currency={currency}
                             />
                             <StandingsBoard standings={standings} currency={currency} />

@@ -5,6 +5,7 @@ import { isShopifyConfigured } from "@/lib/shopify-config";
 import { customRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
 import { getStaffSalesCached } from "@/lib/shopify-range-cache";
 import {
+  asPersonalGoals,
   asPrizes,
   buildResults,
   computeStandings,
@@ -13,6 +14,8 @@ import {
   type ContestSale,
   type ContestStandings,
 } from "@/lib/rewards";
+
+type Service = ReturnType<typeof createServiceClient>;
 import type { SalesContest } from "@/types/db";
 
 /**
@@ -30,8 +33,41 @@ export function toContest(row: SalesContest): Contest {
     start_date: row.start_date,
     end_date: row.end_date,
     store_threshold: Number(row.store_threshold),
+    goal_source: row.goal_source === "monthly" ? "monthly" : "custom",
+    personal_goals: asPersonalGoals(row.personal_goals),
     prizes: asPrizes(row.prizes),
   };
+}
+
+/**
+ * Monthly mode gates on the end-date month: that whole month's attributed
+ * sales (monthly_sales, already synced) vs the store's configured goal.
+ */
+async function monthlyGate(
+  service: Service,
+  locationId: string,
+  endDate: string,
+): Promise<{ total: number; threshold: number }> {
+  const month = endDate.slice(0, 7);
+  const [{ data: goalRow }, { data: emps }] = await Promise.all([
+    service
+      .from("store_goals")
+      .select("goal_amount")
+      .eq("location_id", locationId)
+      .eq("year", Number(month.slice(0, 4)))
+      .eq("month", Number(month.slice(5, 7)))
+      .maybeSingle(),
+    service.from("employees").select("id").eq("location_id", locationId),
+  ]);
+  const ids = new Set((emps ?? []).map((e) => e.id));
+  const { data: sales } = await service
+    .from("monthly_sales")
+    .select("employee_id, amount")
+    .eq("month", month);
+  const total = (sales ?? [])
+    .filter((s) => ids.has(s.employee_id))
+    .reduce((a, s) => a + Number(s.amount), 0);
+  return { total, threshold: Number(goalRow?.goal_amount ?? 0) };
 }
 
 async function contestSales(
@@ -66,9 +102,15 @@ export async function getContestStandings(
   tz: string,
 ): Promise<ContestStandings | null> {
   const contest = toContest(row);
-  const sales = await contestSales(row.location_id, contest, tz);
+  const service = createServiceClient();
+  const [sales, gateOverride] = await Promise.all([
+    contestSales(row.location_id, contest, tz),
+    contest.goal_source === "monthly"
+      ? monthlyGate(service, row.location_id, contest.end_date)
+      : Promise.resolve(undefined),
+  ]);
   if (sales === null) return null;
-  return computeStandings(contest, sales, businessDate(tz));
+  return computeStandings(contest, sales, businessDate(tz), gateOverride);
 }
 
 /**

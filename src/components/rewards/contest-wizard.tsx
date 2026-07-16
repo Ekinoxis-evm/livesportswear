@@ -12,6 +12,8 @@ import {
   type PrizeItem,
 } from "@/lib/rewards";
 import { formatMoney } from "@/lib/commission";
+import { monthLabel } from "@/lib/format-date";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +55,8 @@ export type ContestFormValues = {
   start_date: string;
   end_date: string;
   store_threshold: number;
+  goal_source: "custom" | "monthly";
+  personal_goals: Record<string, number>;
   prizes: ContestPrize[];
 };
 
@@ -64,11 +68,13 @@ function draftComplete(d: ItemDraft): boolean {
 
 export function ContestWizard({
   locations,
+  employees,
   currency,
   contest,
   children,
 }: {
   locations: { id: string; name: string }[];
+  employees: { id: string; name: string; location_id: string }[];
   currency: string;
   contest?: ContestFormValues; // set = edit mode
   children: ReactElement;
@@ -87,6 +93,10 @@ export function ContestWizard({
     endDate: contest?.end_date ?? "",
     threshold:
       contest && contest.store_threshold > 0 ? String(contest.store_threshold) : "",
+    goalSource: contest?.goal_source ?? ("custom" as "custom" | "monthly"),
+    personalGoals: Object.fromEntries(
+      Object.entries(contest?.personal_goals ?? {}).map(([k, v]) => [k, String(v)]),
+    ) as Record<string, string>,
     places:
       contest?.prizes.map((p) => ({
         min_sales: p.min_sales === null ? "" : String(p.min_sales),
@@ -99,6 +109,10 @@ export function ContestWizard({
   const [startDate, setStartDate] = useState(seed().startDate);
   const [endDate, setEndDate] = useState(seed().endDate);
   const [threshold, setThreshold] = useState(seed().threshold);
+  const [goalSource, setGoalSource] = useState<"custom" | "monthly">(seed().goalSource);
+  const [personalGoals, setPersonalGoals] = useState<Record<string, string>>(
+    seed().personalGoals,
+  );
   const [places, setPlaces] = useState<PlaceDraft[]>(seed().places);
 
   // The wizard instance stays mounted across dialog open/close, so every open
@@ -113,6 +127,8 @@ export function ContestWizard({
       setStartDate(s.startDate);
       setEndDate(s.endDate);
       setThreshold(s.threshold);
+      setGoalSource(s.goalSource);
+      setPersonalGoals(s.personalGoals);
       setPlaces(s.places);
       setStep(0);
       setError(null);
@@ -140,7 +156,14 @@ export function ContestWizard({
       name,
       start_date: startDate,
       end_date: endDate,
-      store_threshold: threshold === "" ? 0 : Number(threshold),
+      store_threshold:
+        goalSource === "monthly" || threshold === "" ? 0 : Number(threshold),
+      goal_source: goalSource,
+      personal_goals: Object.fromEntries(
+        Object.entries(personalGoals)
+          .filter(([, v]) => v !== "" && Number(v) > 0)
+          .map(([k, v]) => [k, Number(v)]),
+      ),
       prizes: places.map((p) => ({
         min_sales: p.min_sales === "" ? null : Number(p.min_sales),
         items: fromItemDrafts(p.items),
@@ -226,25 +249,98 @@ export function ContestWizard({
       content: (
         <div className="flex flex-col gap-3 px-1">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="cw-threshold">Store sales goal</Label>
-            <MoneyInput
-              id="cw-threshold"
-              currency={currency}
-              value={threshold}
-              onValueChange={setThreshold}
-              className="w-48"
-              placeholder="0"
-            />
+            {(
+              [
+                {
+                  value: "custom",
+                  title: "Custom number for this challenge",
+                  hint: "A special target measured on the contest period's sales — for mid-month or short quests.",
+                },
+                {
+                  value: "monthly",
+                  title: "The store's monthly goal",
+                  hint: "Measured on the WHOLE month the contest ends in, against the goal configured on this setup page — nothing to type.",
+                },
+              ] as const
+            ).map((opt) => (
+              <label
+                key={opt.value}
+                className={cn(
+                  "flex cursor-pointer flex-col gap-0.5 rounded-lg border p-3",
+                  goalSource === opt.value && "border-primary bg-primary/5",
+                )}
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="radio"
+                    name="cw-goal-source"
+                    checked={goalSource === opt.value}
+                    onChange={() => setGoalSource(opt.value)}
+                    className="size-3.5"
+                  />
+                  {opt.title}
+                </span>
+                <span className="text-muted-foreground pl-5 text-xs">{opt.hint}</span>
+              </label>
+            ))}
           </div>
+          {goalSource === "custom" && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="cw-threshold">Store sales goal</Label>
+              <MoneyInput
+                id="cw-threshold"
+                currency={currency}
+                value={threshold}
+                onValueChange={setThreshold}
+                className="w-48"
+                placeholder="0"
+              />
+            </div>
+          )}
           <p className="text-muted-foreground text-sm">
             Prize items marked{" "}
             <span className="text-foreground font-medium">
               &ldquo;only if the store reaches its goal&rdquo;
             </span>{" "}
-            unlock once the store&apos;s total sales in the contest period pass this
-            number. Items without the mark are won on placement alone. Leave it at 0
-            for no store gate.
+            unlock once this gate passes. Items without the mark are won on
+            placement alone.{goalSource === "custom" && " Leave it at 0 for no store gate."}
           </p>
+        </div>
+      ),
+    },
+    {
+      title: "Personal goals",
+      content: (
+        <div className="flex flex-col gap-3 px-1">
+          <p className="text-muted-foreground text-sm">
+            Optional target per rep for the contest period. Prize items marked{" "}
+            <span className="text-foreground font-medium">
+              &ldquo;only if they beat their personal goal&rdquo;
+            </span>{" "}
+            unlock only for reps who pass their own number. Leave blank for no
+            personal goal.
+          </p>
+          {employees
+            .filter((e) => e.location_id === locationId)
+            .map((e) => (
+              <div key={e.id} className="flex items-center justify-between gap-3">
+                <span className="text-sm">{e.name}</span>
+                <MoneyInput
+                  currency={currency}
+                  value={personalGoals[e.id] ?? ""}
+                  onValueChange={(v) =>
+                    setPersonalGoals((g) => ({ ...g, [e.id]: v }))
+                  }
+                  className="w-32"
+                  placeholder="none"
+                />
+              </div>
+            ))}
+          {employees.filter((e) => e.location_id === locationId).length === 0 && (
+            <p className="text-muted-foreground text-sm">
+              No active employees at this store.
+            </p>
+          )}
         </div>
       ),
     },
@@ -332,10 +428,24 @@ export function ContestWizard({
             </span>
             <span className="text-muted-foreground">
               Store gate:{" "}
-              {threshold === "" || Number(threshold) === 0
-                ? "none"
-                : formatMoney(Number(threshold), currency)}
+              {goalSource === "monthly"
+                ? `monthly goal of ${endDate ? monthLabel(endDate.slice(0, 7)) : "the end month"}`
+                : threshold === "" || Number(threshold) === 0
+                  ? "none"
+                  : `${formatMoney(Number(threshold), currency)} (custom)`}
             </span>
+            {Object.entries(personalGoals).filter(([, v]) => v !== "" && Number(v) > 0)
+              .length > 0 && (
+              <span className="text-muted-foreground">
+                Personal goals:{" "}
+                {employees
+                  .filter(
+                    (e) => personalGoals[e.id] && Number(personalGoals[e.id]) > 0,
+                  )
+                  .map((e) => `${e.name} ${formatMoney(Number(personalGoals[e.id]), currency)}`)
+                  .join(" · ")}
+              </span>
+            )}
           </div>
           <ul className="flex flex-col gap-2">
             {reviewItems().map((p, i) => (
@@ -349,17 +459,23 @@ export function ContestWizard({
                   )}
                 </div>
                 <div className="text-muted-foreground mt-1 flex flex-col gap-0.5 text-xs">
-                  {p.items.map((item, j) => (
-                    <span key={j} className="flex items-center gap-1.5">
-                      {item.requires_goal ? (
-                        <Lock className="size-3" />
-                      ) : (
-                        <Check className="size-3" />
-                      )}
-                      {prizeLabel(item, currency)}
-                      {item.requires_goal && " — needs the store goal"}
-                    </span>
-                  ))}
+                  {p.items.map((item, j) => {
+                    const needs = [
+                      item.requires_goal && "the store goal",
+                      item.requires_personal && "their personal goal",
+                    ].filter(Boolean);
+                    return (
+                      <span key={j} className="flex items-center gap-1.5">
+                        {needs.length > 0 ? (
+                          <Lock className="size-3" />
+                        ) : (
+                          <Check className="size-3" />
+                        )}
+                        {prizeLabel(item, currency)}
+                        {needs.length > 0 && ` — needs ${needs.join(" + ")}`}
+                      </span>
+                    );
+                  })}
                   {p.items.length > 1 && (
                     <span className="text-foreground/70 mt-0.5">
                       = {placeLabelList(p.items, currency)}
@@ -383,7 +499,7 @@ export function ContestWizard({
           <DialogDescription>
             {isEdit
               ? "Adjust the contest — finalized contests can't change."
-              : "Four quick steps: basics, the store goal, prizes, review."}
+              : "Five quick steps: basics, store goal, personal goals, prizes, review."}
           </DialogDescription>
         </DialogHeader>
         {error && <p className="text-destructive text-sm">{error}</p>}

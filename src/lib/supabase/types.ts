@@ -633,9 +633,11 @@ export type Database = {
         Row: {
           created_at: string
           end_date: string
+          goal_source: string
           id: string
           location_id: string
           name: string
+          personal_goals: Json
           prizes: Json
           results: Json | null
           start_date: string
@@ -645,9 +647,11 @@ export type Database = {
         Insert: {
           created_at?: string
           end_date: string
+          goal_source?: string
           id?: string
           location_id: string
           name: string
+          personal_goals?: Json
           prizes?: Json
           results?: Json | null
           start_date: string
@@ -657,9 +661,11 @@ export type Database = {
         Update: {
           created_at?: string
           end_date?: string
+          goal_source?: string
           id?: string
           location_id?: string
           name?: string
+          personal_goals?: Json
           prizes?: Json
           results?: Json | null
           start_date?: string

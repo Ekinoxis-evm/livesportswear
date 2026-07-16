@@ -4,7 +4,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
 import { asTiers, type CommissionTier } from "@/lib/commission";
-import { contestStatus, asPrizes, asResults } from "@/lib/rewards";
+import { contestStatus, asPersonalGoals, asPrizes, asResults } from "@/lib/rewards";
 import { shortDate } from "@/lib/format-date";
 import type { SalesContest } from "@/types/db";
 import {
@@ -33,6 +33,8 @@ function toFormValues(row: SalesContest): ContestFormValues {
     start_date: row.start_date,
     end_date: row.end_date,
     store_threshold: Number(row.store_threshold),
+    goal_source: row.goal_source === "monthly" ? ("monthly" as const) : ("custom" as const),
+    personal_goals: asPersonalGoals(row.personal_goals),
     prizes: asPrizes(row.prizes),
   };
 }
@@ -77,6 +79,13 @@ export default async function CommissionPage() {
     .select("*")
     .order("start_date", { ascending: false });
   const contests = (contestRows ?? []) as SalesContest[];
+
+  const { data: employeeRows } = await supabase
+    .from("employees")
+    .select("id, name, location_id")
+    .eq("active", true)
+    .order("name");
+  const wizardEmployees = employeeRows ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -152,6 +161,7 @@ export default async function CommissionPage() {
             {locations.length > 0 && (
               <ContestWizard
                 locations={locations.map((l) => ({ id: l.id, name: l.name }))}
+                employees={wizardEmployees}
                 currency={currency}
               >
                 <Button size="sm">
@@ -188,6 +198,7 @@ export default async function CommissionPage() {
                   {!finalized && (
                     <ContestWizard
                       locations={locations.map((l) => ({ id: l.id, name: l.name }))}
+                      employees={wizardEmployees}
                       currency={currency}
                       contest={toFormValues(c)}
                     >
