@@ -1,3 +1,5 @@
+import { formatMoney } from "@/lib/commission";
+
 /**
  * Sales-contest standings. Pure — no DB, no clock; `today` is always injected
  * as the location-local business date. The store threshold is a GATE: while
@@ -6,7 +8,26 @@
  * are 1-based and each may carry its own optional minimum.
  */
 
-export type ContestPrize = { place: number; prize: string; min_sales: number | null };
+export const GARMENT_KINDS = [
+  "bra",
+  "t-shirt",
+  "shorts",
+  "leggings",
+  "jacket",
+  "hoodie",
+  "socks",
+  "cap",
+  "other",
+] as const;
+export type GarmentKind = (typeof GARMENT_KINDS)[number];
+
+/** One thing a place wins. `requires_goal` items unlock only when the store gate passes. */
+export type PrizeItem =
+  | { type: "cash"; amount: number; requires_goal: boolean }
+  | { type: "clothing"; garments: GarmentKind[]; qty: number; requires_goal: boolean }
+  | { type: "other"; label: string; requires_goal: boolean };
+
+export type ContestPrize = { place: number; min_sales: number | null; items: PrizeItem[] };
 
 export type Contest = {
   id: string;
@@ -29,11 +50,11 @@ export type RankedEmployee = {
 
 export type PlaceStanding = {
   place: number;
-  prize: string;
   min_sales: number | null;
+  items: (PrizeItem & { unlocked: boolean })[];
   holder: RankedEmployee | null; // null when fewer employees than places
   thresholdMet: boolean;
-  winning: boolean; // gatePassed && thresholdMet
+  winning: boolean; // any item unlocked
 };
 
 export type ContestStatus = "upcoming" | "active" | "ended";
@@ -86,13 +107,17 @@ export function computeStandings(
       const holder = ranking[p.place - 1] ?? null;
       const thresholdMet =
         holder !== null && (p.min_sales === null || holder.amount >= p.min_sales);
+      const items = p.items.map((item) => ({
+        ...item,
+        unlocked: thresholdMet && (item.requires_goal ? gatePassed : true),
+      }));
       return {
         place: p.place,
-        prize: p.prize,
         min_sales: p.min_sales,
+        items,
         holder,
         thresholdMet,
-        winning: gatePassed && thresholdMet,
+        winning: items.some((i) => i.unlocked),
       };
     });
 
@@ -116,14 +141,31 @@ export type ContestResults = {
     name: string;
     amount: number;
     place: number;
-    prize: string | null;
+    prizes: string[]; // human labels of the items actually won
     won: boolean;
   }[];
 };
 
+/** Human label for one prize item ("$200" / "2× bra, t-shirt" / "Free day off"). */
+export function prizeLabel(item: PrizeItem, currency: string): string {
+  switch (item.type) {
+    case "cash":
+      return formatMoney(item.amount, currency);
+    case "clothing":
+      return `${item.qty > 1 ? `${item.qty}× ` : ""}${item.garments.join(", ")}`;
+    case "other":
+      return item.label;
+  }
+}
+
+export function placeLabelList(items: PrizeItem[], currency: string): string {
+  return items.map((i) => prizeLabel(i, currency)).join(" + ");
+}
+
 export function buildResults(
   s: ContestStandings,
   finalizedOn: string,
+  currency: string,
 ): ContestResults {
   const byPlace = new Map(s.places.map((p) => [p.place, p]));
   return {
@@ -132,34 +174,78 @@ export function buildResults(
     gate_passed: s.gatePassed,
     standings: s.ranking.map((r) => {
       const p = byPlace.get(r.place);
-      const won = p !== undefined && p.winning;
+      const prizes = (p?.items ?? [])
+        .filter((i) => i.unlocked)
+        .map((i) => prizeLabel(i, currency));
       return {
         employee_id: r.employeeId,
         name: r.name,
         amount: r.amount,
         place: r.place,
-        prize: won ? p.prize : null,
-        won,
+        prizes,
+        won: prizes.length > 0,
       };
     }),
   };
 }
 
-/** Coerce jsonb into a prize array (invalid entries dropped). */
-export function asPrizes(value: unknown): ContestPrize[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (p): p is ContestPrize =>
-      typeof p === "object" &&
-      p !== null &&
-      typeof (p as ContestPrize).place === "number" &&
-      typeof (p as ContestPrize).prize === "string" &&
-      (typeof (p as ContestPrize).min_sales === "number" ||
-        (p as ContestPrize).min_sales === null),
-  );
+function asItem(value: unknown): PrizeItem | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.requires_goal !== "boolean") return null;
+  if (v.type === "cash" && typeof v.amount === "number" && v.amount >= 0) {
+    return { type: "cash", amount: v.amount, requires_goal: v.requires_goal };
+  }
+  if (
+    v.type === "clothing" &&
+    Array.isArray(v.garments) &&
+    typeof v.qty === "number" &&
+    v.qty >= 1
+  ) {
+    const garments = v.garments.filter((g): g is GarmentKind =>
+      (GARMENT_KINDS as readonly string[]).includes(g as string),
+    );
+    if (garments.length === 0) return null;
+    return { type: "clothing", garments, qty: v.qty, requires_goal: v.requires_goal };
+  }
+  if (v.type === "other" && typeof v.label === "string" && v.label.length > 0) {
+    return { type: "other", label: v.label, requires_goal: v.requires_goal };
+  }
+  return null;
 }
 
-/** Coerce jsonb into a results snapshot; null when it isn't one. */
+/**
+ * Normalize jsonb into v2 prizes. The pre-items shape ({place, prize, min_sales})
+ * coerces — never drops — to one fully-gated "other" item, so legacy contests
+ * stay renderable and editable before the 0027 data migration runs.
+ */
+export function asPrizes(value: unknown): ContestPrize[] {
+  if (!Array.isArray(value)) return [];
+  const out: ContestPrize[] = [];
+  for (const p of value) {
+    if (typeof p !== "object" || p === null) continue;
+    const v = p as Record<string, unknown>;
+    if (typeof v.place !== "number") continue;
+    const min_sales =
+      typeof v.min_sales === "number" ? v.min_sales : null;
+    if (Array.isArray(v.items)) {
+      const items = v.items.map(asItem).filter((i): i is PrizeItem => i !== null);
+      if (items.length > 0) out.push({ place: v.place, min_sales, items });
+    } else if (typeof v.prize === "string") {
+      out.push({
+        place: v.place,
+        min_sales,
+        items: [{ type: "other", label: v.prize, requires_goal: true }],
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Coerce jsonb into a results snapshot; null when it isn't one. Accepts both
+ * snapshot generations — v1 entries carried `prize: string | null`.
+ */
 export function asResults(value: unknown): ContestResults | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as ContestResults;
@@ -171,7 +257,14 @@ export function asResults(value: unknown): ContestResults | null {
   ) {
     return null;
   }
-  return v;
+  return {
+    ...v,
+    standings: v.standings.map((s) => {
+      if (Array.isArray(s.prizes)) return s;
+      const legacy = (s as { prize?: string | null }).prize;
+      return { ...s, prizes: legacy ? [legacy] : [] };
+    }),
+  };
 }
 
 function round2(n: number): number {

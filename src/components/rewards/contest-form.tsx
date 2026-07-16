@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { createContest, updateContest } from "@/server/rewards";
 import type { ContestPrize } from "@/lib/rewards";
+import {
+  PrizeItemsEditor,
+  emptyItemDraft,
+  fromItemDrafts,
+  toItemDrafts,
+  type ItemDraft,
+} from "@/components/rewards/prize-items-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +37,7 @@ import {
 const PLACE_LABELS = ["1st", "2nd", "3rd"];
 const placeLabel = (i: number) => PLACE_LABELS[i] ?? `${i + 1}th`;
 
-type PrizeRow = { prize: string; min_sales: string };
+type PrizeRow = { min_sales: string; items: ItemDraft[] };
 
 export type ContestFormValues = {
   id: string;
@@ -67,9 +74,9 @@ export function ContestFormSheet({
   );
   const [rows, setRows] = useState<PrizeRow[]>(
     contest?.prizes.map((p) => ({
-      prize: p.prize,
       min_sales: p.min_sales === null ? "" : String(p.min_sales),
-    })) ?? [{ prize: "", min_sales: "" }],
+      items: toItemDrafts(p.items),
+    })) ?? [{ min_sales: "", items: [emptyItemDraft()] }],
   );
 
   function save() {
@@ -82,8 +89,8 @@ export function ContestFormSheet({
       end_date: endDate,
       store_threshold: threshold === "" ? 0 : Number(threshold),
       prizes: rows.map((r) => ({
-        prize: r.prize,
         min_sales: r.min_sales === "" ? null : Number(r.min_sales),
+        items: fromItemDrafts(r.items),
       })),
     };
     (isEdit ? updateContest(payload) : createContest(payload)).then((res) => {
@@ -177,45 +184,40 @@ export function ContestFormSheet({
           <div className="flex flex-col gap-2">
             <Label>Places &amp; prizes</Label>
             {rows.map((r, i) => (
-              <div key={i} className="flex items-end gap-2">
-                <span className="text-muted-foreground mb-2 w-8 text-sm font-medium">
-                  {placeLabel(i)}
-                </span>
-                <div className="flex flex-1 flex-col gap-1">
-                  <span className="text-muted-foreground text-xs">Prize</span>
-                  <Input
-                    value={r.prize}
-                    onChange={(e) =>
-                      setRows((rs) =>
-                        rs.map((x, j) => (j === i ? { ...x, prize: e.target.value } : x)),
-                      )
-                    }
-                    placeholder="$300 bonus"
-                  />
+              <div key={i} className="flex flex-col gap-2 rounded-xl border p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">{placeLabel(i)} place</span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-muted-foreground text-xs">Min sales</span>
+                    <MoneyInput
+                      currency={currency}
+                      value={r.min_sales}
+                      onValueChange={(v) =>
+                        setRows((rs) =>
+                          rs.map((x, j) => (j === i ? { ...x, min_sales: v } : x)),
+                        )
+                      }
+                      className="w-28"
+                      placeholder="none"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-destructive"
+                      aria-label="Remove place"
+                      onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-muted-foreground text-xs">Min sales</span>
-                  <MoneyInput
-                    currency={currency}
-                    value={r.min_sales}
-                    onValueChange={(v) =>
-                      setRows((rs) =>
-                        rs.map((x, j) => (j === i ? { ...x, min_sales: v } : x)),
-                      )
-                    }
-                    className="w-28"
-                    placeholder="none"
-                  />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-destructive mb-1"
-                  aria-label="Remove place"
-                  onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
+                <PrizeItemsEditor
+                  items={r.items}
+                  currency={currency}
+                  onChange={(items) =>
+                    setRows((rs) => rs.map((x, j) => (j === i ? { ...x, items } : x)))
+                  }
+                />
               </div>
             ))}
             {rows.length < 10 && (
@@ -223,7 +225,9 @@ export function ContestFormSheet({
                 variant="outline"
                 size="sm"
                 className="w-fit"
-                onClick={() => setRows((rs) => [...rs, { prize: "", min_sales: "" }])}
+                onClick={() =>
+                  setRows((rs) => [...rs, { min_sales: "", items: [emptyItemDraft()] }])
+                }
               >
                 <Plus className="mr-1 size-4" /> Add place
               </Button>

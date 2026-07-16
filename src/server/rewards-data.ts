@@ -86,6 +86,13 @@ export async function finalizeEndedContests(): Promise<{
     .select("*, location:locations(timezone)")
     .is("results", null);
 
+  const { data: cfg } = await service
+    .from("commission_config")
+    .select("currency")
+    .eq("id", 1)
+    .maybeSingle();
+  const currency = cfg?.currency ?? "USD";
+
   let finalized = 0;
   let skipped = 0;
   for (const row of rows ?? []) {
@@ -100,7 +107,7 @@ export async function finalizeEndedContests(): Promise<{
     }
     const { error } = await service
       .from("sales_contests")
-      .update({ results: buildResults(standings, today) })
+      .update({ results: buildResults(standings, today, currency) })
       .eq("id", row.id)
       .is("results", null);
     if (error) skipped += 1;
