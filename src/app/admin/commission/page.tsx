@@ -20,9 +20,9 @@ import { CommissionConfigForm } from "@/components/commission/config-form";
 import { StoreMonthForm, type GoalsByLocation } from "@/components/commission/store-month-form";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 import {
-  ContestFormSheet,
+  ContestWizard,
   type ContestFormValues,
-} from "@/components/rewards/contest-form";
+} from "@/components/rewards/contest-wizard";
 import { DeleteContestDialog } from "@/components/rewards/delete-contest-dialog";
 
 function toFormValues(row: SalesContest): ContestFormValues {
@@ -150,14 +150,14 @@ export default async function CommissionPage() {
               </CardDescription>
             </div>
             {locations.length > 0 && (
-              <ContestFormSheet
+              <ContestWizard
                 locations={locations.map((l) => ({ id: l.id, name: l.name }))}
                 currency={currency}
               >
                 <Button size="sm">
                   <Plus className="mr-1 size-4" /> New contest
                 </Button>
-              </ContestFormSheet>
+              </ContestWizard>
             )}
           </div>
         </CardHeader>
@@ -186,7 +186,7 @@ export default async function CommissionPage() {
                   {status === "upcoming" && <Badge variant="secondary">Upcoming</Badge>}
                   {status === "ended" && <Badge variant="outline">Ended</Badge>}
                   {!finalized && (
-                    <ContestFormSheet
+                    <ContestWizard
                       locations={locations.map((l) => ({ id: l.id, name: l.name }))}
                       currency={currency}
                       contest={toFormValues(c)}
@@ -194,7 +194,7 @@ export default async function CommissionPage() {
                       <Button variant="ghost" size="icon-sm" aria-label="Edit contest">
                         <Pencil className="size-4" />
                       </Button>
-                    </ContestFormSheet>
+                    </ContestWizard>
                   )}
                   <DeleteContestDialog id={c.id} name={c.name} />
                 </div>
