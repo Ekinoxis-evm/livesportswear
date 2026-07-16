@@ -53,7 +53,8 @@ function numberedPrizes(prizes: z.infer<typeof prizeSchema>[]) {
 }
 
 function revalidateRewards() {
-  revalidatePath("/admin/rewards");
+  revalidatePath("/admin/commission");
+  revalidatePath("/admin/performance/rewards");
   revalidatePath("/portal/rewards");
   revalidatePath("/store/rewards");
 }
