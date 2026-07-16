@@ -158,12 +158,15 @@ export function ResultsBoard({
   currency: string;
   highlightEmployeeId?: string;
 }) {
+  const anyWon = results.standings.some((s) => s.won);
   return (
     <div className="flex flex-col gap-2">
       {!results.gate_passed && (
         <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
-          <Lock className="size-4" /> The store goal wasn&apos;t reached — no prizes
-          this time ({formatMoney(results.store_total, currency)} total).
+          <Lock className="size-4" />
+          {anyWon
+            ? `The store goal wasn't reached (${formatMoney(results.store_total, currency)} total) — prizes that needed it stayed locked.`
+            : `The store goal wasn't reached — no prizes this time (${formatMoney(results.store_total, currency)} total).`}
         </p>
       )}
       <ul className="flex flex-col divide-y">

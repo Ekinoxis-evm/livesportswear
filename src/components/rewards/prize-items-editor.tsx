@@ -177,14 +177,16 @@ export function PrizeItemsEditor({
           </label>
         </div>
       ))}
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-fit"
-        onClick={() => onChange([...items, emptyItemDraft()])}
-      >
-        <Plus className="mr-1 size-4" /> Add prize item
-      </Button>
+      {items.length < 8 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          onClick={() => onChange([...items, emptyItemDraft()])}
+        >
+          <Plus className="mr-1 size-4" /> Add prize item
+        </Button>
+      )}
     </div>
   );
 }

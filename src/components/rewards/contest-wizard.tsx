@@ -80,25 +80,40 @@ export function ContestWizard({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [locationId, setLocationId] = useState(
-    contest?.location_id ?? locations[0]?.id ?? "",
-  );
-  const [name, setName] = useState(contest?.name ?? "");
-  const [startDate, setStartDate] = useState(contest?.start_date ?? "");
-  const [endDate, setEndDate] = useState(contest?.end_date ?? "");
-  const [threshold, setThreshold] = useState(
-    contest && contest.store_threshold > 0 ? String(contest.store_threshold) : "",
-  );
-  const [places, setPlaces] = useState<PlaceDraft[]>(
-    contest?.prizes.map((p) => ({
-      min_sales: p.min_sales === null ? "" : String(p.min_sales),
-      items: toItemDrafts(p.items),
-    })) ?? [{ min_sales: "", items: [emptyItemDraft()] }],
-  );
+  const seed = () => ({
+    locationId: contest?.location_id ?? locations[0]?.id ?? "",
+    name: contest?.name ?? "",
+    startDate: contest?.start_date ?? "",
+    endDate: contest?.end_date ?? "",
+    threshold:
+      contest && contest.store_threshold > 0 ? String(contest.store_threshold) : "",
+    places:
+      contest?.prizes.map((p) => ({
+        min_sales: p.min_sales === null ? "" : String(p.min_sales),
+        items: toItemDrafts(p.items),
+      })) ?? [{ min_sales: "", items: [emptyItemDraft()] }],
+  });
 
+  const [locationId, setLocationId] = useState(seed().locationId);
+  const [name, setName] = useState(seed().name);
+  const [startDate, setStartDate] = useState(seed().startDate);
+  const [endDate, setEndDate] = useState(seed().endDate);
+  const [threshold, setThreshold] = useState(seed().threshold);
+  const [places, setPlaces] = useState<PlaceDraft[]>(seed().places);
+
+  // The wizard instance stays mounted across dialog open/close, so every open
+  // re-seeds from the contest (or blank) — a canceled edit or a finished
+  // create must not leak into the next session.
   function openChange(next: boolean) {
     setOpen(next);
     if (next) {
+      const s = seed();
+      setLocationId(s.locationId);
+      setName(s.name);
+      setStartDate(s.startDate);
+      setEndDate(s.endDate);
+      setThreshold(s.threshold);
+      setPlaces(s.places);
       setStep(0);
       setError(null);
     }
@@ -240,6 +255,8 @@ export function ContestWizard({
         for (const [i, p] of places.entries()) {
           if (p.items.length === 0)
             return fail(`${placeName(i)} place needs at least one prize item.`);
+          if (p.items.length > 8)
+            return fail(`${placeName(i)} place has too many items (max 8).`);
           const bad = p.items.find((d) => !draftComplete(d));
           if (bad)
             return fail(

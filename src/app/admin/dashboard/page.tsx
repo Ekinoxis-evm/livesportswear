@@ -88,12 +88,16 @@ export default async function DashboardPage({
   // Month-scoped business metrics follow ?month (‹ › pager); day cards and
   // the schedule/coverage cards always stay on today.
   const currentMonth = today.slice(0, 7);
+  const MIN_MONTH = "2024-01";
+  // Clamp (like the year pager) rather than reset — an out-of-range param
+  // must not silently jump the admin back to today.
   const month =
-    sp.month &&
-    /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month) &&
-    sp.month <= currentMonth &&
-    sp.month >= "2024-01"
-      ? sp.month
+    sp.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(sp.month)
+      ? sp.month < MIN_MONTH
+        ? MIN_MONTH
+        : sp.month > currentMonth
+          ? currentMonth
+          : sp.month
       : currentMonth;
   const year = Number(month.slice(0, 4));
   const monthNum = Number(month.slice(5, 7));
@@ -273,13 +277,15 @@ export default async function DashboardPage({
           {monthLabel(month)}
         </h2>
         <div className="flex items-center gap-1">
-          <Link
-            href={qs({ month: shiftMonth(month, -1) })}
-            aria-label="Previous month"
-            className="hover:bg-muted rounded-md border p-1.5"
-          >
-            <ChevronLeft className="size-4" />
-          </Link>
+          {month > MIN_MONTH && (
+            <Link
+              href={qs({ month: shiftMonth(month, -1) })}
+              aria-label="Previous month"
+              className="hover:bg-muted rounded-md border p-1.5"
+            >
+              <ChevronLeft className="size-4" />
+            </Link>
+          )}
           {month !== currentMonth && (
             <Link
               href={qs({ month: currentMonth })}
