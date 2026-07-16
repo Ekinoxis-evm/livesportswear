@@ -8,8 +8,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createEmployeeWithAccess } from "@/server/employees";
 import { DIAL_CODES, DIAL_CODE_ITEMS, joinPhone } from "@/lib/dial-codes";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Wizard, type WizardStep } from "@/components/shared/wizard";
 import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
@@ -89,11 +88,6 @@ export function EmployeeWizard({
   const locationId = watch("location_id");
   const role = watch("role");
 
-  async function next() {
-    const ok = await trigger(STEP_FIELDS[step]);
-    if (ok) setStep((s) => Math.min(s + 1, STEPS.length - 1));
-  }
-
   async function create() {
     if (!(await trigger())) return;
     setPending(true);
@@ -122,27 +116,11 @@ export function EmployeeWizard({
 
   const v = watch();
 
-  return (
-    <div className="flex flex-col gap-6">
-      <ol className="flex flex-wrap gap-2 text-sm">
-        {STEPS.map((label, i) => (
-          <li
-            key={label}
-            className={cn(
-              "rounded-md px-3 py-1",
-              i === step
-                ? "bg-primary text-primary-foreground"
-                : i < step
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground",
-            )}
-          >
-            {i + 1}. {label}
-          </li>
-        ))}
-      </ol>
-
-      {step === 0 && (
+  const steps: WizardStep[] = [
+    {
+      title: STEPS[0],
+      validate: () => trigger(STEP_FIELDS[0]),
+      content: (
         <div className="flex flex-col gap-4">
           <Field label="Name" error={errors.name?.message} htmlFor="name">
             <Input id="name" {...register("name")} />
@@ -226,9 +204,12 @@ export function EmployeeWizard({
             </Select>
           </Field>
         </div>
-      )}
-
-      {step === 1 && (
+      ),
+    },
+    {
+      title: STEPS[1],
+      validate: () => trigger(STEP_FIELDS[1]),
+      content: (
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-3 gap-3">
             <Field
@@ -269,9 +250,12 @@ export function EmployeeWizard({
             <Input id="hire_date" type="date" {...register("hire_date")} />
           </Field>
         </div>
-      )}
-
-      {step === 2 && (
+      ),
+    },
+    {
+      title: STEPS[2],
+      validate: () => trigger(STEP_FIELDS[2]),
+      content: (
         <div className="flex flex-col gap-4">
           <Field
             label="Hourly rate (private)"
@@ -298,9 +282,11 @@ export function EmployeeWizard({
             Send portal invite to {watch("email") || "their email"} now
           </label>
         </div>
-      )}
-
-      {step === 3 && (
+      ),
+    },
+    {
+      title: STEPS[3],
+      content: (
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <Review label="Name" value={v.name} />
           <Review label="Email" value={v.email} />
@@ -317,25 +303,20 @@ export function EmployeeWizard({
           <Review label="Hourly rate" value={v.hourly_rate || "—"} />
           <Review label="Invite" value={invite ? "Yes" : "No"} />
         </dl>
-      )}
+      ),
+    },
+  ];
 
-      <div className="flex justify-between">
-        <Button
-          variant="outline"
-          onClick={() => setStep((s) => Math.max(s - 1, 0))}
-          disabled={step === 0 || pending}
-        >
-          Back
-        </Button>
-        {step < STEPS.length - 1 ? (
-          <Button onClick={next}>Next</Button>
-        ) : (
-          <Button onClick={create} disabled={pending}>
-            {pending ? "Creating…" : invite ? "Create & invite" : "Create"}
-          </Button>
-        )}
-      </div>
-    </div>
+  return (
+    <Wizard
+      steps={steps}
+      step={step}
+      onStepChange={setStep}
+      onFinish={create}
+      finishLabel={invite ? "Create & invite" : "Create"}
+      pending={pending}
+      pendingLabel="Creating…"
+    />
   );
 }
 
