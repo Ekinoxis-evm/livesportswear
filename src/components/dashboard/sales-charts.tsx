@@ -26,8 +26,19 @@ import {
 
 const FALLBACK = [1, 2, 3, 4, 5].map((n) => `var(--chart-${n})`);
 
-function compact(v: number): string {
-  return v >= 1000 ? `${Math.round(v / 1000)}k` : String(v);
+/** Compact currency ticks: $12K, $1.5K, $900. */
+function moneyTick(currency: string) {
+  try {
+    const fmt = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      notation: "compact",
+      maximumFractionDigits: 1,
+    });
+    return (v: number) => fmt.format(v);
+  } catch {
+    return (v: number) => String(v);
+  }
 }
 
 // Replaces the default tooltip row wholesale (that's the formatter contract),
@@ -91,10 +102,12 @@ export function RepSalesChart({
             <CartesianGrid vertical={false} />
             <XAxis dataKey="month" tickLine={false} axisLine={false} />
             <YAxis
-              width={44}
+              width={54}
               tickLine={false}
               axisLine={false}
-              tickFormatter={compact}
+              domain={[0, "auto"]}
+              tickCount={5}
+              tickFormatter={moneyTick(currency)}
               className="tabular-nums"
             />
             <ChartTooltip
@@ -148,10 +161,12 @@ export function StoreSalesChart({
             <CartesianGrid vertical={false} />
             <XAxis dataKey="month" tickLine={false} axisLine={false} />
             <YAxis
-              width={44}
+              width={54}
               tickLine={false}
               axisLine={false}
-              tickFormatter={compact}
+              domain={[0, "auto"]}
+              tickCount={5}
+              tickFormatter={moneyTick(currency)}
               className="tabular-nums"
             />
             <ChartTooltip
