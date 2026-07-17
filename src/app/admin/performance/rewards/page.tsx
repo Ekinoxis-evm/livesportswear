@@ -6,7 +6,6 @@ import { contestStatus, asResults } from "@/lib/rewards";
 import {
   finalizeEndedContests,
   getContestStandings,
-  toContest,
 } from "@/server/rewards-data";
 import { shortDate } from "@/lib/format-date";
 import type { SalesContest } from "@/types/db";
@@ -95,7 +94,6 @@ export default async function RewardsTabPage() {
             <div key={key} className="flex flex-col gap-3">
               <h2 className="text-sm font-semibold uppercase tracking-wide">{title}</h2>
               {rows.map((c) => {
-                const contest = toContest(c);
                 const results = asResults(c.results);
                 const standings =
                   key === "active" ? activeStandings[grouped.active.indexOf(c)] : null;

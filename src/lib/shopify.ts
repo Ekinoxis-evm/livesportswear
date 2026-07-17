@@ -257,3 +257,48 @@ export async function searchProducts(query: string): Promise<ProductHit[]> {
     image: p.featuredMedia?.preview?.image?.url ?? null,
   }));
 }
+
+export type TenderRow = {
+  amount: number; // negative = refund
+  payment_method: string; // "cash" | "credit_card" | ...
+  processed_at: string;
+};
+
+type RestTender = {
+  amount: string;
+  payment_method: string | null;
+  processed_at: string;
+  test: boolean;
+};
+
+/**
+ * Every tender transaction processed in [start, endExclusive) — payments AND
+ * refunds (refunds are negative amounts). This is the cash-drawer truth for
+ * the day: cash received, card volume, and money refunded.
+ */
+export async function fetchDayTenders(
+  start: string,
+  endExclusive: string,
+): Promise<TenderRow[]> {
+  const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
+  const rows: TenderRow[] = [];
+  let path: string | null =
+    `/tender_transactions.json?limit=250` +
+    `&processed_at_min=${encodeURIComponent(start)}&processed_at_max=${encodeURIComponent(max)}`;
+  while (path) {
+    const { body, nextPageInfo }: { body: { tender_transactions: RestTender[] }; nextPageInfo: string | null } =
+      await shopifyRest<{ tender_transactions: RestTender[] }>(path);
+    for (const t of body.tender_transactions) {
+      if (t.test) continue;
+      rows.push({
+        amount: Number(t.amount) || 0,
+        payment_method: t.payment_method ?? "other",
+        processed_at: t.processed_at,
+      });
+    }
+    path = nextPageInfo
+      ? `/tender_transactions.json?limit=250&page_info=${nextPageInfo}`
+      : null;
+  }
+  return rows;
+}

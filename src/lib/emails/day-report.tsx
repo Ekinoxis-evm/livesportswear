@@ -30,8 +30,11 @@ export type DayReportEmailProps = {
   conversionPct: string;
   returns?: number;
   returnExtraSales?: number;
-  shopifySales?: string | null; // formatted money, when POS keys are connected
+  shopifySales?: string | null; // formatted NET sales, when POS keys are connected
   shopifyOrders?: number | null;
+  cashReceived?: string | null;
+  cardReceived?: string | null;
+  refunds?: string | null; // "-$41.73 · 1" when any happened
   perPerson: DayReportRow[];
 };
 
@@ -83,6 +86,9 @@ export function DayReportEmail({
   returnExtraSales,
   shopifySales,
   shopifyOrders,
+  cashReceived,
+  cardReceived,
+  refunds,
   perPerson,
 }: DayReportEmailProps): React.ReactElement {
   return (
@@ -151,11 +157,29 @@ export function DayReportEmail({
 
           {shopifySales != null ? (
             <Text style={{ fontSize: "13px", color: muted, margin: "8px 0 0" }}>
-              Shopify POS sales: <span style={{ color: text }}>{shopifySales}</span>
+              Net sales: <span style={{ color: text }}>{shopifySales}</span>
               {shopifyOrders != null && (
                 <>
                   {" "}
                   · <span style={{ color: text }}>{shopifyOrders}</span> orders
+                </>
+              )}
+              {cashReceived != null && (
+                <>
+                  <br />
+                  Cash received: <span style={{ color: text }}>{cashReceived}</span>
+                  {cardReceived != null && (
+                    <>
+                      {" "}
+                      · Card: <span style={{ color: text }}>{cardReceived}</span>
+                    </>
+                  )}
+                </>
+              )}
+              {refunds != null && (
+                <>
+                  <br />
+                  Refunds: <span style={{ color: text }}>{refunds}</span>
                 </>
               )}
             </Text>
