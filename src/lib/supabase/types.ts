@@ -978,6 +978,69 @@ export type Database = {
           },
         ]
       }
+      store_inventory: {
+        Row: {
+          barcode: string
+          count_id: string | null
+          counted_at: string
+          created_at: string
+          id: string
+          location_id: string
+          product_title: string
+          qty: number
+          shopify_qty: number | null
+          sku: string | null
+          unknown: boolean
+          updated_at: string
+          variant_title: string | null
+        }
+        Insert: {
+          barcode: string
+          count_id?: string | null
+          counted_at?: string
+          created_at?: string
+          id?: string
+          location_id: string
+          product_title: string
+          qty?: number
+          shopify_qty?: number | null
+          sku?: string | null
+          unknown?: boolean
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Update: {
+          barcode?: string
+          count_id?: string | null
+          counted_at?: string
+          created_at?: string
+          id?: string
+          location_id?: string
+          product_title?: string
+          qty?: number
+          shopify_qty?: number | null
+          sku?: string | null
+          unknown?: boolean
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_inventory_count_id_fkey"
+            columns: ["count_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_counts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_inventory_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_day_closes: {
         Row: {
           attended_count: number

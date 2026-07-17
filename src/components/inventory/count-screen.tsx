@@ -313,8 +313,8 @@ export function CountScreen({
             <DialogTitle>Finalize this count?</DialogTitle>
             <DialogDescription>
               This sweeps the whole Shopify catalog: every item with expected
-              stock that was never scanned is added as missing. The count locks
-              afterwards.
+              stock that was never scanned is added as missing. The finalized
+              count then replaces the store&apos;s inventory book and locks.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3">

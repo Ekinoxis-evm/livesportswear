@@ -202,16 +202,41 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
     .eq("count_id", countId);
   const totals = countTotals((items ?? []) as CountItem[]);
 
-  const { error } = await supabase
+  const finalizedAt = new Date().toISOString();
+  const { data: finalized, error } = await supabase
     .from("inventory_counts")
     .update({
       status: "final",
-      finalized_at: new Date().toISOString(),
+      finalized_at: finalizedAt,
       counted_units: totals.countedUnits,
       expected_units: totals.expectedUnits,
     })
-    .eq("id", countId);
+    .eq("id", countId)
+    .select("location_id")
+    .single();
   if (error) return { ok: false, error: dbError(error) };
+
+  // The finalized count becomes the store's inventory book: our counted
+  // truth per barcode, zeros included (a total count establishes zeros).
+  const bookRows = (items ?? []).map((it) => ({
+    location_id: finalized.location_id,
+    barcode: it.barcode,
+    sku: it.sku,
+    product_title: it.product_title,
+    variant_title: it.variant_title,
+    qty: it.qty,
+    shopify_qty: it.expected,
+    unknown: it.unknown,
+    counted_at: finalizedAt,
+    count_id: countId,
+  }));
+  for (let i = 0; i < bookRows.length; i += 500) {
+    const { error: bookErr } = await supabase
+      .from("store_inventory")
+      .upsert(bookRows.slice(i, i + 500), { onConflict: "location_id,barcode" });
+    if (bookErr) return { ok: false, error: dbError(bookErr) };
+  }
+
   revalidatePath("/admin/inventory");
   return { ok: true };
 }
