@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { Lock, Check } from "lucide-react";
 import { createContest, updateContest } from "@/server/rewards";
 import {
+  conditionsLabel,
+  ordinal,
   placeLabelList,
-  prizeLabel,
   type ContestPrize,
   type PrizeItem,
 } from "@/lib/rewards";
@@ -43,10 +44,28 @@ import {
 } from "@/components/rewards/prize-items-editor";
 import { Plus, Trash2 } from "lucide-react";
 
-const PLACE_LABELS = ["1st", "2nd", "3rd"];
-const placeName = (i: number) => PLACE_LABELS[i] ?? `${i + 1}th`;
+const POSITION_ITEMS: Record<string, string> = {
+  any: "Anyone",
+  ...Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [String(i + 1), ordinal(i + 1)]),
+  ),
+};
 
-type PlaceDraft = { min_sales: string; items: ItemDraft[] };
+type PrizeDraft = {
+  items: ItemDraft[];
+  position: string; // "" = anyone, else "1".."10"
+  min_sales: string;
+  requires_store_goal: boolean;
+  requires_personal_goal: boolean;
+};
+
+const emptyPrizeDraft = (): PrizeDraft => ({
+  items: [emptyItemDraft()],
+  position: "",
+  min_sales: "",
+  requires_store_goal: false,
+  requires_personal_goal: false,
+});
 
 export type ContestFormValues = {
   id: string;
@@ -56,6 +75,7 @@ export type ContestFormValues = {
   end_date: string;
   store_threshold: number;
   goal_source: "custom" | "monthly";
+  personal_source: "custom" | "monthly";
   personal_goals: Record<string, number>;
   prizes: ContestPrize[];
 };
@@ -94,14 +114,19 @@ export function ContestWizard({
     threshold:
       contest && contest.store_threshold > 0 ? String(contest.store_threshold) : "",
     goalSource: contest?.goal_source ?? ("custom" as "custom" | "monthly"),
+    personalSource: contest?.personal_source ?? ("custom" as "custom" | "monthly"),
     personalGoals: Object.fromEntries(
       Object.entries(contest?.personal_goals ?? {}).map(([k, v]) => [k, String(v)]),
     ) as Record<string, string>,
-    places:
+    prizes:
       contest?.prizes.map((p) => ({
-        min_sales: p.min_sales === null ? "" : String(p.min_sales),
         items: toItemDrafts(p.items),
-      })) ?? [{ min_sales: "", items: [emptyItemDraft()] }],
+        position: p.conditions.position === null ? "" : String(p.conditions.position),
+        min_sales:
+          p.conditions.min_sales === null ? "" : String(p.conditions.min_sales),
+        requires_store_goal: p.conditions.requires_store_goal,
+        requires_personal_goal: p.conditions.requires_personal_goal,
+      })) ?? [emptyPrizeDraft()],
   });
 
   const [locationId, setLocationId] = useState(seed().locationId);
@@ -110,10 +135,13 @@ export function ContestWizard({
   const [endDate, setEndDate] = useState(seed().endDate);
   const [threshold, setThreshold] = useState(seed().threshold);
   const [goalSource, setGoalSource] = useState<"custom" | "monthly">(seed().goalSource);
+  const [personalSource, setPersonalSource] = useState<"custom" | "monthly">(
+    seed().personalSource,
+  );
   const [personalGoals, setPersonalGoals] = useState<Record<string, string>>(
     seed().personalGoals,
   );
-  const [places, setPlaces] = useState<PlaceDraft[]>(seed().places);
+  const [prizes, setPrizes] = useState<PrizeDraft[]>(seed().prizes);
 
   // The wizard instance stays mounted across dialog open/close, so every open
   // re-seeds from the contest (or blank) — a canceled edit or a finished
@@ -128,8 +156,9 @@ export function ContestWizard({
       setEndDate(s.endDate);
       setThreshold(s.threshold);
       setGoalSource(s.goalSource);
+      setPersonalSource(s.personalSource);
       setPersonalGoals(s.personalGoals);
-      setPlaces(s.places);
+      setPrizes(s.prizes);
       setStep(0);
       setError(null);
     }
@@ -140,12 +169,13 @@ export function ContestWizard({
     return false;
   }
 
-  function reviewItems(): { place: number; min: number | null; items: PrizeItem[] }[] {
-    return places.map((p, i) => ({
-      place: i + 1,
-      min: p.min_sales === "" ? null : Number(p.min_sales),
-      items: fromItemDrafts(p.items) as PrizeItem[],
-    }));
+  function draftConditions(p: PrizeDraft) {
+    return {
+      position: p.position === "" ? null : Number(p.position),
+      min_sales: p.min_sales === "" ? null : Number(p.min_sales),
+      requires_store_goal: p.requires_store_goal,
+      requires_personal_goal: p.requires_personal_goal,
+    };
   }
 
   function save() {
@@ -159,14 +189,18 @@ export function ContestWizard({
       store_threshold:
         goalSource === "monthly" || threshold === "" ? 0 : Number(threshold),
       goal_source: goalSource,
-      personal_goals: Object.fromEntries(
-        Object.entries(personalGoals)
-          .filter(([, v]) => v !== "" && Number(v) > 0)
-          .map(([k, v]) => [k, Number(v)]),
-      ),
-      prizes: places.map((p) => ({
-        min_sales: p.min_sales === "" ? null : Number(p.min_sales),
+      personal_source: personalSource,
+      personal_goals:
+        personalSource === "custom"
+          ? Object.fromEntries(
+              Object.entries(personalGoals)
+                .filter(([, v]) => v !== "" && Number(v) > 0)
+                .map(([k, v]) => [k, Number(v)]),
+            )
+          : {},
+      prizes: prizes.map((p) => ({
         items: fromItemDrafts(p.items),
+        conditions: draftConditions(p),
       })),
     };
     (isEdit ? updateContest(payload) : createContest(payload)).then((res) => {
@@ -312,105 +346,181 @@ export function ContestWizard({
       title: "Personal goals",
       content: (
         <div className="flex flex-col gap-3 px-1">
-          <p className="text-muted-foreground text-sm">
-            Optional target per rep for the contest period. Prize items marked{" "}
-            <span className="text-foreground font-medium">
-              &ldquo;only if they beat their personal goal&rdquo;
-            </span>{" "}
-            unlock only for reps who pass their own number. Leave blank for no
-            personal goal.
-          </p>
-          {employees
-            .filter((e) => e.location_id === locationId)
-            .map((e) => (
-              <div key={e.id} className="flex items-center justify-between gap-3">
-                <span className="text-sm">{e.name}</span>
-                <MoneyInput
-                  currency={currency}
-                  value={personalGoals[e.id] ?? ""}
-                  onValueChange={(v) =>
-                    setPersonalGoals((g) => ({ ...g, [e.id]: v }))
-                  }
-                  className="w-32"
-                  placeholder="none"
-                />
-              </div>
+          <div className="flex flex-col gap-2">
+            {(
+              [
+                {
+                  value: "custom",
+                  title: "Custom targets for this challenge",
+                  hint: "Type each rep's number below — measured on the contest period's sales.",
+                },
+                {
+                  value: "monthly",
+                  title: "Their monthly personal goals",
+                  hint: "Measured on the WHOLE month the contest ends in, against each rep's monthly goal from the Personal goals card on this setup page.",
+                },
+              ] as const
+            ).map((opt) => (
+              <label
+                key={opt.value}
+                className={cn(
+                  "flex cursor-pointer flex-col gap-0.5 rounded-lg border p-3",
+                  personalSource === opt.value && "border-primary bg-primary/5",
+                )}
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="radio"
+                    name="cw-personal-source"
+                    checked={personalSource === opt.value}
+                    onChange={() => setPersonalSource(opt.value)}
+                    className="size-3.5"
+                  />
+                  {opt.title}
+                </span>
+                <span className="text-muted-foreground pl-5 text-xs">{opt.hint}</span>
+              </label>
             ))}
-          {employees.filter((e) => e.location_id === locationId).length === 0 && (
-            <p className="text-muted-foreground text-sm">
-              No active employees at this store.
-            </p>
+          </div>
+          {personalSource === "custom" && (
+            <>
+              <p className="text-muted-foreground text-sm">
+                Prizes with the personal-goal condition unlock only for reps who
+                pass their number. Leave blank for no personal goal.
+              </p>
+              {employees
+                .filter((e) => e.location_id === locationId)
+                .map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-3">
+                    <span className="text-sm">{e.name}</span>
+                    <MoneyInput
+                      currency={currency}
+                      value={personalGoals[e.id] ?? ""}
+                      onValueChange={(v) =>
+                        setPersonalGoals((g) => ({ ...g, [e.id]: v }))
+                      }
+                      className="w-32"
+                      placeholder="none"
+                    />
+                  </div>
+                ))}
+              {employees.filter((e) => e.location_id === locationId).length === 0 && (
+                <p className="text-muted-foreground text-sm">
+                  No active employees at this store.
+                </p>
+              )}
+            </>
           )}
         </div>
       ),
     },
     {
-      title: "Places & prizes",
+      title: "Prizes",
       validate: () => {
-        if (places.length === 0) return fail("Add at least one place.");
-        for (const [i, p] of places.entries()) {
+        if (prizes.length === 0) return fail("Add at least one prize.");
+        for (const [i, p] of prizes.entries()) {
           if (p.items.length === 0)
-            return fail(`${placeName(i)} place needs at least one prize item.`);
+            return fail(`Prize ${i + 1} needs at least one item.`);
           if (p.items.length > 8)
-            return fail(`${placeName(i)} place has too many items (max 8).`);
+            return fail(`Prize ${i + 1} has too many items (max 8).`);
           const bad = p.items.find((d) => !draftComplete(d));
-          if (bad)
-            return fail(
-              `${placeName(i)} place has an incomplete ${bad.type} item.`,
-            );
+          if (bad) return fail(`Prize ${i + 1} has an incomplete ${bad.type} item.`);
         }
         setError(null);
         return true;
       },
       content: (
         <div className="flex flex-col gap-3 px-1">
-          {places.map((p, i) => (
-            <div key={i} className="flex flex-col gap-2 rounded-xl border p-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">{placeName(i)} place</span>
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-muted-foreground text-xs">Min sales</span>
-                  <MoneyInput
-                    currency={currency}
-                    value={p.min_sales}
-                    onValueChange={(v) =>
-                      setPlaces((ps) =>
-                        ps.map((x, j) => (j === i ? { ...x, min_sales: v } : x)),
-                      )
-                    }
-                    className="w-28"
-                    placeholder="none"
-                  />
+          <p className="text-muted-foreground text-sm">
+            Each prize has its own conditions. A prize with position
+            &ldquo;Anyone&rdquo; is won by <em>every</em> rep who meets the rest.
+          </p>
+          {prizes.map((p, i) => {
+            const patch = (patchP: Partial<PrizeDraft>) =>
+              setPrizes((ps) => ps.map((x, j) => (j === i ? { ...x, ...patchP } : x)));
+            return (
+              <div key={i} className="flex flex-col gap-2 rounded-xl border p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Prize {i + 1}</span>
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    className="text-destructive"
-                    aria-label="Remove place"
-                    onClick={() => setPlaces((ps) => ps.filter((_, j) => j !== i))}
+                    className="text-destructive ml-auto"
+                    aria-label="Remove prize"
+                    onClick={() => setPrizes((ps) => ps.filter((_, j) => j !== i))}
                   >
                     <Trash2 className="size-4" />
                   </Button>
                 </div>
+                <PrizeItemsEditor
+                  items={p.items}
+                  currency={currency}
+                  onChange={(items) => patch({ items })}
+                />
+                <div className="flex flex-wrap items-end gap-3 border-t pt-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-muted-foreground text-xs">Position</span>
+                    <Select
+                      items={POSITION_ITEMS}
+                      value={p.position === "" ? "any" : p.position}
+                      onValueChange={(v) =>
+                        patch({ position: !v || v === "any" ? "" : v })
+                      }
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue placeholder="Anyone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(POSITION_ITEMS).map(([v, label]) => (
+                          <SelectItem key={v} value={v}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-muted-foreground text-xs">Min sales</span>
+                    <MoneyInput
+                      currency={currency}
+                      value={p.min_sales}
+                      onValueChange={(v) => patch({ min_sales: v })}
+                      className="w-28"
+                      placeholder="none"
+                    />
+                  </div>
+                  <label className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={p.requires_store_goal}
+                      onChange={(e) => patch({ requires_store_goal: e.target.checked })}
+                      className="size-3.5"
+                    />
+                    Store goal
+                  </label>
+                  <label className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={p.requires_personal_goal}
+                      onChange={(e) =>
+                        patch({ requires_personal_goal: e.target.checked })
+                      }
+                      className="size-3.5"
+                    />
+                    Personal goal
+                  </label>
+                </div>
               </div>
-              <PrizeItemsEditor
-                items={p.items}
-                currency={currency}
-                onChange={(items) =>
-                  setPlaces((ps) => ps.map((x, j) => (j === i ? { ...x, items } : x)))
-                }
-              />
-            </div>
-          ))}
-          {places.length < 10 && (
+            );
+          })}
+          {prizes.length < 10 && (
             <Button
               variant="outline"
               size="sm"
               className="w-fit"
-              onClick={() =>
-                setPlaces((ps) => [...ps, { min_sales: "", items: [emptyItemDraft()] }])
-              }
+              onClick={() => setPrizes((ps) => [...ps, emptyPrizeDraft()])}
             >
-              <Plus className="mr-1 size-4" /> Add place
+              <Plus className="mr-1 size-4" /> Add prize
             </Button>
           )}
         </div>
@@ -448,42 +558,30 @@ export function ContestWizard({
             )}
           </div>
           <ul className="flex flex-col gap-2">
-            {reviewItems().map((p, i) => (
-              <li key={i} className="rounded-lg border p-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{placeName(i)} place</span>
-                  {p.min !== null && p.min > 0 && (
-                    <span className="text-muted-foreground text-xs tabular-nums">
-                      min {formatMoney(p.min, currency)}
+            {prizes.map((p, i) => {
+              const conditions = draftConditions(p);
+              const items = fromItemDrafts(p.items) as PrizeItem[];
+              const anyone = conditions.position === null;
+              return (
+                <li key={i} className="rounded-lg border p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">
+                      {placeLabelList(items, currency)}
                     </span>
-                  )}
-                </div>
-                <div className="text-muted-foreground mt-1 flex flex-col gap-0.5 text-xs">
-                  {p.items.map((item, j) => {
-                    const needs = [
-                      item.requires_goal && "the store goal",
-                      item.requires_personal && "their personal goal",
-                    ].filter(Boolean);
-                    return (
-                      <span key={j} className="flex items-center gap-1.5">
-                        {needs.length > 0 ? (
-                          <Lock className="size-3" />
-                        ) : (
-                          <Check className="size-3" />
-                        )}
-                        {prizeLabel(item, currency)}
-                        {needs.length > 0 && ` — needs ${needs.join(" + ")}`}
-                      </span>
-                    );
-                  })}
-                  {p.items.length > 1 && (
-                    <span className="text-foreground/70 mt-0.5">
-                      = {placeLabelList(p.items, currency)}
-                    </span>
-                  )}
-                </div>
-              </li>
-            ))}
+                    {anyone ? (
+                      <Check className="text-primary size-3.5 shrink-0" />
+                    ) : (
+                      <Lock className="text-muted-foreground size-3.5 shrink-0" />
+                    )}
+                  </div>
+                  <span className="text-muted-foreground mt-0.5 block text-xs">
+                    {anyone && conditionsLabel(conditions, currency) === "everyone"
+                      ? "Everyone wins this"
+                      : `${anyone ? "Anyone who reaches" : "Needs"}: ${conditionsLabel(conditions, currency)}`}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ),

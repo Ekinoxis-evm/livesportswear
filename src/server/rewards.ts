@@ -7,36 +7,33 @@ import { createServerClient } from "@/lib/supabase/server";
 import { GARMENT_KINDS } from "@/lib/rewards";
 import { type ActionResult, dbError, firstError } from "@/server/shared";
 
-const itemConditions = {
-  requires_goal: z.boolean(),
-  requires_personal: z.boolean(),
-};
-
 const prizeItemSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("cash"),
     amount: z.coerce.number().positive("Cash needs an amount.").max(1_000_000),
-    ...itemConditions,
   }),
   z.object({
     type: z.literal("clothing"),
     garments: z.array(z.enum(GARMENT_KINDS)).min(1, "Pick at least one garment."),
     qty: z.coerce.number().int().min(1).max(20),
-    ...itemConditions,
   }),
   z.object({
     type: z.literal("other"),
     label: z.string().trim().min(1, "Describe the prize.").max(120),
-    ...itemConditions,
   }),
 ]);
 
 const prizeSchema = z.object({
-  min_sales: z.coerce.number().min(0).nullable(),
   items: z
     .array(prizeItemSchema)
-    .min(1, "Every place needs at least one prize item.")
+    .min(1, "Every prize needs at least one item.")
     .max(8),
+  conditions: z.object({
+    position: z.coerce.number().int().min(1).max(20).nullable(),
+    min_sales: z.coerce.number().min(0).nullable(),
+    requires_store_goal: z.boolean(),
+    requires_personal_goal: z.boolean(),
+  }),
 });
 
 const contestSchema = z
@@ -47,17 +44,15 @@ const contestSchema = z
     end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     store_threshold: z.coerce.number().min(0),
     goal_source: z.enum(["custom", "monthly"]),
+    personal_source: z.enum(["custom", "monthly"]),
     personal_goals: z.record(z.string().uuid(), z.coerce.number().min(0)),
-    prizes: z.array(prizeSchema).min(1, "Add at least one place.").max(10),
+    prizes: z.array(prizeSchema).min(1, "Add at least one prize.").max(10),
   })
   .refine((c) => c.end_date >= c.start_date, {
     message: "End date must be on or after the start.",
   });
 
-// Places are always the row order — the client can't desync numbering.
-function numberedPrizes(prizes: z.infer<typeof prizeSchema>[]) {
-  return prizes.map((p, i) => ({ ...p, place: i + 1 }));
-}
+// Prizes are stored exactly as validated — v3 carries no derived numbering.
 
 function revalidateRewards() {
   revalidatePath("/admin/commission");
@@ -77,7 +72,7 @@ export async function createContest(
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("sales_contests")
-    .insert({ ...rest, prizes: numberedPrizes(prizes) })
+    .insert({ ...rest, prizes })
     .select("id")
     .single();
   if (error) return { ok: false, error: dbError(error) };
@@ -112,7 +107,7 @@ export async function updateContest(input: unknown): Promise<ActionResult> {
 
   const { error } = await supabase
     .from("sales_contests")
-    .update({ ...rest, prizes: numberedPrizes(prizes) })
+    .update({ ...rest, prizes })
     .eq("id", id.data);
   if (error) return { ok: false, error: dbError(error) };
 

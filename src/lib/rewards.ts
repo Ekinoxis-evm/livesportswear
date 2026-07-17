@@ -1,11 +1,14 @@
 import { formatMoney } from "@/lib/commission";
 
 /**
- * Sales-contest standings. Pure — no DB, no clock; `today` is always injected
- * as the location-local business date. The store threshold is a GATE: while
- * storeTotal (the sum of attributed sales, so the board and the gate can never
- * disagree) is below it, nobody wins regardless of individual numbers. Places
- * are 1-based and each may carry its own optional minimum.
+ * Sales-contest standings, prize-centric (v3). Pure — no DB, no clock;
+ * `today` is always injected as the location-local business date.
+ *
+ * A contest is a flat list of PRIZES. Each prize carries the items you win
+ * and its own combinable conditions: a ranking position in the challenge, a
+ * minimum sales amount, the store gate, and the personal goal. A prize with
+ * no position condition is won by EVERY rep who meets the rest. Amounts are
+ * NET sales (after discounts/refunds, excl. taxes+shipping) throughout.
  */
 
 export const GARMENT_KINDS = [
@@ -21,18 +24,20 @@ export const GARMENT_KINDS = [
 ] as const;
 export type GarmentKind = (typeof GARMENT_KINDS)[number];
 
-/**
- * One thing a place wins. `requires_goal` items unlock only when the store
- * gate passes; `requires_personal` items only when the holder beat their own
- * personal goal. The two conditions are independent and can be combined.
- */
-type ItemConditions = { requires_goal: boolean; requires_personal: boolean };
+/** What you win — pure description; conditions live on the prize. */
 export type PrizeItem =
-  | ({ type: "cash"; amount: number } & ItemConditions)
-  | ({ type: "clothing"; garments: GarmentKind[]; qty: number } & ItemConditions)
-  | ({ type: "other"; label: string } & ItemConditions);
+  | { type: "cash"; amount: number }
+  | { type: "clothing"; garments: GarmentKind[]; qty: number }
+  | { type: "other"; label: string };
 
-export type ContestPrize = { place: number; min_sales: number | null; items: PrizeItem[] };
+export type PrizeConditions = {
+  position: number | null; // exact rank in the challenge; null = anyone
+  min_sales: number | null; // contest-window amount
+  requires_store_goal: boolean;
+  requires_personal_goal: boolean;
+};
+
+export type ContestPrize = { items: PrizeItem[]; conditions: PrizeConditions };
 
 export type GoalSource = "custom" | "monthly";
 
@@ -43,7 +48,8 @@ export type Contest = {
   end_date: string; // inclusive
   store_threshold: number; // the gate when goal_source is "custom"
   goal_source: GoalSource;
-  personal_goals: Record<string, number>; // employeeId -> contest-window target
+  personal_source: GoalSource; // where personal targets come from
+  personal_goals: Record<string, number>; // custom mode: employeeId -> target
   prizes: ContestPrize[];
 };
 
@@ -56,29 +62,38 @@ export type RankedEmployee = {
   place: number; // 1-based; ties broken by name so places stay deterministic
   toNextPlace: number | null; // delta to overtake the employee above; null for #1
   personalGoal: number | null;
+  personalProgress: number; // the amount measured against the goal (window or month)
   personalMet: boolean; // no goal set => true (the condition can't block them)
 };
 
-export type PlaceStanding = {
-  place: number;
-  min_sales: number | null;
-  items: (PrizeItem & { unlocked: boolean })[];
-  holder: RankedEmployee | null; // null when fewer employees than places
-  thresholdMet: boolean;
-  winning: boolean; // any item unlocked
+export type PrizeBlocker = "position" | "min_sales" | "store_goal" | "personal_goal";
+
+export type PrizeStanding = {
+  items: PrizeItem[];
+  conditions: PrizeConditions;
+  /** Per rep: is this prize theirs right now, and if not, why not. */
+  eligible: { employeeId: string; unlocked: boolean; blockers: PrizeBlocker[] }[];
+  winners: RankedEmployee[];
 };
 
 export type ContestStatus = "upcoming" | "active" | "ended";
 
 export type ContestStandings = {
   status: ContestStatus;
-  storeTotal: number; // sum of contest-window attributed sales (the board)
+  storeTotal: number; // Σ contest-window net sales (the board)
   gate: { source: GoalSource; total: number; threshold: number };
   gatePassed: boolean;
   gateRemaining: number;
   gateProgress: number; // clamped 0..1; 1 when the threshold is 0
   ranking: RankedEmployee[];
-  places: PlaceStanding[];
+  prizes: PrizeStanding[];
+};
+
+export type StandingsOverrides = {
+  /** Monthly store gate: the end-date month's net total + configured goal. */
+  gate?: { total: number; threshold: number };
+  /** Monthly personal goals: per rep, their month total + configured goal. */
+  personal?: Record<string, { goal: number | null; total: number }>;
 };
 
 export function contestStatus(
@@ -94,15 +109,17 @@ export function computeStandings(
   contest: Contest,
   sales: ContestSale[],
   today: string,
-  // Monthly mode: the caller resolves the month's total + configured goal and
-  // the gate measures those instead of the contest window.
-  gateOverride?: { total: number; threshold: number },
+  overrides?: StandingsOverrides,
 ): ContestStandings {
   const sorted = [...sales].sort(
     (a, b) => b.amount - a.amount || a.name.localeCompare(b.name),
   );
   const ranking: RankedEmployee[] = sorted.map((s, i) => {
-    const personalGoal = contest.personal_goals[s.employeeId] ?? null;
+    const monthly = overrides?.personal?.[s.employeeId];
+    const personalGoal = monthly
+      ? monthly.goal
+      : (contest.personal_goals[s.employeeId] ?? null);
+    const personalProgress = monthly ? monthly.total : s.amount;
     return {
       employeeId: s.employeeId,
       name: s.name,
@@ -110,39 +127,47 @@ export function computeStandings(
       place: i + 1,
       toNextPlace: i === 0 ? null : round2(sorted[i - 1].amount - s.amount),
       personalGoal,
-      personalMet: personalGoal === null || s.amount >= personalGoal,
+      personalProgress,
+      personalMet: personalGoal === null || personalProgress >= personalGoal,
     };
   });
 
   const storeTotal = round2(sorted.reduce((a, s) => a + s.amount, 0));
-  const gateTotal = gateOverride ? gateOverride.total : storeTotal;
-  const threshold = gateOverride ? gateOverride.threshold : contest.store_threshold;
+  const gateTotal = overrides?.gate ? overrides.gate.total : storeTotal;
+  const threshold = overrides?.gate
+    ? overrides.gate.threshold
+    : contest.store_threshold;
   const gatePassed = gateTotal >= threshold;
   const gateRemaining = round2(Math.max(0, threshold - gateTotal));
   const gateProgress = threshold <= 0 ? 1 : Math.min(1, gateTotal / threshold);
 
-  const places: PlaceStanding[] = [...contest.prizes]
-    .sort((a, b) => a.place - b.place)
-    .map((p) => {
-      const holder = ranking[p.place - 1] ?? null;
-      const thresholdMet =
-        holder !== null && (p.min_sales === null || holder.amount >= p.min_sales);
-      const items = p.items.map((item) => ({
-        ...item,
-        unlocked:
-          thresholdMet &&
-          (item.requires_goal ? gatePassed : true) &&
-          (item.requires_personal ? (holder?.personalMet ?? false) : true),
-      }));
-      return {
-        place: p.place,
-        min_sales: p.min_sales,
-        items,
-        holder,
-        thresholdMet,
-        winning: items.some((i) => i.unlocked),
-      };
+  const prizes: PrizeStanding[] = contest.prizes.map((p) => {
+    const eligible = ranking.map((r) => {
+      const blockers: PrizeBlocker[] = [];
+      if (p.conditions.position !== null && r.place !== p.conditions.position) {
+        blockers.push("position");
+      }
+      if (p.conditions.min_sales !== null && r.amount < p.conditions.min_sales) {
+        blockers.push("min_sales");
+      }
+      if (p.conditions.requires_store_goal && !gatePassed) {
+        blockers.push("store_goal");
+      }
+      if (p.conditions.requires_personal_goal && !r.personalMet) {
+        blockers.push("personal_goal");
+      }
+      return { employeeId: r.employeeId, unlocked: blockers.length === 0, blockers };
     });
+    const winnerIds = new Set(
+      eligible.filter((e) => e.unlocked).map((e) => e.employeeId),
+    );
+    return {
+      items: p.items,
+      conditions: p.conditions,
+      eligible,
+      winners: ranking.filter((r) => winnerIds.has(r.employeeId)),
+    };
+  });
 
   return {
     status: contestStatus(contest, today),
@@ -152,8 +177,29 @@ export function computeStandings(
     gateRemaining,
     gateProgress,
     ranking,
-    places,
+    prizes,
   };
+}
+
+/** A rep's view: each prize with won/locked + why. Drives the boards. */
+export function prizesForEmployee(
+  standings: ContestStandings,
+  employeeId: string,
+): {
+  items: PrizeItem[];
+  conditions: PrizeConditions;
+  unlocked: boolean;
+  blockers: PrizeBlocker[];
+}[] {
+  return standings.prizes.map((p) => {
+    const e = p.eligible.find((x) => x.employeeId === employeeId);
+    return {
+      items: p.items,
+      conditions: p.conditions,
+      unlocked: e?.unlocked ?? false,
+      blockers: e?.blockers ?? (["position"] as PrizeBlocker[]),
+    };
+  });
 }
 
 export type ContestResults = {
@@ -165,7 +211,7 @@ export type ContestResults = {
     name: string;
     amount: number;
     place: number;
-    prizes: string[]; // human labels of the items actually won
+    prizes: string[]; // human labels of the prizes actually won
     won: boolean;
   }[];
 };
@@ -186,21 +232,34 @@ export function placeLabelList(items: PrizeItem[], currency: string): string {
   return items.map((i) => prizeLabel(i, currency)).join(" + ");
 }
 
+/** Human summary of a prize's conditions ("1st in the challenge · store goal"). */
+export function conditionsLabel(c: PrizeConditions, currency: string): string {
+  const parts: string[] = [];
+  if (c.position !== null) parts.push(`${ordinal(c.position)} in the challenge`);
+  if (c.min_sales !== null && c.min_sales > 0)
+    parts.push(`sell ${formatMoney(c.min_sales, currency)}+`);
+  if (c.requires_store_goal) parts.push("store goal");
+  if (c.requires_personal_goal) parts.push("personal goal");
+  return parts.length > 0 ? parts.join(" · ") : "everyone";
+}
+
+export function ordinal(n: number): string {
+  return n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
+}
+
 export function buildResults(
   s: ContestStandings,
   finalizedOn: string,
   currency: string,
 ): ContestResults {
-  const byPlace = new Map(s.places.map((p) => [p.place, p]));
   return {
     finalized_on: finalizedOn,
     store_total: s.storeTotal,
     gate_passed: s.gatePassed,
     standings: s.ranking.map((r) => {
-      const p = byPlace.get(r.place);
-      const prizes = (p?.items ?? [])
-        .filter((i) => i.unlocked)
-        .map((i) => prizeLabel(i, currency));
+      const prizes = s.prizes
+        .filter((p) => p.winners.some((w) => w.employeeId === r.employeeId))
+        .map((p) => placeLabelList(p.items, currency));
       return {
         employee_id: r.employeeId,
         name: r.name,
@@ -216,15 +275,8 @@ export function buildResults(
 function asItem(value: unknown): PrizeItem | null {
   if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
-  if (typeof v.requires_goal !== "boolean") return null;
-  const conditions = {
-    requires_goal: v.requires_goal,
-    // Additive field — items written before personal goals existed coerce to
-    // "no personal condition".
-    requires_personal: v.requires_personal === true,
-  };
   if (v.type === "cash" && typeof v.amount === "number" && v.amount >= 0) {
-    return { type: "cash", amount: v.amount, ...conditions };
+    return { type: "cash", amount: v.amount };
   }
   if (
     v.type === "clothing" &&
@@ -236,12 +288,77 @@ function asItem(value: unknown): PrizeItem | null {
       (GARMENT_KINDS as readonly string[]).includes(g as string),
     );
     if (garments.length === 0) return null;
-    return { type: "clothing", garments, qty: v.qty, ...conditions };
+    return { type: "clothing", garments, qty: v.qty };
   }
   if (v.type === "other" && typeof v.label === "string" && v.label.length > 0) {
-    return { type: "other", label: v.label, ...conditions };
+    return { type: "other", label: v.label };
   }
   return null;
+}
+
+function asConditions(value: unknown): PrizeConditions {
+  const v = (typeof value === "object" && value !== null ? value : {}) as Record<
+    string,
+    unknown
+  >;
+  return {
+    position: typeof v.position === "number" && v.position >= 1 ? v.position : null,
+    min_sales: typeof v.min_sales === "number" && v.min_sales > 0 ? v.min_sales : null,
+    requires_store_goal: v.requires_store_goal === true,
+    requires_personal_goal: v.requires_personal_goal === true,
+  };
+}
+
+/**
+ * Normalize jsonb into v3 prizes. Coerces — never drops — the older shapes:
+ * v2 places explode (each item becomes one prize carrying the place's
+ * position/minimum plus that item's own flags); v1 prize strings become one
+ * fully-store-gated "other" prize at their place. Runs on both sides of the
+ * 0030 data migration.
+ */
+export function asPrizes(value: unknown): ContestPrize[] {
+  if (!Array.isArray(value)) return [];
+  const out: ContestPrize[] = [];
+  for (const p of value) {
+    if (typeof p !== "object" || p === null) continue;
+    const v = p as Record<string, unknown>;
+    if (Array.isArray(v.items) && "conditions" in v) {
+      // v3
+      const items = v.items.map(asItem).filter((i): i is PrizeItem => i !== null);
+      if (items.length > 0) {
+        out.push({ items, conditions: asConditions(v.conditions) });
+      }
+    } else if (typeof v.place === "number" && Array.isArray(v.items)) {
+      // v2 place → one prize per item, carrying that item's own flags
+      const min_sales = typeof v.min_sales === "number" ? v.min_sales : null;
+      for (const raw of v.items) {
+        const item = asItem(raw);
+        if (!item) continue;
+        const flags = (raw ?? {}) as Record<string, unknown>;
+        out.push({
+          items: [item],
+          conditions: {
+            position: v.place,
+            min_sales,
+            requires_store_goal: flags.requires_goal === true,
+            requires_personal_goal: flags.requires_personal === true,
+          },
+        });
+      }
+    } else if (typeof v.place === "number" && typeof v.prize === "string") {
+      // v1
+      out.push({
+        items: [{ type: "other", label: v.prize }],
+        conditions: {
+          position: v.place,
+          min_sales: typeof v.min_sales === "number" ? v.min_sales : null,
+          requires_store_goal: true,
+          requires_personal_goal: false,
+        },
+      });
+    }
+  }
+  return out;
 }
 
 /** Coerce jsonb into an employeeId -> positive amount map. */
@@ -255,42 +372,7 @@ export function asPersonalGoals(value: unknown): Record<string, number> {
 }
 
 /**
- * Normalize jsonb into v2 prizes. The pre-items shape ({place, prize, min_sales})
- * coerces — never drops — to one fully-gated "other" item, so legacy contests
- * stay renderable and editable before the 0027 data migration runs.
- */
-export function asPrizes(value: unknown): ContestPrize[] {
-  if (!Array.isArray(value)) return [];
-  const out: ContestPrize[] = [];
-  for (const p of value) {
-    if (typeof p !== "object" || p === null) continue;
-    const v = p as Record<string, unknown>;
-    if (typeof v.place !== "number") continue;
-    const min_sales =
-      typeof v.min_sales === "number" ? v.min_sales : null;
-    if (Array.isArray(v.items)) {
-      const items = v.items.map(asItem).filter((i): i is PrizeItem => i !== null);
-      if (items.length > 0) out.push({ place: v.place, min_sales, items });
-    } else if (typeof v.prize === "string") {
-      out.push({
-        place: v.place,
-        min_sales,
-        items: [
-          {
-            type: "other",
-            label: v.prize,
-            requires_goal: true,
-            requires_personal: false,
-          },
-        ],
-      });
-    }
-  }
-  return out;
-}
-
-/**
- * Coerce jsonb into a results snapshot; null when it isn't one. Accepts both
+ * Coerce jsonb into a results snapshot; null when it isn't one. Accepts all
  * snapshot generations — v1 entries carried `prize: string | null`.
  */
 export function asResults(value: unknown): ContestResults | null {

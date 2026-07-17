@@ -18,6 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommissionConfigForm } from "@/components/commission/config-form";
 import { StoreMonthForm, type GoalsByLocation } from "@/components/commission/store-month-form";
+import {
+  EmployeeGoalsForm,
+  type EmployeeGoalsByKey,
+} from "@/components/commission/employee-goals-form";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 import {
   ContestWizard,
@@ -34,6 +38,8 @@ function toFormValues(row: SalesContest): ContestFormValues {
     end_date: row.end_date,
     store_threshold: Number(row.store_threshold),
     goal_source: row.goal_source === "monthly" ? ("monthly" as const) : ("custom" as const),
+    personal_source:
+      row.personal_source === "monthly" ? ("monthly" as const) : ("custom" as const),
     personal_goals: asPersonalGoals(row.personal_goals),
     prizes: asPrizes(row.prizes),
   };
@@ -87,6 +93,17 @@ export default async function CommissionPage() {
     .order("name");
   const wizardEmployees = employeeRows ?? [];
 
+  const { data: empGoalRows } = await supabase
+    .from("employee_goals")
+    .select("employee_id, year, month, goal_amount")
+    .in("year", [year, year + 1]);
+  const goalsByEmployee: EmployeeGoalsByKey = {};
+  for (const g of empGoalRows ?? []) {
+    (goalsByEmployee[g.employee_id] ??= {})[`${g.year}-${g.month}`] = Number(
+      g.goal_amount,
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
@@ -125,6 +142,25 @@ export default async function CommissionPage() {
             goalsByLocation={goalsByLocation}
             tiersByKey={tiersByKey}
             globalTiers={globalTiers}
+            currency={currency}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Personal goals</CardTitle>
+          <CardDescription>
+            Each rep&apos;s monthly sales target. Contests can gate prizes on
+            &ldquo;beat their monthly personal goal&rdquo;.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <EmployeeGoalsForm
+            employees={wizardEmployees.map((e) => ({ id: e.id, name: e.name }))}
+            year={year}
+            month={monthNum}
+            goalsByEmployee={goalsByEmployee}
             currency={currency}
           />
         </CardContent>

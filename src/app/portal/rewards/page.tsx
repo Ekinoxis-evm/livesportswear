@@ -16,7 +16,7 @@ import {
 import {
   GateProgress,
   MyPersonalProgress,
-  MyPlaceProgress,
+  PrizeList,
   ResultsBoard,
   StandingsBoard,
 } from "@/components/rewards/standings";
@@ -118,11 +118,7 @@ export default async function PortalRewardsPage() {
                     employeeId={employee.id}
                     currency={currency}
                   />
-                  <MyPlaceProgress
-                    standings={standings}
-                    employeeId={employee.id}
-                    currency={currency}
-                  />
+                  <PrizeList standings={standings} currency={currency} />
                   <StandingsBoard
                     standings={standings}
                     currency={currency}
