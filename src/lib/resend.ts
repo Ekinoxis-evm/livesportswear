@@ -13,7 +13,7 @@ export type SendArgs = {
 
 export type SendResult = { ok: true; id?: string } | { ok: false; error: string };
 
-export function maskEmail(email: string): string {
+function maskEmail(email: string): string {
   const at = email.indexOf("@");
   if (at <= 0) return "***";
   const local = email.slice(0, at);

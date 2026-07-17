@@ -25,7 +25,7 @@ export type FloorMember = {
   onBreak?: boolean; // open break — off the line, rotation position kept
 };
 
-export type QueueState = "up" | "waiting" | "attending" | "break";
+type QueueState = "up" | "waiting" | "attending" | "break";
 export type QueueRow = FloorMember & { state: QueueState; turn: number | null };
 
 function byTurn(a: FloorMember, b: FloorMember): number {
@@ -47,7 +47,7 @@ function byTurn(a: FloorMember, b: FloorMember): number {
 }
 
 /** Open customers for a member (counts win; `status` is the legacy signal). */
-export function openClients(m: FloorMember): number {
+function openClients(m: FloorMember): number {
   const counted = (m.attendingCount ?? 0) + (m.returnCount ?? 0);
   if (counted > 0) return counted;
   return m.status === "attending" ? 1 : 0;

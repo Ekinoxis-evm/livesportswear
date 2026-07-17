@@ -27,11 +27,6 @@ export async function getSessionUser(): Promise<User | null> {
   return user;
 }
 
-/** Back-compat alias. */
-export async function getAdminUser(): Promise<User | null> {
-  return getSessionUser();
-}
-
 /** Guard for admin pages/actions. Sends employees to their portal. */
 export async function requireAdmin(): Promise<User> {
   const user = await getSessionUser();

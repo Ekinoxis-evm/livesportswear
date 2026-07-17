@@ -112,30 +112,6 @@ const setLocsSchema = z.object({
   locationIds: z.array(uuid),
 });
 
-/** Replace a scoped admin's assigned locations. */
-export async function setAdminLocations(input: unknown): Promise<ActionResult> {
-  const master = await requireMasterAdmin();
-  const parsed = setLocsSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
-  const { adminUserId, locationIds } = parsed.data;
-  if (adminUserId === master.id) {
-    return { ok: false, error: "You can't scope your own master account." };
-  }
-
-  const service = createServiceClient();
-  await service.from("admin_locations").delete().eq("admin_user_id", adminUserId);
-  if (locationIds.length) {
-    const rows = locationIds.map((location_id) => ({
-      admin_user_id: adminUserId,
-      location_id,
-    }));
-    const ins = await service.from("admin_locations").insert(rows);
-    if (ins.error) return { ok: false, error: dbError(ins.error) };
-  }
-
-  revalidatePath("/admin/settings");
-  return { ok: true };
-}
 
 /** Delete a scoped admin account (master admins can't be removed here). */
 export async function removeAdmin(adminUserId: string): Promise<ActionResult> {
