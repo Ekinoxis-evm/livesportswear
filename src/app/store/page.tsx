@@ -94,6 +94,7 @@ export default async function StoreSalesPage() {
       avatarColor: colorOf.get(r.employeeId) ?? null,
       state: r.state,
       turn: r.turn,
+      turns: r.rotationCount,
       arrivedLabel: formatInTimeZone(new Date(r.arrivedAt), tz, "HH:mm"),
       walkins: r.attendingCount ?? 0,
       returns: r.returnCount ?? 0,
