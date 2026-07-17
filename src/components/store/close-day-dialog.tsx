@@ -126,8 +126,10 @@ export function CloseDayDialog({
                 <Metric label="Sold" value={draft.sold} />
                 <Metric label="Conversion" value={draft.conversionPct} />
                 <Metric label="Contacts" value={draft.contacts} />
-                <Metric label="Shopify sales" value={draft.shopifySales ?? "—"} />
+                <Metric label="Net sales" value={draft.shopifySales ?? "—"} />
                 <Metric label="Orders" value={draft.shopifyOrders ?? "—"} />
+                <Metric label="Cash received" value={draft.cashReceived ?? "—"} />
+                <Metric label="Refunds" value={draft.refunds ?? "none"} />
                 {draft.returns > 0 && (
                   <>
                     <Metric label="Returns" value={draft.returns} />
@@ -144,7 +146,7 @@ export function CloseDayDialog({
                 </span>
                 <span className="text-muted-foreground flex items-center gap-1.5">
                   <Paperclip className="size-3.5 shrink-0" />
-                  CSV attached: {draft.eventCount} clients · {draft.checkinCount} check-ins
+                  CSV + XML + PDF attached: {draft.eventCount} clients · {draft.checkinCount} check-ins
                 </span>
               </div>
 

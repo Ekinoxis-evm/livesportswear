@@ -5,8 +5,14 @@ import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct, type ConversionTotals } from "@/lib/conversion";
 import { breakMinutes, type BreakRow } from "@/lib/breaks";
 import { getDaySalesCached } from "@/lib/shopify-day-cache";
-import type { DaySales } from "@/lib/shopify";
-import { buildDayReportCsv } from "@/lib/day-report-csv";
+import { fetchDayTenders, type DaySales } from "@/lib/shopify";
+import { isShopifyConfigured } from "@/lib/shopify-config";
+import { dayRangeInTz } from "@/lib/shopify-range";
+import { summarizeTenders, type TenderSummary } from "@/lib/tenders";
+import { buildDayReportCsv, type ReportCheckin, type ReportEvent } from "@/lib/day-report-csv";
+import { buildDayReportXml, type DayReportTotals } from "@/lib/day-report-xml";
+import { renderToBuffer } from "@react-pdf/renderer";
+import { DayReportPdf } from "@/lib/emails/day-report-pdf";
 import { formatMoney } from "@/lib/commission";
 import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
@@ -48,8 +54,10 @@ export type CloseDayDraft = {
   conversionPct: string;
   returns: number;
   returnExtraSales: number;
-  shopifySales: string | null; // formatted money-in for the day
+  shopifySales: string | null; // formatted NET money-in for the day
   shopifyOrders: number | null;
+  cashReceived: string | null;
+  refunds: string | null; // "-$41.73 · 1" when any
   eventCount: number;
   checkinCount: number;
 };
@@ -61,9 +69,15 @@ type DayReportData = {
   t: ConversionTotals;
   perPerson: DayReportRow[];
   shopify: DaySales | null;
+  tenders: TenderSummary | null;
   recipients: string[];
   subject: string;
   csv: string;
+  xml: string;
+  reportEvents: ReportEvent[];
+  reportCheckins: ReportCheckin[];
+  totals: DayReportTotals;
+  currency: string;
   eventCount: number;
   checkinCount: number;
 };
@@ -80,7 +94,14 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
   const locName = loc?.name ?? "Store";
   const bd = businessDate(tz);
 
-  const [{ data: eventRows }, { data: checkinRows }, { data: breakRows }, shopify, recipients] =
+  const dayRange = dayRangeInTz(bd, tz);
+  const tendersPromise: Promise<TenderSummary | null> = isShopifyConfigured()
+    ? fetchDayTenders(dayRange.start, dayRange.endExclusive)
+        .then(summarizeTenders)
+        .catch(() => null)
+    : Promise.resolve(null);
+
+  const [{ data: eventRows }, { data: checkinRows }, { data: breakRows }, shopify, tenders, recipients] =
     await Promise.all([
       service
         .from("client_events")
@@ -104,6 +125,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
         .eq("location_id", locationId)
         .eq("business_date", bd),
       getDaySalesCached(bd, tz),
+      tendersPromise,
       reportRecipients(locationId),
     ]);
 
@@ -131,30 +153,57 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
     conversionPct: formatPct(p.conversion),
   }));
 
+  const reportEvents: ReportEvent[] = events.map((e) => ({
+    employeeName: nameOf(e),
+    attended_at: e.attended_at,
+    kind: e.kind,
+    sold: e.sold,
+    got_contact: e.got_contact,
+    reasons: e.reasons,
+    products: (e.products as { title: string }[] | null) ?? null,
+    note: e.note,
+  }));
+  const reportCheckins: ReportCheckin[] = checkins.map((c) => ({
+    employeeName: nameOf(c),
+    arrived_at: c.arrived_at,
+    left_at: c.left_at,
+    entry_validated_at: c.entry_validated_at,
+    entry_self: c.entry_self,
+    exit_validated_at: c.exit_validated_at,
+    exit_self: c.exit_self,
+    exit_missed: c.exit_missed,
+    breakMinutes: breakMinutes(breaksBy.get(c.employee_id) ?? [], now),
+  }));
+
+  const currency = shopify?.currency ?? "USD";
+  const reportTotals: DayReportTotals = {
+    netSales: shopify?.total ?? null,
+    orders: shopify?.orders ?? null,
+    cashNet: tenders?.cashNet ?? null,
+    cardNet: tenders?.cardNet ?? null,
+    refundsTotal: tenders?.refundsTotal ?? null,
+    refundsCount: tenders?.refundsCount ?? null,
+    attended: t.attended,
+    sold: t.sold,
+    conversionPct: formatPct(t.conversion),
+    contacts: t.contacts,
+    returns: t.returns,
+  };
+
   const csv = buildDayReportCsv({
     businessDate: bd,
     tz,
-    events: events.map((e) => ({
-      employeeName: nameOf(e),
-      attended_at: e.attended_at,
-      kind: e.kind,
-      sold: e.sold,
-      got_contact: e.got_contact,
-      reasons: e.reasons,
-      products: (e.products as { title: string }[] | null) ?? null,
-      note: e.note,
-    })),
-    checkins: checkins.map((c) => ({
-      employeeName: nameOf(c),
-      arrived_at: c.arrived_at,
-      left_at: c.left_at,
-      entry_validated_at: c.entry_validated_at,
-      entry_self: c.entry_self,
-      exit_validated_at: c.exit_validated_at,
-      exit_self: c.exit_self,
-      exit_missed: c.exit_missed,
-      breakMinutes: breakMinutes(breaksBy.get(c.employee_id) ?? [], now),
-    })),
+    events: reportEvents,
+    checkins: reportCheckins,
+  });
+  const xml = buildDayReportXml({
+    businessDate: bd,
+    storeName: locName,
+    currency,
+    tz,
+    totals: reportTotals,
+    events: reportEvents,
+    checkins: reportCheckins,
   });
 
   return {
@@ -164,9 +213,15 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
     t,
     perPerson,
     shopify,
+    tenders,
     recipients,
     subject: `Daily Report — ${locName} · ${weekdayName(bd)} ${shortDate(bd)}`,
     csv,
+    xml,
+    reportEvents,
+    reportCheckins,
+    totals: reportTotals,
+    currency,
     eventCount: events.length,
     checkinCount: checkins.length,
   };
@@ -236,6 +291,11 @@ export async function closeDayDraftFor(closer: {
       shopifySales:
         d.shopify != null ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD") : null,
       shopifyOrders: d.shopify?.orders ?? null,
+      cashReceived: d.tenders != null ? formatMoney(d.tenders.cashNet, d.currency) : null,
+      refunds:
+        d.tenders != null && d.tenders.refundsCount > 0
+          ? `${formatMoney(d.tenders.refundsTotal, d.currency)} · ${d.tenders.refundsCount}`
+          : null,
       eventCount: d.eventCount,
       checkinCount: d.checkinCount,
     },
@@ -295,11 +355,32 @@ export async function closeDayFor(closer: {
       sold_count: d.t.sold,
       contact_count: d.t.contacts,
       shopify_sales: d.shopify?.total ?? null,
+      cash_sales: d.tenders?.cashNet ?? null,
       currency: d.shopify?.currency ?? null,
     },
     { onConflict: "location_id,business_date" },
   );
   if (upErr) return { ok: false, error: upErr.message };
+
+  const money = (v: number | null) =>
+    v === null ? "—" : formatMoney(v, d.currency);
+  const pdf = await renderToBuffer(
+    DayReportPdf({
+      storeName: d.locName,
+      businessDateLabel: `${weekdayName(d.bd)} · ${shortDate(d.bd)}`,
+      currency: d.currency,
+      tz: d.tz,
+      totals: d.totals,
+      money,
+      events: d.reportEvents,
+      checkins: d.reportCheckins,
+    }),
+  );
+  const attachments = [
+    { filename: `daily-report-${d.bd}.csv`, content: d.csv },
+    { filename: `daily-report-${d.bd}.xml`, content: d.xml },
+    { filename: `daily-report-${d.bd}.pdf`, content: pdf.toString("base64") },
+  ];
 
   for (const to of d.recipients) {
     await sendSafe({
@@ -320,9 +401,15 @@ export async function closeDayFor(closer: {
             ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD")
             : null,
         shopifyOrders: d.shopify?.orders ?? null,
+        cashReceived: d.tenders != null ? money(d.tenders.cashNet) : null,
+        cardReceived: d.tenders != null ? money(d.tenders.cardNet) : null,
+        refunds:
+          d.tenders != null && d.tenders.refundsCount > 0
+            ? `${money(d.tenders.refundsTotal)} · ${d.tenders.refundsCount}`
+            : null,
         perPerson: d.perPerson,
       }),
-      attachments: [{ filename: `daily-report-${d.bd}.csv`, content: d.csv }],
+      attachments,
     });
   }
 
