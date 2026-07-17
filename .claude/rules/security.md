@@ -34,6 +34,17 @@
 
 ## Row-Level Security
 - **Every table has RLS enabled. Default deny.**
+- **Hardening (0028):** the SECURITY DEFINER helper functions (`is_admin`,
+  `admin_can_access_location`, `current_employee_id`, …) are NOT executable by
+  `anon`/`public` — only `authenticated` + `service_role` (they power the RLS
+  policies, which all target `authenticated`). `search_path` is pinned on
+  `tg_set_updated_at`/`is_admin`/`is_master_admin`. The `avatars` bucket's
+  listing policy was dropped (public-bucket object URLs don't need it).
+  Leaked-password protection (HaveIBeenPwned) is ON — that's a Supabase Auth
+  dashboard setting, not a migration.
+- Floor/rewards tables follow the same posture: `floor_breaks` and
+  `sales_contests` are admin-all + location-read with service-role-only
+  writes; `employee_goals` is admin-all (via `employee_location`) + self-read.
 - **Role-aware** (migration `0003`). Role comes from the JWT claim `app_metadata.role` (`admin` | `employee`), read by `public.is_admin()`. Helpers `public.current_employee_id()` / `public.current_location_id()` are `security definer` (bypass RLS to avoid policy recursion).
   - **Admin** (`is_admin()`): full CRUD on every table.
   - **Employee**: reads only their **own** `employees` row, their **own** `shifts` / `time_off_requests`, and their location's `schedules`; `locations` + `shift_templates` are readable by any authenticated user (not sensitive). Employees have **no write policy** on `employees` — profile/photo edits go through a service-role server action with controlled fields.

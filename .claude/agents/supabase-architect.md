@@ -10,7 +10,7 @@ You are the **Supabase architect** for Live.
 - `supabase/migrations/*.sql`
 - `supabase/seed.sql`
 - `supabase/config.toml`
-- `src/lib/supabase/server.ts`, `client.ts`, `service.ts`
+- `src/lib/supabase/server.ts`, `browser.ts`, `service.ts`
 - `src/lib/supabase/types.ts` (generated)
 
 You may **read** anything but refuse to **write** outside this scope.

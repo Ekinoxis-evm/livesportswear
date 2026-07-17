@@ -2,6 +2,11 @@
 
 > Every schema decision lives here. If you change a table, update this file in the same PR. Authoritative SQL lives in `supabase/migrations/`.
 
+> **The sales metric everywhere is NET sales** — Shopify `current_subtotal_price`: after
+> discounts and refunds, excluding taxes and shipping (`src/lib/shopify.ts`). This is what
+> `monthly_sales.amount`, contest standings, range views, and dashboards all mean. (Note:
+> `store_day_closes.shopify_sales` snapshots taken before 2026-07-16 are tax-inclusive.)
+
 ## Tables
 
 ### `locations`
@@ -128,6 +133,7 @@ keys are connected.
 - `attended_count int`, `sold_count int`, `contact_count int`
 - `shopify_sales numeric(12,2)` (nullable), `currency text` — snapshotted from
   Shopify at close time (`closeDay`); null if Shopify was unreachable/unconfigured
+- `cash_sales numeric` (added 0025) — cash-in-register snapshot at close
 - `unique (location_id, business_date)`
 
 ### `store_goals` (added 0009)
@@ -200,6 +206,55 @@ a *temporary* credential; see security.md.
 - `set_at timestamptz default now()`
 - RLS: enabled with **no policies** (default deny) — read/written only by
   admin-gated server code via the service client.
+
+### `floor_breaks` (added 0025)
+An on-floor employee steps off the line without checking out. Tracked only —
+worked hours stay checkout − checkin; the 30-min daily budget is flagged
+(`lib/breaks.ts`), never enforced. Multiple breaks per day; `ended_at` null =
+ongoing. A partial unique index allows at most ONE open break per employee per
+day. On break = removed from the queue, rotation position kept.
+- `id uuid pk`
+- `location_id uuid fk -> locations`, `employee_id uuid fk -> employees`
+- `business_date date not null`
+- `started_at timestamptz not null default now()`, `ended_at timestamptz`
+- index `(location_id, business_date)`; partial unique `(location, date, employee) where ended_at is null`
+- RLS: admins full via `admin_can_access_location`; location JWTs read-only;
+  all writes via the PIN-gated kiosk actions (`src/server/store-floor.ts`).
+
+### `sales_contests` (added 0026; extended 0029, 0030)
+Per-location sales contests ("rewards"). Standings math is pure in
+`src/lib/rewards.ts`; per-rep amounts come live from Shopify over the contest
+window (NET sales).
+- `id uuid pk`, `location_id uuid fk -> locations`
+- `name text`, `start_date date`, `end_date date` (inclusive; check end >= start)
+- `store_threshold numeric(14,2)` — the store gate when `goal_source='custom'`
+- `goal_source text ('custom'|'monthly')` (0029) — `monthly` gates on the END
+  date's month: that whole month's `monthly_sales` vs `store_goals.goal_amount`
+- `personal_source text ('custom'|'monthly')` (0030) — where the personal-goal
+  condition measures: targets typed into the contest (window) or each rep's
+  `employee_goals` for the end month
+- `personal_goals jsonb` (0029) — custom mode: `{employee_id: amount}`
+- `prizes jsonb` — **v3 shape** (0030): a flat list of prizes, each
+  `{items: PrizeItem[], conditions: {position|null, min_sales|null,
+  requires_store_goal, requires_personal_goal}}`. `position: null` = won by
+  EVERY rep meeting the rest. Items are pure descriptions (cash amount /
+  clothing garments+qty / other label). `asPrizes` coerces the older v1/v2
+  shapes defensively.
+- `results jsonb` — immutable final snapshot written once after `end_date`
+  (daily cron + admin-view fallback); per rep `{prizes: string[], won}`
+- RLS: admin-all via location; employees read their location's contests;
+  kiosk reads via service client.
+
+### `employee_goals` (added 0030)
+A rep's monthly sales target — mirror of `store_goals`, configured in the
+"Personal goals" card on Sales & Rewards setup. Contests with
+`personal_source='monthly'` measure each rep's end-month `monthly_sales`
+against it.
+- `employee_id uuid fk -> employees`, `year int`, `month int check (1..12)`
+- `goal_amount numeric(12,2) not null default 0`
+- `primary key (employee_id, year, month)`
+- RLS: admin-all via `admin_can_access_location(employee_location(employee_id))`;
+  employees read their own rows.
 
 ### `attendance_validations` (added 0015 — LEGACY since 0019)
 

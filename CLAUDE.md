@@ -1,55 +1,55 @@
 # Live — Project Memory for Claude Code
 
-> This file is loaded into every Claude Code session. Keep it tight; long-form context lives in `.claude/rules/*` and `PLAN.md`.
+> This file is loaded into every Claude Code session. Keep it tight; long-form context lives in `.claude/rules/*`.
 
 ## Mission
-Internal scheduling app for **Live Active Wear** (liveactivewear.com). One admin builds weekly schedules (Mon–Sun) across multiple store locations; employees receive emails + a personal ICS calendar feed + a read-only schedule page. Rules engine enforces hard limits (max days/week, conflicts, time-off) and warns on soft ones (coverage, hour targets).
+Internal ops app for **Live Active Wear** (liveactivewear.com), in production at livesportswear.vercel.app. Three surfaces:
+- **Admin**: weekly schedules (Mon–Sun) with a rules engine (hard limits block publish, soft ones warn), a Performance hub (Daily floor · Sales · Rewards), and Sales & Rewards setup (goals, commission tiers, contests, per-rep monthly goals).
+- **Store kiosk** (shared iPad login, `role=store`): check-in/out with PIN + face photo, the rotation queue ("up system") with breaks/undo, sales contests leaderboard, close-day report.
+- **Employee portal + public pages**: personal schedule/sales/rewards, magic-token schedule page + ICS feed, public store-week page.
+
+**Sales metric everywhere = NET sales** (Shopify `current_subtotal_price`: after discounts/refunds, excluding taxes+shipping). Conversion counts live in `client_events`; money comes from Shopify.
 
 ## Stack (one-liner)
-Next.js 15 (App Router) · TypeScript · Tailwind v4 + shadcn/ui · Supabase (Postgres + Auth) · Resend · Vercel · pnpm.
-
-Full plan: see `PLAN.md`.
+Next.js 16 (App Router) · TypeScript · Tailwind v4 + shadcn/ui (Base UI) · Supabase (Postgres + Auth) · Resend · Shopify Admin API · Vercel · pnpm.
 
 ## How this codebase is organized
-- `src/lib/scheduling/` — pure functions: rules engine, conflicts, stats, week math, publish. **No DB calls here.** This is the heart of the app.
-- `src/server/` — server actions (the only place DB mutations happen).
+- `src/lib/scheduling/` — pure scheduling functions: rules engine, conflicts, stats, week/payroll math. **No DB calls here.**
+- `src/lib/` — other pure domain libs (same no-DB rule): `rewards.ts` (contest standings), `floor-queue.ts` + `floor-state.ts` (kiosk queue), `breaks.ts`, `commission.ts`, `conversion.ts`, `attendance.ts`, `shopify-range*.ts`, `monthly-series.ts`.
+- `src/server/` — server actions and server-only assembly (the only place DB mutations happen). `*-core.ts` files hold shared bodies (floor, conversion).
 - `src/lib/supabase/` — Supabase clients (server, browser, service-role).
-- `src/app/(admin)/` — admin UI (auth required).
-- `src/app/(public)/` — employee-facing public pages + ICS feed (magic-token URLs).
-- `src/lib/emails/` — React Email templates.
-- `supabase/migrations/` — append-only migrations.
-- `.claude/` — slash commands, subagents, hooks, rules, project skills.
+- `src/app/admin/` — admin UI (role=admin). Performance is a route-tab hub (`performance/{daily,sales,rewards}`); `/admin/commission` is the "Sales & Rewards setup" page; old `/admin/{sales,rewards}` are redirect stubs.
+- `src/app/portal/` — employee portal (role=employee): Performance / Schedule / Rewards / Settings.
+- `src/app/store/` — the kiosk (role=store): Sales / Check-in / Performance / Rewards, 45s auto-refresh.
+- `src/app/s/[token]/` + `src/app/w/[token]/` — public magic-token pages (employee schedule + ICS; store week + sales ranking).
+- `src/app/api/cron/` — `shopify-sync` (also finalizes ended contests), `stale-checkins`, `photo-retention`, `meta-sync`. All check `CRON_SECRET`.
+- `src/lib/emails/` — React Email templates (schedule-published, day-report, credentials, time-off-decision).
+- `supabase/migrations/` — append-only, currently through `0030`.
+- `.claude/` — agents, commands, hooks, rules, project skills.
 
 ## Coding standards (short version)
 - Server-side mutations only via files in `src/server/`. Components never write to the DB.
 - Zod validation at every boundary: server actions inputs, route handler payloads, env parsing.
-- `validateSchedule()` from `lib/scheduling/rules.ts` runs at publish — never bypass.
+- `validateSchedule()` from `lib/scheduling/rules.ts` runs at publish (`src/server/schedules.ts`) — never bypass.
 - Magic tokens are 32-byte URL-safe random; **never log them**, never expose in error messages.
-- Dates: store as `date` (no time) for shift dates; times as `time` in location-local; render with `date-fns-tz` and the location's IANA TZ.
+- Dates: store as `date` (no time) for shift dates; times as `time` in location-local; render with `date-fns-tz` and the location's IANA TZ. "Today" = `businessDate(tz)`.
+- Complex create/edit forms use the shared `Wizard` shell (`src/components/shared/wizard.tsx`); side edits use Sheets; confirms use Dialogs.
 - Don't add features beyond the current task. Don't add abstractions for hypotheticals. No backwards-compat shims.
 
 ## Never do
 - `supabase db reset` without `--i-mean-it` (a pre-tool-use hook enforces this).
 - Send real emails from dev. `RESEND_DRY_RUN=true` in `.env.local` for local work.
 - Commit `.env.local`, `*.key`, or anything matching `*secret*`.
-- Bypass RLS by using the service-role client in any path that isn't an admin server action.
-- Create a second Supabase Auth user. RLS grants every authenticated user full read/write in v1 (single admin); a second login exposes all data until `is_admin()` gating lands. See `.claude/rules/security.md`.
+- Bypass RLS with the service-role client outside token-verified public routes, cron handlers, or admin/kiosk server actions (see `.claude/rules/security.md`).
+- Write floor/queue state from anywhere but the kiosk server actions (`src/server/store-floor.ts`) — the kiosk is the floor's single writer.
 
 ## Where to find specifics
 - Schema decisions: `.claude/rules/data-model.md`
-- UI patterns (when to use Dialog vs Sheet, color usage): `.claude/rules/ui-patterns.md`
-- Security (RLS, magic tokens, secrets): `.claude/rules/security.md`
+- UI patterns (Dialog vs Sheet vs Wizard, color usage): `.claude/rules/ui-patterns.md`
+- Security (roles, RLS, magic tokens, hardening): `.claude/rules/security.md`
 - Testing (rules engine coverage gate): `.claude/rules/testing.md`
+- Go-live keys checklist: `docs/ready-for-keys.md`
 - Adding a scheduling rule: `/add-shift-rule` slash command
 
-## Build phases (we are here)
-- [x] Phase 0 — Bootstrap
-- [x] Phase 1 — Schema + Auth + CRUD
-- [x] Phase 2 — Schedule grid + shift CRUD
-- [x] Phase 3 — Rules engine
-- [x] Phase 4 — Publish + email + ICS
-- [x] Phase 5 — Time-off requests
-- [x] Phase 6 — Stats + dashboard
-- [ ] Phase 7 — Cron + polish + deploy
-
-Update the box as phases complete.
+## Current state
+In production since 2026-07. Live: scheduling + publish emails/ICS, time-off, store kiosk (PIN/photo check-in, rotation queue, multi-client, breaks, undo, close-day report + CSV), Shopify net-sales sync (10-min GitHub Action + daily cron) with 2024→now history, dashboards + year charts, custom date-range sales, commission tiers, sales contests v3 (prize-centric: position/min-sales/store-goal/personal-goal conditions; monthly store + personal goal modes), per-rep monthly goals, per-location admins, security-hardened RLS helpers.

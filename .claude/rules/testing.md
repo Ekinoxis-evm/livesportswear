@@ -6,7 +6,10 @@
 
 ## Coverage gates
 - `src/lib/scheduling/*` MUST stay at 100% line coverage. CI fails below.
-- Everything else is best-effort; no enforced threshold.
+- The other pure domain libs (rewards, floor-queue/state, breaks, commission,
+  conversion, attendance, monthly-series, shopify-range) each have their own
+  spec file and are expected to keep full behavioral coverage, though only the
+  scheduling gate is CI-enforced.
 
 ## Test types
 - **Pure unit tests** (default) for `lib/scheduling/*`. No mocks needed — inputs are plain objects.

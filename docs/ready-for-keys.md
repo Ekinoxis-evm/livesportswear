@@ -1,30 +1,22 @@
-# Ready for keys — go-live checklist
+# Ready for keys — external keys checklist
 
-The store-ops build (conversion app, goals, per-location admins, Resend auth) ships
-"wired and waiting." Everything works with graceful empty states **before** the
-external keys are connected, and lights up automatically once they are. This is the
-order of operations to take it live.
+> Status 2026-07: the app is LIVE (livesportswear.vercel.app). Migrations are
+> applied through `0030`, the master admin exists, Shopify is connected and
+> syncing (net sales, every 10 min via GitHub Action + daily cron), and
+> CRON_SECRET is set. What remains below is marked ⏳.
 
-## 1. Apply the migrations
+## 1. Migrations — ✅ done
 
-Migrations `0009_conversion_goals_admin_scope.sql` and `0010_admin_scope_rls.sql`
-must be applied to the Supabase project.
-
-```bash
-supabase link --project-ref "$SUPABASE_PROJECT_REF"
-supabase db push          # applies 0009 + 0010
-```
-
-(Or apply each via the Supabase MCP `apply_migration`. The project pauses when idle —
-unpause it in the dashboard first.) After applying, regenerate types and confirm they
-match the hand-written ones:
+Schema is applied through `0030` (apply new ones via the Supabase MCP
+`apply_migration`; `db push` would try to re-apply early out-of-band
+migrations — don't use it here). After schema changes, regenerate types:
 
 ```bash
 supabase gen types typescript --linked > src/lib/supabase/types.ts
 git diff --stat src/lib/supabase/types.ts   # expect no/minimal diff
 ```
 
-## 2. Designate the master admin
+## 2. Designate the master admin — ✅ done
 
 The first admin account (no `app_metadata.admin_scope` claim) is the **master** admin
 and sees every store. Set it once via the service role:
@@ -39,7 +31,7 @@ where email = 'owner@liveactivewear.com';
 Then invite per-store admins from **Settings → Admins** (they get
 `admin_scope=location` + an `admin_locations` row and are isolated by RLS).
 
-## 3. Email
+## 3. Email — ⏳ verified-domain sender pending (default resend.dev sender only reaches the account owner)
 
 **Auth emails (invite + password reset) use Supabase Auth's built-in email** — no
 Resend needed, works out of the box. Admins can also **Set password** on an
@@ -63,7 +55,7 @@ report, time-off decision.
 > `noreply@yourdomain.com`). `sendSafe` logs the masked send outcome, so failures
 > are visible in the runtime logs.
 
-## 4. Shopify POS (sales / commission / day-report money) — when ready
+## 4. Shopify POS (sales / commission / day-report money) — ✅ connected (net sales, synced every 10 min)
 
 Auth is the **client-credentials grant** from a Dev Dashboard app (admin-created
 custom apps were retired Jan 2026). The app must live in the **same organization**
@@ -79,13 +71,13 @@ previous month → commission, the dashboard **Sales vs Goal** card, and (next
 step) the day-report money line. Conversion counts (`client_events`) are
 employee-entered and already work without Shopify.
 
-## 5. Meta Ads (ROAS) — optional
+## 5. Meta Ads (ROAS) — ⏳ optional, keys not connected
 
 Set `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_API_VERSION` (`ads_read`). The
 cron (`/api/cron/meta-sync`) fills `ad_insights` → Marketing page + dashboard **Ad
 ROAS** card.
 
-## 6. Cron
+## 6. Cron — ✅ CRON_SECRET set; all four crons live
 
 `CRON_SECRET` must be set; Vercel cron calls send `Authorization: Bearer $CRON_SECRET`.
 Schedules: `meta-sync` and `shopify-sync` run daily (see `vercel.ts`).
@@ -94,8 +86,9 @@ Schedules: `meta-sync` and `shopify-sync` run daily (see `vercel.ts`).
 
 - Employee invites + password reset (needs only Resend).
 - Scheduling, publish, ICS, time-off with the Friday cutoff.
-- The in-store conversion app: who's-working-today, swipe attended/sold/contact,
-  live conversion %, Close Day → emailed report (money line shows "connect Shopify").
+- The store kiosk (`/store`): PIN + photo check-in, rotation queue with breaks
+  and undo, attended/sold/contact logging, contests leaderboard, Close Day →
+  emailed report with CSV.
 - Monthly goals entry; dashboard cards show real conversion and honest
   "connect keys" placeholders for sales/ROAS.
 - Per-location admin isolation.
