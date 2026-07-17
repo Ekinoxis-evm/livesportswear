@@ -24,6 +24,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DateRangeForm } from "@/components/shared/date-range-form";
+import { SalesBreakdownBlock } from "@/components/shared/sales-breakdown-view";
+import { zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -112,11 +114,11 @@ export default async function PortalPage({
   const myStaffId = employee.shopify_staff_id
     ? normalizeStaffId(employee.shopify_staff_id)
     : null;
-  let rangeSales: number | null = null;
+  let rangeSales: SalesBreakdown | null = null;
   if (hasRange && myStaffId && isShopifyConfigured()) {
     const range = customRangeInTz(from, to, location?.timezone ?? "UTC");
     const entries = await getStaffSalesCached(range.start, range.endExclusive);
-    if (entries) rangeSales = new Map(entries).get(myStaffId) ?? 0;
+    if (entries) rangeSales = new Map(entries).get(myStaffId) ?? zeroBreakdown();
   }
 
   return (
@@ -158,7 +160,7 @@ export default async function PortalPage({
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-8">
-              <Stat label="Sales" value={formatMoney(mySales, currency)} />
+              <Stat label="Net sales" value={formatMoney(mySales, currency)} />
               <Stat label="Rate" value={`${(commission.rate * 100).toFixed(1)}%`} />
               <Stat label="Commission" value={formatMoney(commission.earned, currency)} />
               <Stat label="Rank" value={`#${rank}`} />
@@ -195,14 +197,16 @@ export default async function PortalPage({
                     Sales are unavailable right now.
                   </p>
                 ) : (
-                  <p className="text-sm">
-                    <span className="text-muted-foreground">
-                      {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d:
-                    </span>{" "}
-                    <span className="font-semibold tabular-nums">
-                      {formatMoney(rangeSales, currency)}
-                    </span>
-                  </p>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-muted-foreground text-sm">
+                      {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d
+                    </p>
+                    <SalesBreakdownBlock
+                      sales={rangeSales}
+                      currency={currency}
+                      className="max-w-xs"
+                    />
+                  </div>
                 ))}
             </>
           )}

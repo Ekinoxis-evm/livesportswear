@@ -20,6 +20,20 @@ describe("finishSchema", () => {
     expect(res.success).toBe(true);
   });
 
+  it("accepts the 'No reason' chip and products carrying a SKU", () => {
+    const res = finishSchema.safeParse({
+      kind: "walkin",
+      sold: false,
+      got_contact: false,
+      reasons: ["No reason"],
+      products: [
+        { id: "123", title: "Everyday Jog Pants", sku: "84939.S.0LJ104" },
+        { id: "456", title: "Runner shorts", sku: null },
+      ],
+    });
+    expect(res.success).toBe(true);
+  });
+
   it("rejects a no-sale without reasons", () => {
     expect(
       finishSchema.safeParse({ kind: "walkin", sold: false, got_contact: false }).success,

@@ -12,6 +12,11 @@ import { formatMoney } from "@/lib/commission";
 import { shortDate } from "@/lib/format-date";
 import { DateRangeForm } from "@/components/shared/date-range-form";
 import {
+  SalesBreakdownBlock,
+  SalesBreakdownSubline,
+} from "@/components/shared/sales-breakdown-view";
+import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -116,7 +121,7 @@ export default async function StorePerformancePage({
   // 45s auto-refresh loop must not add Shopify calls.
   const hasRange = Boolean(sp.from || sp.to);
   const { from, to } = resolveDateRange(sp, bd);
-  let rangeRows: { name: string; amount: number }[] | null = null;
+  let rangeRows: { name: string; sales: SalesBreakdown }[] | null = null;
   if (hasRange && isShopifyConfigured()) {
     const range = customRangeInTz(from, to, tz);
     const [entries, { data: mapped }] = await Promise.all([
@@ -133,23 +138,30 @@ export default async function StorePerformancePage({
       rangeRows = (mapped ?? [])
         .map((e) => ({
           name: e.name,
-          amount: byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ?? 0,
+          sales:
+            byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ??
+            zeroBreakdown(),
         }))
-        .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
+        .sort((a, b) => b.sales.net - a.sales.net || a.name.localeCompare(b.name));
     }
   }
-  const rangeTotal = (rangeRows ?? []).reduce((a, r) => a + r.amount, 0);
+  const rangeTotal = sumBreakdowns((rangeRows ?? []).map((r) => r.sales));
 
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3">
         <Card>
           <CardHeader>
-            <CardDescription>Sales today</CardDescription>
+            <CardDescription>Net sales today</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {daySales ? formatMoney(daySales.total, daySales.currency ?? "USD") : "—"}
+              {daySales ? formatMoney(daySales.net, daySales.currency ?? "USD") : "—"}
             </CardTitle>
           </CardHeader>
+          {daySales && (
+            <CardContent className="pt-0">
+              <SalesBreakdownSubline sales={daySales} currency={daySales.currency} />
+            </CardContent>
+          )}
         </Card>
         <Card>
           <CardHeader>
@@ -262,20 +274,21 @@ export default async function StorePerformancePage({
                 Sales are unavailable right now.
               </p>
             ) : (
-              <div className="flex flex-col gap-2">
-                <p className="text-sm">
-                  <span className="text-muted-foreground">
-                    {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d:
-                  </span>{" "}
-                  <span className="font-semibold tabular-nums">
-                    {formatMoney(rangeTotal, daySales?.currency ?? "USD")}
-                  </span>
+              <div className="flex flex-col gap-3">
+                <p className="text-muted-foreground text-sm">
+                  {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d
+                  (attributed to this store&apos;s team)
                 </p>
+                <SalesBreakdownBlock
+                  sales={rangeTotal}
+                  currency={daySales?.currency}
+                  className="max-w-xs"
+                />
                 <ul className="flex flex-col divide-y">
                   {rangeRows.map((r, i) => (
                     <li
                       key={r.name}
-                      className="flex items-center justify-between py-1.5 text-sm"
+                      className="flex items-center justify-between gap-3 py-1.5 text-sm"
                     >
                       <span>
                         <span className="text-muted-foreground mr-2 tabular-nums">
@@ -283,8 +296,14 @@ export default async function StorePerformancePage({
                         </span>
                         {r.name}
                       </span>
-                      <span className="font-medium tabular-nums">
-                        {formatMoney(r.amount, daySales?.currency ?? "USD")}
+                      <span className="flex flex-col items-end">
+                        <span className="font-medium tabular-nums">
+                          {formatMoney(r.sales.net, daySales?.currency ?? "USD")}
+                        </span>
+                        <SalesBreakdownSubline
+                          sales={r.sales}
+                          currency={daySales?.currency}
+                        />
                       </span>
                     </li>
                   ))}

@@ -8,6 +8,9 @@ const base = {
   tz: "America/New_York",
   totals: {
     netSales: 1176,
+    grossSales: 1490,
+    discounts: 272.5,
+    returnsValue: 41.5,
     orders: 9,
     cashNet: 279.27,
     cardNet: 896.73,
@@ -29,8 +32,10 @@ describe("buildDayReportXml", () => {
         {
           employeeName: "Maryna",
           attended_at: "2026-07-16T15:30:00Z", // 11:30 EDT
-          sold: true,
+          sold: false,
           got_contact: true,
+          reasons: ["No reason"],
+          products: [{ title: "Everyday Jog Pants", sku: "84939.S.0LJ104" }],
         },
       ],
       checkins: [
@@ -48,9 +53,14 @@ describe("buildDayReportXml", () => {
     });
     expect(xml).toContain('<dayReport date="2026-07-16" store="Miami Lincoln Road"');
     expect(xml).toContain("<netSales>1176</netSales>");
+    expect(xml).toContain("<grossSales>1490</grossSales>");
+    expect(xml).toContain("<discounts>272.5</discounts>");
+    expect(xml).toContain("<returnsValue>41.5</returnsValue>");
     expect(xml).toContain("<cashReceived>279.27</cashReceived>");
     expect(xml).toContain('<refunds count="1">-41.73</refunds>');
-    expect(xml).toContain('<event time="11:30" employee="Maryna" kind="walkin" sold="true"');
+    expect(xml).toContain('<event time="11:30" employee="Maryna" kind="walkin" sold="false"');
+    expect(xml).toContain("<reasons>No reason</reasons>");
+    expect(xml).toContain("<products>Everyday Jog Pants [84939.S.0LJ104]</products>");
     expect(xml).toContain('in="09:30" out="17:30" hours="8" breakMinutes="25"');
   });
 
@@ -77,11 +87,18 @@ describe("buildDayReportXml", () => {
   it("renders empty sections and null money as self-closing tags", () => {
     const xml = buildDayReportXml({
       ...base,
-      totals: { ...base.totals, netSales: null, cashNet: null, refundsTotal: null },
+      totals: {
+        ...base.totals,
+        netSales: null,
+        grossSales: null,
+        cashNet: null,
+        refundsTotal: null,
+      },
       events: [],
       checkins: [],
     });
     expect(xml).toContain("<netSales/>");
+    expect(xml).toContain("<grossSales/>");
     expect(xml).toContain("<cashReceived/>");
     expect(xml).toContain('<clientEvents count="0">');
   });

@@ -2,6 +2,7 @@ import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchStaffSales, fetchStaffNames } from "@/lib/shopify";
+import type { SalesBreakdown } from "@/lib/sales-breakdown";
 import { monthRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
 import { primaryTimezone } from "@/lib/business-tz";
 
@@ -26,7 +27,7 @@ export async function runShopifySync(month: string): Promise<SyncResult> {
 
   const { start, endExclusive } = monthRangeInTz(month, await primaryTimezone());
 
-  let totals: Map<string, number>;
+  let totals: Map<string, SalesBreakdown>;
   let names: Map<string, string>;
   try {
     const sales = await fetchStaffSales(start, endExclusive);
@@ -59,7 +60,7 @@ export async function runShopifySync(month: string): Promise<SyncResult> {
 
   let updated = 0;
   let unmatched = 0;
-  for (const [staffId, amount] of totals) {
+  for (const [staffId, sales] of totals) {
     const employeeId = resolve(staffId);
     if (!employeeId) {
       unmatched++;
@@ -68,7 +69,15 @@ export async function runShopifySync(month: string): Promise<SyncResult> {
     const { error } = await supabase
       .from("monthly_sales")
       .upsert(
-        { employee_id: employeeId, month, amount, source: "shopify" },
+        {
+          employee_id: employeeId,
+          month,
+          amount: sales.net,
+          gross_amount: sales.gross,
+          discounts_amount: sales.discounts,
+          returns_amount: sales.returns,
+          source: "shopify",
+        },
         { onConflict: "employee_id,month" },
       );
     if (!error) updated++;

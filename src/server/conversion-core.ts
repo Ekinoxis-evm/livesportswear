@@ -55,6 +55,9 @@ export type CloseDayDraft = {
   returns: number;
   returnExtraSales: number;
   shopifySales: string | null; // formatted NET money-in for the day
+  grossSales: string | null;
+  discounts: string | null;
+  returnsValue: string | null;
   shopifyOrders: number | null;
   cashReceived: string | null;
   refunds: string | null; // "-$41.73 · 1" when any
@@ -160,7 +163,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
     sold: e.sold,
     got_contact: e.got_contact,
     reasons: e.reasons,
-    products: (e.products as { title: string }[] | null) ?? null,
+    products: (e.products as { title: string; sku?: string | null }[] | null) ?? null,
     note: e.note,
   }));
   const reportCheckins: ReportCheckin[] = checkins.map((c) => ({
@@ -177,7 +180,10 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
 
   const currency = shopify?.currency ?? "USD";
   const reportTotals: DayReportTotals = {
-    netSales: shopify?.total ?? null,
+    netSales: shopify?.net ?? null,
+    grossSales: shopify?.gross ?? null,
+    discounts: shopify?.discounts ?? null,
+    returnsValue: shopify?.returns ?? null,
     orders: shopify?.orders ?? null,
     cashNet: tenders?.cashNet ?? null,
     cardNet: tenders?.cardNet ?? null,
@@ -289,7 +295,16 @@ export async function closeDayDraftFor(closer: {
       returns: d.t.returns,
       returnExtraSales: d.t.returnExtraSales,
       shopifySales:
-        d.shopify != null ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD") : null,
+        d.shopify != null ? formatMoney(d.shopify.net, d.shopify.currency ?? "USD") : null,
+      grossSales: d.shopify != null ? formatMoney(d.shopify.gross, d.currency) : null,
+      discounts:
+        d.shopify != null && d.shopify.discounts > 0
+          ? `−${formatMoney(d.shopify.discounts, d.currency)}`
+          : null,
+      returnsValue:
+        d.shopify != null && d.shopify.returns > 0
+          ? `−${formatMoney(d.shopify.returns, d.currency)}`
+          : null,
       shopifyOrders: d.shopify?.orders ?? null,
       cashReceived: d.tenders != null ? formatMoney(d.tenders.cashNet, d.currency) : null,
       refunds:
@@ -354,7 +369,10 @@ export async function closeDayFor(closer: {
       attended_count: d.t.attended,
       sold_count: d.t.sold,
       contact_count: d.t.contacts,
-      shopify_sales: d.shopify?.total ?? null,
+      shopify_sales: d.shopify?.net ?? null,
+      gross_sales: d.shopify?.gross ?? null,
+      discounts: d.shopify?.discounts ?? null,
+      returns_value: d.shopify?.returns ?? null,
       cash_sales: d.tenders?.cashNet ?? null,
       currency: d.shopify?.currency ?? null,
     },
@@ -398,7 +416,16 @@ export async function closeDayFor(closer: {
         returnExtraSales: d.t.returnExtraSales,
         shopifySales:
           d.shopify != null
-            ? formatMoney(d.shopify.total, d.shopify.currency ?? "USD")
+            ? formatMoney(d.shopify.net, d.shopify.currency ?? "USD")
+            : null,
+        grossSales: d.shopify != null ? formatMoney(d.shopify.gross, d.currency) : null,
+        discounts:
+          d.shopify != null && d.shopify.discounts > 0
+            ? `−${formatMoney(d.shopify.discounts, d.currency)}`
+            : null,
+        returnsValue:
+          d.shopify != null && d.shopify.returns > 0
+            ? `−${formatMoney(d.shopify.returns, d.currency)}`
             : null,
         shopifyOrders: d.shopify?.orders ?? null,
         cashReceived: d.tenders != null ? money(d.tenders.cashNet) : null,

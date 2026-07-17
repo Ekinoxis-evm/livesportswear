@@ -1,6 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { workedHours, stampStatus } from "@/lib/attendance";
-import type { ReportCheckin, ReportEvent } from "@/lib/day-report-csv";
+import { productLabel, type ReportCheckin, type ReportEvent } from "@/lib/day-report-csv";
 
 /**
  * Pure builder for the Daily Report XML attachment — a generic,
@@ -10,6 +10,9 @@ import type { ReportCheckin, ReportEvent } from "@/lib/day-report-csv";
 
 export type DayReportTotals = {
   netSales: number | null;
+  grossSales: number | null;
+  discounts: number | null;
+  returnsValue: number | null; // merchandise value refunded off orders
   orders: number | null;
   cashNet: number | null;
   cardNet: number | null;
@@ -69,7 +72,7 @@ export function buildDayReportXml({
       (e) =>
         `    <event time="${esc(time(e.attended_at))}" employee="${esc(e.employeeName)}" kind="${esc(e.kind ?? "walkin")}" sold="${e.sold}" gotContact="${e.got_contact}">` +
         tag("reasons", (e.reasons ?? []).join("; ") || null) +
-        tag("products", (e.products ?? []).map((p) => p.title).join("; ") || null) +
+        tag("products", (e.products ?? []).map(productLabel).join("; ") || null) +
         tag("note", e.note || null) +
         `</event>`,
     )
@@ -85,6 +88,9 @@ export function buildDayReportXml({
   return `<?xml version="1.0" encoding="UTF-8"?>
 <dayReport date="${esc(businessDate)}" store="${esc(storeName)}" timezone="${esc(tz)}">
   <totals currency="${esc(currency)}">
+    ${tag("grossSales", totals.grossSales)}
+    ${tag("discounts", totals.discounts)}
+    ${tag("returnsValue", totals.returnsValue)}
     ${tag("netSales", totals.netSales)}
     ${tag("orders", totals.orders)}
     ${tag("cashReceived", totals.cashNet)}

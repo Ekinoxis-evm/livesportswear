@@ -6,6 +6,10 @@
 > discounts and refunds, excluding taxes and shipping (`src/lib/shopify.ts`). This is what
 > `monthly_sales.amount`, contest standings, range views, and dashboards all mean. (Note:
 > `store_day_closes.shopify_sales` snapshots taken before 2026-07-16 are tax-inclusive.)
+> Since 0031 the decomposition rides alongside wherever sales are shown:
+> **gross − discounts − returns = net** (`src/lib/sales-breakdown.ts`; gross =
+> `total_line_items_price`, discounts = `total_discounts`, returns =
+> `subtotal_price − current_subtotal_price`; identity verified live).
 
 ## Tables
 
@@ -134,6 +138,8 @@ keys are connected.
 - `shopify_sales numeric(12,2)` (nullable), `currency text` — snapshotted from
   Shopify at close time (`closeDay`); null if Shopify was unreachable/unconfigured
 - `cash_sales numeric` (added 0025) — cash-in-register snapshot at close
+- `gross_sales`, `discounts`, `returns_value numeric(12,2)` (added 0031) —
+  net-sales decomposition at close; null on days closed before 0031
 - `unique (location_id, business_date)`
 
 ### `store_goals` (added 0009)
@@ -255,6 +261,15 @@ against it.
 - `primary key (employee_id, year, month)`
 - RLS: admin-all via `admin_can_access_location(employee_location(employee_id))`;
   employees read their own rows.
+
+### `monthly_sales` (added 0004; breakdown columns 0031)
+One row per (employee, month): the rep's attributed NET sales, synced from
+Shopify (`runShopifySync` — cron + admin button) or entered manually.
+- `employee_id uuid fk -> employees`, `month text 'YYYY-MM'`, unique together
+- `amount numeric(14,2)` — NET sales (THE metric; commission + contests read this)
+- `gross_amount`, `discounts_amount`, `returns_amount numeric(14,2)` (0031,
+  nullable) — the decomposition; null on months synced before 0031 until re-synced
+- `source text ('manual'|'shopify')`
 
 ### `attendance_validations` (added 0015 — LEGACY since 0019)
 

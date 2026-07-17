@@ -127,7 +127,7 @@ async function contestSales(
   return (emps ?? []).map((e) => ({
     employeeId: e.id,
     name: e.name,
-    amount: byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ?? 0,
+    amount: byStaff.get(normalizeStaffId(e.shopify_staff_id as string))?.net ?? 0,
   }));
 }
 

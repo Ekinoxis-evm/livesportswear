@@ -31,6 +31,9 @@ export type DayReportEmailProps = {
   returns?: number;
   returnExtraSales?: number;
   shopifySales?: string | null; // formatted NET sales, when POS keys are connected
+  grossSales?: string | null;
+  discounts?: string | null; // pre-formatted with the leading minus
+  returnsValue?: string | null; // pre-formatted with the leading minus
   shopifyOrders?: number | null;
   cashReceived?: string | null;
   cardReceived?: string | null;
@@ -85,6 +88,9 @@ export function DayReportEmail({
   returns,
   returnExtraSales,
   shopifySales,
+  grossSales,
+  discounts,
+  returnsValue,
   shopifyOrders,
   cashReceived,
   cardReceived,
@@ -157,7 +163,26 @@ export function DayReportEmail({
 
           {shopifySales != null ? (
             <Text style={{ fontSize: "13px", color: muted, margin: "8px 0 0" }}>
-              Net sales: <span style={{ color: text }}>{shopifySales}</span>
+              {grossSales != null && (
+                <>
+                  Sales value: <span style={{ color: text }}>{grossSales}</span>
+                  {discounts != null && (
+                    <>
+                      {" "}
+                      · Discounts: <span style={{ color: text }}>{discounts}</span>
+                    </>
+                  )}
+                  {returnsValue != null && (
+                    <>
+                      {" "}
+                      · Returns: <span style={{ color: text }}>{returnsValue}</span>
+                    </>
+                  )}
+                  <br />
+                </>
+              )}
+              Net sales:{" "}
+              <span style={{ color: text, fontWeight: 700 }}>{shopifySales}</span>
               {shopifyOrders != null && (
                 <>
                   {" "}

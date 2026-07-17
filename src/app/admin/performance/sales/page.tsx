@@ -35,6 +35,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DateRangeForm } from "@/components/shared/date-range-form";
+import {
+  SalesBreakdownBlock,
+  SalesBreakdownSubline,
+} from "@/components/shared/sales-breakdown-view";
+import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
@@ -99,7 +104,10 @@ export default async function SalesTabPage({
       .from("employees")
       .select("id, name, location_id, avatar_color, active, shopify_staff_id, locations(name)")
       .order("name"),
-    supabase.from("monthly_sales").select("employee_id, amount").eq("month", month),
+    supabase
+      .from("monthly_sales")
+      .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
+      .eq("month", month),
     supabase
       .from("monthly_sales")
       .select("employee_id, month, amount")
@@ -113,17 +121,29 @@ export default async function SalesTabPage({
   }
   const allEmployees = employees ?? [];
 
-  const salesBy = new Map((monthSales ?? []).map((s) => [s.employee_id, Number(s.amount)]));
+  const salesBy = new Map((monthSales ?? []).map((s) => [s.employee_id, s]));
   const ranking = allEmployees
     .filter((e) => e.active)
     .map((e) => {
-      const amount = salesBy.get(e.id) ?? 0;
+      const row = salesBy.get(e.id);
+      const amount = Number(row?.amount ?? 0);
+      // History synced before the breakdown columns existed has them null.
+      const breakdown: SalesBreakdown | null =
+        row?.gross_amount != null
+          ? {
+              gross: Number(row.gross_amount),
+              discounts: Number(row.discounts_amount ?? 0),
+              returns: Number(row.returns_amount ?? 0),
+              net: amount,
+            }
+          : null;
       const tiers = monthTiersByLoc[e.location_id] ?? globalTiers;
       return {
         id: e.id,
         name: e.name,
         store: (e.locations as { name: string } | null)?.name ?? "—",
         amount,
+        breakdown,
         ...commissionFor(amount, tiers),
       };
     })
@@ -141,8 +161,8 @@ export default async function SalesTabPage({
   );
 
   // Range view (live Shopify).
-  let rangeRows: { name: string; amount: number }[] = [];
-  let shopTotal: { total: number; orders: number } | null = null;
+  let rangeRows: { name: string; sales: SalesBreakdown }[] = [];
+  let shopTotal: (SalesBreakdown & { orders: number }) | null = null;
   let unmappedCount = 0;
   if (isShopifyConfigured()) {
     const range = customRangeInTz(from, to, location.timezone);
@@ -161,13 +181,15 @@ export default async function SalesTabPage({
       rangeRows = mapped
         .map((e) => ({
           name: e.name,
-          amount: byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ?? 0,
+          sales:
+            byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ??
+            zeroBreakdown(),
         }))
-        .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
+        .sort((a, b) => b.sales.net - a.sales.net || a.name.localeCompare(b.name));
     }
-    if (shop) shopTotal = { total: shop.total, orders: shop.orders };
+    if (shop) shopTotal = { ...shop, orders: shop.orders };
   }
-  const rangeTotal = rangeRows.reduce((a, r) => a + r.amount, 0);
+  const rangeTotal = sumBreakdowns(rangeRows.map((r) => r.sales));
 
   return (
     <div className="flex flex-col gap-6">
@@ -194,7 +216,7 @@ export default async function SalesTabPage({
                   <TableHead>#</TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead className="hidden sm:table-cell">Store</TableHead>
-                  <TableHead>Sales</TableHead>
+                  <TableHead>Net sales</TableHead>
                   <TableHead>Rate</TableHead>
                   <TableHead>Commission</TableHead>
                   <TableHead className="hidden md:table-cell">To next tier</TableHead>
@@ -209,7 +231,15 @@ export default async function SalesTabPage({
                       {r.store}
                     </TableCell>
                     <TableCell className="tabular-nums">
-                      {formatMoney(r.amount, currency)}
+                      <span className="flex flex-col">
+                        {formatMoney(r.amount, currency)}
+                        {r.breakdown && (
+                          <SalesBreakdownSubline
+                            sales={r.breakdown}
+                            currency={currency}
+                          />
+                        )}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{(r.rate * 100).toFixed(1)}%</Badge>
@@ -268,8 +298,8 @@ export default async function SalesTabPage({
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wide">Custom range</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Shopify sales between two dates, attributed per employee. Long ranges may
-          take a few seconds.
+          Net Shopify sales between two dates, attributed per employee. Long
+          ranges may take a few seconds.
         </p>
       </div>
 
@@ -307,18 +337,22 @@ export default async function SalesTabPage({
             <Card>
               <CardHeader>
                 <CardDescription>{location.name} · attributed</CardDescription>
-                <CardTitle className="tabular-nums">
-                  {formatMoney(rangeTotal, currency)}
-                </CardTitle>
               </CardHeader>
+              <CardContent>
+                <SalesBreakdownBlock sales={rangeTotal} currency={currency} />
+              </CardContent>
             </Card>
             <Card>
               <CardHeader>
                 <CardDescription>Whole shop (all stores + web)</CardDescription>
-                <CardTitle className="tabular-nums">
-                  {shopTotal ? formatMoney(shopTotal.total, currency) : "—"}
-                </CardTitle>
               </CardHeader>
+              <CardContent>
+                {shopTotal ? (
+                  <SalesBreakdownBlock sales={shopTotal} currency={currency} />
+                ) : (
+                  <p className="text-muted-foreground text-sm">—</p>
+                )}
+              </CardContent>
             </Card>
             <Card>
               <CardHeader>
@@ -336,7 +370,7 @@ export default async function SalesTabPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
-                  <TableHead className="text-right">Sales</TableHead>
+                  <TableHead className="text-right">Net sales</TableHead>
                   <TableHead className="text-right">Share</TableHead>
                 </TableRow>
               </TableHeader>
@@ -357,10 +391,15 @@ export default async function SalesTabPage({
                       {r.name}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
-                      {formatMoney(r.amount, currency)}
+                      <span className="flex flex-col items-end">
+                        {formatMoney(r.sales.net, currency)}
+                        <SalesBreakdownSubline sales={r.sales} currency={currency} />
+                      </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-right tabular-nums">
-                      {rangeTotal > 0 ? `${Math.round((r.amount / rangeTotal) * 100)}%` : "—"}
+                      {rangeTotal.net > 0
+                        ? `${Math.round((r.sales.net / rangeTotal.net) * 100)}%`
+                        : "—"}
                     </TableCell>
                   </TableRow>
                 ))}

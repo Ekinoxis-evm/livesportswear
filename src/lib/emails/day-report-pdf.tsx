@@ -5,7 +5,11 @@ import {
   Text,
   View,
 } from "@react-pdf/renderer";
-import type { ReportCheckin, ReportEvent } from "@/lib/day-report-csv";
+import {
+  productLabel,
+  type ReportCheckin,
+  type ReportEvent,
+} from "@/lib/day-report-csv";
 import type { DayReportTotals } from "@/lib/day-report-xml";
 import { workedHours, stampStatus } from "@/lib/attendance";
 import { formatInTimeZone } from "date-fns-tz";
@@ -100,7 +104,20 @@ export function DayReportPdf({
         </View>
 
         <View style={s.moneyRow}>
+          <Money label="Sales value" value={money(totals.grossSales)} />
+          <Money
+            label="Discounts"
+            value={totals.discounts ? `−${money(totals.discounts)}` : money(totals.discounts)}
+          />
+          <Money
+            label="Returns"
+            value={
+              totals.returnsValue ? `−${money(totals.returnsValue)}` : money(totals.returnsValue)
+            }
+          />
           <Money label="Net sales" value={money(totals.netSales)} />
+        </View>
+        <View style={s.moneyRow}>
           <Money label="Cash received" value={money(totals.cashNet)} />
           <Money label="Card" value={money(totals.cardNet)} />
           <Money
@@ -142,7 +159,7 @@ export function DayReportPdf({
               <Text style={[s.cell, { width: eventCols[4] }]}>
                 {[
                   (e.reasons ?? []).join("; "),
-                  (e.products ?? []).map((p) => p.title).join("; "),
+                  (e.products ?? []).map(productLabel).join("; "),
                   e.note ?? "",
                 ]
                   .filter(Boolean)

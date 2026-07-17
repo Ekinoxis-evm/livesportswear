@@ -2,6 +2,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { fetchStaffSales } from "@/lib/shopify";
 import { weekRangeInTz } from "@/lib/shopify-range";
+import type { SalesBreakdown } from "@/lib/sales-breakdown";
 
 /**
  * Week-sales cache for the public share page. One Shopify read per
@@ -16,7 +17,7 @@ export function weekSalesTag(locationId: string, monday: string): string {
 }
 
 export type ShareWeekSales = {
-  entries: [staffId: string, amount: number][];
+  entries: [staffId: string, sales: SalesBreakdown][];
   fetchedAt: number;
 };
 

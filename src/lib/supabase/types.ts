@@ -630,27 +630,36 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          discounts_amount: number | null
           employee_id: string
+          gross_amount: number | null
           id: string
           month: string
+          returns_amount: number | null
           source: string
           updated_at: string
         }
         Insert: {
           amount?: number
           created_at?: string
+          discounts_amount?: number | null
           employee_id: string
+          gross_amount?: number | null
           id?: string
           month: string
+          returns_amount?: number | null
           source?: string
           updated_at?: string
         }
         Update: {
           amount?: number
           created_at?: string
+          discounts_amount?: number | null
           employee_id?: string
+          gross_amount?: number | null
           id?: string
           month?: string
+          returns_amount?: number | null
           source?: string
           updated_at?: string
         }
@@ -879,8 +888,11 @@ export type Database = {
           contact_count: number
           created_at: string
           currency: string | null
+          discounts: number | null
+          gross_sales: number | null
           id: string
           location_id: string
+          returns_value: number | null
           shopify_sales: number | null
           sold_count: number
         }
@@ -893,8 +905,11 @@ export type Database = {
           contact_count?: number
           created_at?: string
           currency?: string | null
+          discounts?: number | null
+          gross_sales?: number | null
           id?: string
           location_id: string
+          returns_value?: number | null
           shopify_sales?: number | null
           sold_count?: number
         }
@@ -907,8 +922,11 @@ export type Database = {
           contact_count?: number
           created_at?: string
           currency?: string | null
+          discounts?: number | null
+          gross_sales?: number | null
           id?: string
           location_id?: string
+          returns_value?: number | null
           shopify_sales?: number | null
           sold_count?: number
         }
