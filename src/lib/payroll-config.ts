@@ -6,8 +6,8 @@ import { createServerClient } from "@/lib/supabase/server";
  * commission_config (admin-managed in Settings); the constants below are the
  * seed defaults / fallback if the row is missing.
  */
-export const DEFAULT_SPRINT_ANCHOR = "2026-06-22";
-export const DEFAULT_BIWEEKLY_HOUR_CAP = 80;
+const DEFAULT_SPRINT_ANCHOR = "2026-06-22";
+const DEFAULT_BIWEEKLY_HOUR_CAP = 80;
 
 export async function getPayPeriod(): Promise<{ anchor: string; cap: number }> {
   const supabase = await createServerClient();

@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export const NO_SALE_REASONS = ["No size", "No color", "Price too expensive"];
+const NO_SALE_REASONS = ["No size", "No color", "Price too expensive"];
 
 export type FinishTarget = {
   employeeId: string;

@@ -14,7 +14,7 @@ export const DIAL_CODES = [
   { code: "+44", country: "United Kingdom", flag: "🇬🇧" },
 ] as const;
 
-export const DEFAULT_DIAL_CODE = "+57";
+const DEFAULT_DIAL_CODE = "+57";
 
 /** label map for a Base UI Select `items` prop (value -> display). */
 export const DIAL_CODE_ITEMS: Record<string, string> = Object.fromEntries(

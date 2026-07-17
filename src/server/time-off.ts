@@ -116,30 +116,6 @@ const ownSchema = z
     path: ["end_date"],
   });
 
-/** Authenticated portal request: the signed-in employee asks for days off. */
-export async function requestOwnTimeOff(input: unknown): Promise<ActionResult> {
-  const { employee } = await requireEmployee();
-  const parsed = ownSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-
-  const today = await locationToday(employee.location_id);
-  const winErr = windowError(parsed.data.start_date, parsed.data.end_date, today);
-  if (winErr) return { ok: false, error: winErr };
-
-  // RLS self-insert policy checks employee_id = current_employee_id().
-  const supabase = await createServerClient();
-  const { error } = await supabase.from("time_off_requests").insert({
-    employee_id: employee.id,
-    start_date: parsed.data.start_date,
-    end_date: parsed.data.end_date,
-    reason: parsed.data.reason,
-    status: "pending",
-  });
-  if (error) return { ok: false, error: dbError(error) };
-
-  revalidatePath("/portal");
-  return { ok: true };
-}
 
 const daysSchema = z.object({
   dates: z.array(z.string().refine(isValidDateStr, "Invalid date.")).min(1).max(7),

@@ -12,7 +12,7 @@ export type MonthlySaleRow = {
 
 export type RepSeriesMeta = { key: string; name: string; color: string | null };
 
-export const MONTH_LABELS = [
+const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;

@@ -8,7 +8,7 @@ export type MetaSyncResult =
   | { ok: false; error: string };
 
 /** YYYY-MM → inclusive [since, until] day bounds for that month. */
-export function monthBounds(month: string): { since: string; until: string } {
+function monthBounds(month: string): { since: string; until: string } {
   const [y, m] = month.split("-").map(Number);
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return { since: `${month}-01`, until: `${month}-${String(lastDay).padStart(2, "0")}` };
@@ -26,7 +26,7 @@ export function runMetaSyncForMonth(month: string): Promise<MetaSyncResult> {
  * Pulls Meta Ads insights for [since, until] and upserts ad_insights (one row
  * per campaign-day). Service client so it runs from the admin action and cron.
  */
-export async function runMetaSync(
+async function runMetaSync(
   since: string,
   until: string,
 ): Promise<MetaSyncResult> {
