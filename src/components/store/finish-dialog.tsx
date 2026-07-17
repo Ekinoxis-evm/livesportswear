@@ -17,7 +17,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const NO_SALE_REASONS = ["No size", "No color", "Price too expensive"];
+const NO_SALE_REASONS = [
+  "No size",
+  "No color",
+  "Price too expensive",
+  "Just browsing",
+  "No reason",
+];
 
 export type FinishTarget = {
   employeeId: string;
@@ -255,6 +261,11 @@ function FinishSteps({
                   onClick={() => addProduct(p)}
                 >
                   {p.title}
+                  {p.sku && (
+                    <span className="text-muted-foreground ml-2 text-xs tabular-nums">
+                      {p.sku}
+                    </span>
+                  )}
                 </button>
               ))
             )}
@@ -267,7 +278,7 @@ function FinishSteps({
                 key={p.id}
                 className="bg-muted flex items-center gap-1 rounded-full px-3 py-1 text-xs"
               >
-                {p.title}
+                {p.sku ? `${p.title} · ${p.sku}` : p.title}
                 <button
                   type="button"
                   aria-label={`Remove ${p.title}`}
@@ -302,7 +313,7 @@ function FinishSteps({
             sold: false,
             got_contact: false,
             reasons,
-            products: products.map((p) => ({ id: p.id, title: p.title })),
+            products: products.map((p) => ({ id: p.id, title: p.title, sku: p.sku })),
             note: note.trim() || undefined,
           })
         }

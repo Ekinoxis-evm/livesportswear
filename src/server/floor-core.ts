@@ -277,7 +277,7 @@ export type FinishResult = {
   sold: boolean; // for a return: the customer bought something else
   got_contact: boolean;
   reasons?: string[]; // mandatory (app layer) when a walk-in didn't buy
-  products?: { id: string; title: string }[];
+  products?: { id: string; title: string; sku?: string | null }[];
   note?: string;
 };
 

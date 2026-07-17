@@ -126,6 +126,9 @@ export function CloseDayDialog({
                 <Metric label="Sold" value={draft.sold} />
                 <Metric label="Conversion" value={draft.conversionPct} />
                 <Metric label="Contacts" value={draft.contacts} />
+                <Metric label="Sales value" value={draft.grossSales ?? "—"} />
+                <Metric label="Discounts" value={draft.discounts ?? "—"} />
+                <Metric label="Returns value" value={draft.returnsValue ?? "—"} />
                 <Metric label="Net sales" value={draft.shopifySales ?? "—"} />
                 <Metric label="Orders" value={draft.shopifyOrders ?? "—"} />
                 <Metric label="Cash received" value={draft.cashReceived ?? "—"} />

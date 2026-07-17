@@ -16,9 +16,12 @@ export type ReportEvent = {
   sold: boolean;
   got_contact: boolean;
   reasons?: string[] | null;
-  products?: { title: string }[] | null;
+  products?: { title: string; sku?: string | null }[] | null;
   note?: string | null;
 };
+
+export const productLabel = (p: { title: string; sku?: string | null }) =>
+  p.sku ? `${p.title} [${p.sku}]` : p.title;
 
 export type ReportCheckin = {
   employeeName: string;
@@ -51,7 +54,7 @@ export function buildDayReportCsv({
     e.kind ?? "walkin",
     e.sold ? "sold" : "no sale",
     (e.reasons ?? []).join("; "),
-    (e.products ?? []).map((p) => p.title).join("; "),
+    (e.products ?? []).map(productLabel).join("; "),
     e.note ?? "",
     e.got_contact ? "yes" : "no",
   ]);

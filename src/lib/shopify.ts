@@ -6,6 +6,13 @@ import {
   SHOPIFY_ADMIN_TOKEN,
   SHOPIFY_API_VERSION,
 } from "@/lib/shopify-config";
+import {
+  addBreakdown,
+  orderBreakdown,
+  roundBreakdown,
+  zeroBreakdown,
+  type SalesBreakdown,
+} from "@/lib/sales-breakdown";
 
 // Staff attribution uses the REST orders API: order.user_id and the order
 // timeline's "placed" author come with read_orders alone, while GraphQL's
@@ -74,15 +81,22 @@ type RestOrder = {
   cancelled_at: string | null;
   test: boolean;
   current_subtotal_price: string;
+  total_line_items_price: string;
+  total_discounts: string;
+  subtotal_price: string;
 };
 
 // current_subtotal_price = NET sales: after discounts and refunds, excluding
-// taxes and shipping — the metric every sales number in the app uses.
-const ORDER_FIELDS = "id,user_id,cancelled_at,test,current_subtotal_price";
+// taxes and shipping — the metric every sales number in the app uses. The
+// extra money fields decompose it: gross − discounts − returns = net
+// (see lib/sales-breakdown.ts).
+const ORDER_FIELDS =
+  "id,user_id,cancelled_at,test,current_subtotal_price," +
+  "total_line_items_price,total_discounts,subtotal_price";
 
 export type StaffSales = {
-  /** staff user_id (numeric string) → summed current order totals */
-  totals: Map<string, number>;
+  /** staff user_id (numeric string) → summed sales breakdown (net = the metric) */
+  totals: Map<string, SalesBreakdown>;
   /** staff user_id → one order id, for name lookup via the order timeline */
   sampleOrder: Map<string, number>;
 };
@@ -99,7 +113,7 @@ export async function fetchStaffSales(
 ): Promise<StaffSales> {
   // REST created_at_max is inclusive — step back one second from the bound.
   const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
-  const totals = new Map<string, number>();
+  const totals = new Map<string, SalesBreakdown>();
   const sampleOrder = new Map<string, number>();
 
   let path: string | null =
@@ -111,30 +125,39 @@ export async function fetchStaffSales(
     for (const o of body.orders) {
       if (!o.user_id || o.cancelled_at || o.test) continue;
       const staffId = String(o.user_id);
-      const amount = Number(o.current_subtotal_price) || 0;
-      totals.set(staffId, (totals.get(staffId) ?? 0) + amount);
+      totals.set(
+        staffId,
+        addBreakdown(totals.get(staffId) ?? zeroBreakdown(), orderBreakdown(o)),
+      );
       if (!sampleOrder.has(staffId)) sampleOrder.set(staffId, o.id);
     }
     path = nextPageInfo
       ? `/orders.json?limit=250&fields=${ORDER_FIELDS}&page_info=${nextPageInfo}`
       : null;
   }
+  for (const [staffId, b] of totals) totals.set(staffId, roundBreakdown(b));
   return { totals, sampleOrder };
 }
 
-export type DaySales = { total: number; currency: string | null; orders: number };
+export type DaySales = SalesBreakdown & {
+  /** kept as an alias of `net` — the number older consumers read */
+  total: number;
+  currency: string | null;
+  orders: number;
+};
 
 /**
  * The store's total NET sales for [start, endExclusive) — all non-cancelled,
- * non-test orders regardless of staff attribution (the day's money line).
+ * non-test orders regardless of staff attribution (the day's money line) —
+ * with the gross/discounts/returns decomposition alongside.
  */
 export async function fetchDaySales(
   start: string,
   endExclusive: string,
 ): Promise<DaySales> {
   const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
-  const fields = "id,cancelled_at,test,current_subtotal_price,currency";
-  let total = 0;
+  const fields = `${ORDER_FIELDS},currency`;
+  let sum = zeroBreakdown();
   let orders = 0;
   let currency: string | null = null;
 
@@ -146,7 +169,7 @@ export async function fetchDaySales(
       await shopifyRest(path);
     for (const o of page.body.orders) {
       if (o.cancelled_at || o.test) continue;
-      total += Number(o.current_subtotal_price) || 0;
+      sum = addBreakdown(sum, orderBreakdown(o));
       orders++;
       currency ??= o.currency ?? null;
     }
@@ -154,7 +177,8 @@ export async function fetchDaySales(
       ? `/orders.json?limit=250&fields=${fields}&page_info=${page.nextPageInfo}`
       : null;
   }
-  return { total: Math.round(total * 100) / 100, currency, orders };
+  const b = roundBreakdown(sum);
+  return { ...b, total: b.net, currency, orders };
 }
 
 type RestEvent = { verb: string; author: string | null };
@@ -195,7 +219,12 @@ export async function listStaffMembers(): Promise<ShopifyStaff[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export type ProductHit = { id: string; title: string; image: string | null };
+export type ProductHit = {
+  id: string;
+  title: string;
+  sku: string | null;
+  image: string | null;
+};
 
 async function shopifyGraphql<T>(query: string, variables: object): Promise<T> {
   const call = async (token: string) =>
@@ -229,16 +258,18 @@ type ProductSearchData = {
     nodes: {
       id: string;
       title: string;
+      variants: { nodes: { sku: string | null }[] } | null;
       featuredMedia: { preview: { image: { url: string } | null } | null } | null;
     }[];
   };
 };
 
 /**
- * Case-insensitive title-contains search — feeds the no-sale product tags.
- * GraphQL, because the REST products.json title filter is EXACT-match on
- * modern API versions (verified live: "shorts" → 0 hits on a 3,596-product
- * store) — it silently found nothing.
+ * Matches title OR variant SKU (the number on the garment tag), both
+ * contains-style — feeds the no-sale product tags. GraphQL, because the REST
+ * products.json title filter is EXACT-match on modern API versions (verified
+ * live: "shorts" → 0 hits on a 3,596-product store) — it silently found
+ * nothing.
  */
 export async function searchProducts(query: string): Promise<ProductHit[]> {
   const sanitized = query.replace(/["\\()]/g, " ").trim();
@@ -246,14 +277,20 @@ export async function searchProducts(query: string): Promise<ProductHit[]> {
   const data = await shopifyGraphql<ProductSearchData>(
     `query($q: String!) {
       products(first: 10, query: $q) {
-        nodes { id title featuredMedia { preview { image { url } } } }
+        nodes {
+          id
+          title
+          variants(first: 10) { nodes { sku } }
+          featuredMedia { preview { image { url } } }
+        }
       }
     }`,
-    { q: `title:*${sanitized}*` },
+    { q: `title:*${sanitized}* OR sku:*${sanitized}*` },
   );
   return data.products.nodes.map((p) => ({
     id: p.id.split("/").pop() ?? p.id,
     title: p.title,
+    sku: p.variants?.nodes.find((v) => v.sku)?.sku ?? null,
     image: p.featuredMedia?.preview?.image?.url ?? null,
   }));
 }

@@ -1,6 +1,7 @@
 import "server-only";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales, fetchStaffSales, type DaySales } from "@/lib/shopify";
+import type { SalesBreakdown } from "@/lib/sales-breakdown";
 
 /**
  * Short-TTL cache for arbitrary-range Shopify pulls (date-range sales views,
@@ -12,7 +13,7 @@ import { fetchDaySales, fetchStaffSales, type DaySales } from "@/lib/shopify";
 const TTL_MS = 60_000;
 const MAX_ENTRIES = 20;
 
-export type StaffSalesEntries = [staffId: string, amount: number][];
+export type StaffSalesEntries = [staffId: string, sales: SalesBreakdown][];
 
 const staffCache = new Map<string, { at: number; data: StaffSalesEntries }>();
 const shopCache = new Map<string, { at: number; data: DaySales }>();

@@ -23,6 +23,7 @@ import { monthRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
 import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
 import { storeMonthlyData } from "@/lib/monthly-series";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
+import { SalesBreakdownSubline } from "@/components/shared/sales-breakdown-view";
 import { StoreSalesChart } from "@/components/dashboard/sales-charts";
 
 function shiftMonth(month: string, delta: number): string {
@@ -368,7 +369,7 @@ export default async function DashboardPage({
             Sales by employee · {monthLabel(month)}
           </CardTitle>
           <CardDescription>
-            Synced from Shopify POS · store total{" "}
+            Net sales synced from Shopify POS · store total{" "}
             <span className="font-semibold tabular-nums">
               {formatMoney(salesTotal, currency)}
             </span>
@@ -452,10 +453,13 @@ export default async function DashboardPage({
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Sales today</CardDescription>
+            <CardDescription>Net sales today</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
-              {shopToday ? formatMoney(shopToday.total, currency) : "—"}
+              {shopToday ? formatMoney(shopToday.net, currency) : "—"}
             </CardTitle>
+            {shopToday && (
+              <SalesBreakdownSubline sales={shopToday} currency={currency} />
+            )}
           </CardHeader>
         </Card>
         <Card>

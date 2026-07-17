@@ -13,6 +13,8 @@ import { formatMoney } from "@/lib/commission";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales } from "@/lib/shopify";
 import { dayRangeInTz } from "@/lib/shopify-range";
+import type { SalesBreakdown } from "@/lib/sales-breakdown";
+import { SalesBreakdownSubline } from "@/components/shared/sales-breakdown-view";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -97,7 +99,9 @@ export default async function PerformancePage({
         .eq("business_date", date),
       supabase
         .from("store_day_closes")
-        .select("id, shopify_sales, currency")
+        .select(
+          "id, shopify_sales, cash_sales, gross_sales, discounts, returns_value, currency",
+        )
         .eq("location_id", location.id)
         .eq("business_date", date)
         .maybeSingle(),
@@ -170,11 +174,24 @@ export default async function PerformancePage({
   // otherwise a live read (today, or a day closed before Shopify connected).
   let shopifySales: number | null =
     closeRow?.shopify_sales != null ? Number(closeRow.shopify_sales) : null;
+  let breakdown: SalesBreakdown | null =
+    closeRow?.gross_sales != null && closeRow?.shopify_sales != null
+      ? {
+          gross: Number(closeRow.gross_sales),
+          discounts: Number(closeRow.discounts ?? 0),
+          returns: Number(closeRow.returns_value ?? 0),
+          net: Number(closeRow.shopify_sales),
+        }
+      : null;
+  const cashSales: number | null =
+    closeRow?.cash_sales != null ? Number(closeRow.cash_sales) : null;
   const currency = closeRow?.currency ?? "USD";
   if (shopifySales == null && isShopifyConfigured()) {
     try {
       const range = dayRangeInTz(date, tz);
-      shopifySales = (await fetchDaySales(range.start, range.endExclusive)).total;
+      const live = await fetchDaySales(range.start, range.endExclusive);
+      shopifySales = live.net;
+      breakdown = live;
     } catch {
       // card shows an em dash
     }
@@ -256,10 +273,18 @@ export default async function PerformancePage({
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Shopify sales</CardDescription>
+            <CardDescription>Net sales</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {shopifySales != null ? formatMoney(shopifySales, currency) : "—"}
             </CardTitle>
+            {breakdown && (
+              <SalesBreakdownSubline sales={breakdown} currency={currency} />
+            )}
+            {cashSales != null && (
+              <CardDescription className="tabular-nums">
+                cash received {formatMoney(cashSales, currency)}
+              </CardDescription>
+            )}
             {closeRow?.shopify_sales == null && shopifySales != null && (
               <CardDescription>live — snapshots at close</CardDescription>
             )}

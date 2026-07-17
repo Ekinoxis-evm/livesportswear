@@ -14,6 +14,11 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { RefreshSalesButton } from "@/components/shared/refresh-sales-button";
+import {
+  SalesBreakdownBlock,
+  SalesBreakdownSubline,
+} from "@/components/shared/sales-breakdown-view";
+import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hhmm = (t: string) => t.slice(0, 5);
@@ -105,7 +110,7 @@ export default async function StoreWeekPage({
   // Week sales ranking — every mapped, active employee of this store appears,
   // $0 included (a quiet week must not make anyone vanish from the list).
   // Sales by staff we can't attribute to someone at this store are left out.
-  let weekRanking: { name: string; amount: number }[] = [];
+  let weekRanking: { name: string; sales: SalesBreakdown }[] = [];
   if (schedule && isShopifyConfigured()) {
     try {
       const [{ entries }, { data: emps }] = await Promise.all([
@@ -121,14 +126,16 @@ export default async function StoreWeekPage({
       weekRanking = (emps ?? [])
         .map((e) => ({
           name: e.name,
-          amount: byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ?? 0,
+          sales:
+            byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ??
+            zeroBreakdown(),
         }))
-        .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
+        .sort((a, b) => b.sales.net - a.sales.net || a.name.localeCompare(b.name));
     } catch {
       // section hidden when Shopify is unreachable
     }
   }
-  const weekTotal = weekRanking.reduce((a, r) => a + r.amount, 0);
+  const weekTotal = sumBreakdowns(weekRanking.map((r) => r.sales));
 
   const slots = SHIFT_SLOTS.map((slot) => ({ slot, tpl: templateForSlot(slot, templates) }));
   const inAnySlot = (s: ShiftRow) =>
@@ -298,14 +305,15 @@ export default async function StoreWeekPage({
                 <RefreshSalesButton token={token} week={monday} />
               </span>
               <span className="text-sm font-semibold tabular-nums">
-                {formatMoney(weekTotal)}
+                {formatMoney(weekTotal.net)} net
               </span>
             </div>
+            <SalesBreakdownBlock sales={weekTotal} className="max-w-xs" />
             <ul className="flex flex-col divide-y">
               {weekRanking.map((r, i) => (
                 <li
                   key={r.name}
-                  className="flex items-center justify-between py-2 text-sm"
+                  className="flex items-center justify-between gap-3 py-2 text-sm"
                 >
                   <span>
                     <span className="text-muted-foreground mr-2 tabular-nums">
@@ -313,8 +321,11 @@ export default async function StoreWeekPage({
                     </span>
                     {r.name}
                   </span>
-                  <span className="font-medium tabular-nums">
-                    {formatMoney(r.amount)}
+                  <span className="flex flex-col items-end">
+                    <span className="font-medium tabular-nums">
+                      {formatMoney(r.sales.net)}
+                    </span>
+                    <SalesBreakdownSubline sales={r.sales} />
                   </span>
                 </li>
               ))}

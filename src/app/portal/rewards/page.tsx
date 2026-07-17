@@ -86,7 +86,7 @@ export default async function PortalRewardsPage() {
                   {me && (
                     <div className="flex flex-wrap gap-8">
                       <div className="flex flex-col">
-                        <span className="text-muted-foreground text-xs">My sales</span>
+                        <span className="text-muted-foreground text-xs">My net sales</span>
                         <span className="text-xl font-semibold tabular-nums">
                           {formatMoney(me.amount, currency)}
                         </span>

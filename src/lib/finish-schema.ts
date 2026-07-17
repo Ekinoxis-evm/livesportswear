@@ -10,6 +10,7 @@ import { z } from "zod";
 const productSchema = z.object({
   id: z.string().min(1).max(30),
   title: z.string().min(1).max(200),
+  sku: z.string().trim().min(1).max(60).nullish(),
 });
 
 // A walk-in that didn't buy REQUIRES at least one reason.
