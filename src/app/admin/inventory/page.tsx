@@ -22,20 +22,37 @@ export default async function InventoryPage() {
   const supabase = await createServerClient();
 
   // RLS scopes both queries to the admin's locations.
-  const [{ data: locations }, { data: counts }] = await Promise.all([
-    supabase
-      .from("locations")
-      .select("id, name, timezone")
-      .eq("active", true)
-      .order("name"),
-    supabase
-      .from("inventory_counts")
-      .select("id, location_id, status, note, started_at, finalized_at, counted_units, expected_units")
-      .order("started_at", { ascending: false })
-      .limit(50),
-  ]);
+  const [{ data: locations }, { data: counts }, { data: bookRows }] =
+    await Promise.all([
+      supabase
+        .from("locations")
+        .select("id, name, timezone")
+        .eq("active", true)
+        .order("name"),
+      supabase
+        .from("inventory_counts")
+        .select("id, location_id, status, note, started_at, finalized_at, counted_units, expected_units")
+        .order("started_at", { ascending: false })
+        .limit(50),
+      supabase.from("store_inventory").select("location_id, qty, counted_at"),
+    ]);
 
   const locs = locations ?? [];
+  const bookByLoc = new Map<
+    string,
+    { items: number; units: number; lastCounted: string }
+  >();
+  for (const r of bookRows ?? []) {
+    const cur = bookByLoc.get(r.location_id) ?? {
+      items: 0,
+      units: 0,
+      lastCounted: r.counted_at,
+    };
+    cur.items++;
+    cur.units += r.qty;
+    if (r.counted_at > cur.lastCounted) cur.lastCounted = r.counted_at;
+    bookByLoc.set(r.location_id, cur);
+  }
   const locOf = new Map(locs.map((l) => [l.id, l]));
   const openByLocation = new Set(
     (counts ?? []).filter((c) => c.status === "open").map((c) => c.location_id),
@@ -58,6 +75,42 @@ export default async function InventoryPage() {
             hasOpen: openByLocation.has(l.id),
           }))}
         />
+      </div>
+
+      {/* The book: our counted truth per store */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {locs.map((l) => {
+          const book = bookByLoc.get(l.id);
+          return (
+            <Link key={l.id} href={`/admin/inventory/book?location=${l.id}`}>
+              <Card className="hover:border-primary h-full transition-colors">
+                <CardContent className="flex flex-col gap-1 pt-6">
+                  <span className="text-muted-foreground text-xs uppercase tracking-wide">
+                    Inventory book · {l.name}
+                  </span>
+                  {book ? (
+                    <>
+                      <span className="text-2xl font-semibold tabular-nums">
+                        {book.units}{" "}
+                        <span className="text-muted-foreground text-sm font-normal">
+                          units on hand
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {book.items} items · last count{" "}
+                        {formatInTimeZone(new Date(book.lastCounted), l.timezone, "MMM d")}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">
+                      Finalize a count to build the book.
+                    </span>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
 
       <Card>

@@ -288,6 +288,21 @@ is pure in `src/lib/inventory-count.ts`; Shopify lookups in
 - RLS: admin-only via `admin_can_access_location` (items via join to the
   parent count); no employee/kiosk policies.
 
+### `store_inventory` (added 0033)
+The store's own inventory book — one row per (location, barcode) holding OUR
+counted truth. Each `finalizeCount` REPLACES the book rows for that store
+(upsert on `(location_id, barcode)`, zeros included — a total count
+establishes zeros). `shopify_qty` = what Shopify believed at count time
+(drift stays visible on `/admin/inventory/book`).
+- `location_id fk`, `barcode`, `unique (location_id, barcode)`
+- `sku`, `product_title`, `variant_title`, `qty` (our truth), `shopify_qty`,
+  `unknown`, `counted_at`, `count_id fk (on delete set null)`
+- RLS: admin-only via `admin_can_access_location`.
+- **Next phase (not built):** push corrections to Shopify via
+  `inventorySetOnHandQuantities` — requires adding the `write_inventory`
+  scope to the custom app in the Shopify admin (token has read_inventory
+  only today, verified 2026-07-17).
+
 ### `attendance_validations` (added 0015 — LEGACY since 0019)
 
 > No longer written: check-ins moved to the store kiosk, whose stamps are

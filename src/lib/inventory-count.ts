@@ -71,6 +71,39 @@ export function varianceRows(items: CountItem[]): VarianceRow[] {
   );
 }
 
+export type BookRow = {
+  barcode: string;
+  sku: string | null;
+  product_title: string;
+  variant_title: string | null;
+  qty: number;
+  shopify_qty: number | null;
+  unknown: boolean;
+  counted_at: string;
+};
+
+/** The whole inventory book as CSV — our counted truth per barcode. */
+export function buildBookCsv(locationName: string, rows: BookRow[]): string {
+  const units = rows.reduce((a, r) => a + r.qty, 0);
+  const body: CsvCell[][] = rows.map((r) => [
+    r.product_title,
+    r.variant_title ?? "",
+    r.sku ?? "",
+    r.barcode,
+    r.qty,
+    r.shopify_qty ?? "",
+    r.counted_at.slice(0, 10),
+    r.unknown ? "unknown barcode" : "",
+  ]);
+  return toCsv([
+    [`Inventory book — ${locationName}`],
+    [`${rows.length} items · ${units} units on hand`],
+    [],
+    ["Product", "Variant", "SKU", "Barcode", "On hand", "Shopify at count", "Counted", "Note"],
+    ...body,
+  ]);
+}
+
 export function buildInventoryCsv(
   header: { locationName: string; startedAt: string; status: string },
   items: CountItem[],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildBookCsv,
   buildInventoryCsv,
   countTotals,
   varianceRows,
@@ -54,6 +55,26 @@ describe("varianceRows", () => {
     expect(rows.map((r) => r.barcode)).toEqual(["short", "over", "match", "unknown"]);
     expect(rows[0].diff).toBe(-6);
     expect(rows[3].diff).toBeNull();
+  });
+});
+
+describe("buildBookCsv", () => {
+  it("renders unit totals and one row per barcode", () => {
+    const csv = buildBookCsv("Miami Lincoln Road", [
+      {
+        barcode: "790",
+        sku: "84939.S",
+        product_title: "Jog Pants",
+        variant_title: "S",
+        qty: 4,
+        shopify_qty: 3,
+        unknown: false,
+        counted_at: "2026-07-17T22:00:00Z",
+      },
+    ]);
+    expect(csv).toContain("Inventory book — Miami Lincoln Road");
+    expect(csv).toContain("1 items · 4 units on hand");
+    expect(csv).toContain("Jog Pants,S,84939.S,790,4,3,2026-07-17,");
   });
 });
 
