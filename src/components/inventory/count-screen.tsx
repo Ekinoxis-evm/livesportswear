@@ -8,8 +8,10 @@ import {
   adjustItem,
   deleteCount,
   finalizeCount,
+  peekBarcode,
   removeItem,
   scanBarcode,
+  type BarcodePeek,
 } from "@/server/inventory";
 import { countTotals, type CountItem } from "@/lib/inventory-count";
 import type { InventoryCountItem } from "@/types/db";
@@ -44,6 +46,10 @@ export function CountScreen({
   const [scanning, setScanning] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
+  const [confirmMode, setConfirmMode] = useState(true);
+  const [pendingScan, setPendingScan] = useState<BarcodePeek | null>(null);
+  const [confirmQty, setConfirmQty] = useState(1);
+  const [peeking, setPeeking] = useState(false);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   // Scans run strictly one after another — concurrent inserts of the same new
@@ -62,13 +68,10 @@ export function CountScreen({
     setLastScan(row);
   };
 
-  const scan = (raw: string) => {
-    const barcode = raw.trim();
-    if (barcode.length < 4) return;
-    setQuery("");
+  const count = (barcode: string, qty: number) => {
     setScanning(true);
     queueRef.current = queueRef.current.then(async () => {
-      const res = await scanBarcode({ countId, barcode });
+      const res = await scanBarcode({ countId, barcode, qty });
       if (res.ok && res.data) {
         applyRow(res.data);
         if (res.data.unknown) toast.warning(`Barcode ${barcode} isn't in the catalog.`);
@@ -78,6 +81,35 @@ export function CountScreen({
       setScanning(false);
       inputRef.current?.focus();
     });
+  };
+
+  const scan = (raw: string) => {
+    const barcode = raw.trim();
+    if (barcode.length < 4) return;
+    // One product at a time while a confirm card is up.
+    if (pendingScan || peeking) return;
+    setQuery("");
+    if (!confirmMode) {
+      count(barcode, 1);
+      return;
+    }
+    setPeeking(true);
+    peekBarcode({ countId, barcode }).then((res) => {
+      setPeeking(false);
+      if (!res.ok || !res.data) {
+        toast.error(res.ok ? "Barcode lookup failed." : res.error);
+        inputRef.current?.focus();
+        return;
+      }
+      setConfirmQty(1);
+      setPendingScan(res.data);
+    });
+  };
+
+  const confirmCount = () => {
+    if (!pendingScan) return;
+    count(pendingScan.barcode, confirmQty);
+    setPendingScan(null);
   };
 
   const setQty = (item: Item, qty: number) => {
@@ -180,6 +212,21 @@ export function CountScreen({
             </Button>
           </form>
 
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-muted-foreground flex cursor-pointer select-none items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="accent-primary size-4"
+                checked={confirmMode}
+                onChange={(e) => setConfirmMode(e.target.checked)}
+              />
+              Confirm each scan — see the product before counting it
+            </label>
+            {peeking && (
+              <span className="text-muted-foreground shrink-0 text-xs">looking up…</span>
+            )}
+          </div>
+
           {lastScan && (
             <div
               className={
@@ -239,7 +286,7 @@ export function CountScreen({
                     </span>
                     <span className="text-muted-foreground text-xs tabular-nums">
                       {it.sku ?? it.barcode}
-                      {it.expected != null && ` · expected ${it.expected}`}
+                      {it.expected != null && ` · in Shopify ${it.expected}`}
                     </span>
                   </span>
                   <div className="flex shrink-0 items-center gap-1">
@@ -307,13 +354,92 @@ export function CountScreen({
         onScan={scan}
       />
 
+      <Dialog
+        open={!!pendingScan}
+        onOpenChange={(o) => {
+          if (!o) {
+            setPendingScan(null);
+            inputRef.current?.focus();
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          {pendingScan && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-start gap-2">
+                  {pendingScan.unknown && (
+                    <TriangleAlert className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                  )}
+                  <span>
+                    {pendingScan.productTitle}
+                    {pendingScan.variantTitle && (
+                      <span className="text-muted-foreground ml-1.5 text-base font-normal">
+                        {pendingScan.variantTitle}
+                      </span>
+                    )}
+                  </span>
+                </DialogTitle>
+                <DialogDescription className="tabular-nums">
+                  {pendingScan.sku ?? pendingScan.barcode}
+                  {pendingScan.shopifyQty != null &&
+                    ` · in Shopify ${pendingScan.shopifyQty}`}
+                  {pendingScan.currentQty > 0 &&
+                    ` · already counted ${pendingScan.currentQty}`}
+                  {pendingScan.unknown && " · not in the catalog"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-11"
+                  disabled={confirmQty <= 1}
+                  aria-label="One unit less"
+                  onClick={() => setConfirmQty((q) => Math.max(1, q - 1))}
+                >
+                  <Minus className="size-4" />
+                </Button>
+                <span className="w-14 text-center text-3xl font-bold tabular-nums">
+                  {confirmQty}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-11"
+                  aria-label="One unit more"
+                  onClick={() => setConfirmQty((q) => q + 1)}
+                >
+                  <Plus className="size-4" />
+                </Button>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setPendingScan(null);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button className="flex-1" onClick={confirmCount}>
+                  Count {confirmQty === 1 ? "it" : `${confirmQty} units`}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={confirmFinalize} onOpenChange={(o) => !pending && setConfirmFinalize(o)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Finalize this count?</DialogTitle>
             <DialogDescription>
-              This sweeps the whole Shopify catalog: every item with expected
-              stock that was never scanned is added as missing. The finalized
+              This sweeps the whole Shopify catalog: every item with stock in
+              Shopify that was never scanned is added as missing. The finalized
               count then replaces the store&apos;s inventory book and locks.
             </DialogDescription>
           </DialogHeader>

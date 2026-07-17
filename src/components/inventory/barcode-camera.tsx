@@ -115,7 +115,7 @@ export function BarcodeCamera({
         <DialogHeader>
           <DialogTitle>Scan with the camera</DialogTitle>
           <DialogDescription>
-            Point at the barcode — every new code counts one unit.
+            Point at the barcode to scan it.
           </DialogDescription>
         </DialogHeader>
         {!supported ? (

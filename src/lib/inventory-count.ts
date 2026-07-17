@@ -123,10 +123,10 @@ export function buildInventoryCsv(
     [`Inventory count — ${header.locationName}`],
     [`Started ${header.startedAt} · ${header.status}`],
     [
-      `Counted ${t.countedUnits} units · expected ${t.expectedUnits} · missing ${t.missingUnits} · over ${t.overUnits}`,
+      `Counted ${t.countedUnits} units · in Shopify ${t.expectedUnits} · missing ${t.missingUnits} · over ${t.overUnits}`,
     ],
     [],
-    ["Product", "Variant", "SKU", "Barcode", "Counted", "Expected", "Diff", "Note"],
+    ["Product", "Variant", "SKU", "Barcode", "Counted", "In Shopify", "Diff", "Note"],
     ...rows,
   ]);
 }

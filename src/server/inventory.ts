@@ -48,16 +48,17 @@ const scanSchema = z.object({
   countId: z.string().uuid(),
   // EAN/UPC are digits, but keep it permissive — some catalogs use alphanumerics.
   barcode: z.string().trim().min(4).max(60),
+  qty: z.number().int().min(1).max(100_000).default(1),
 });
 
-/** One scan = +1 on that barcode's row; first scan resolves it in Shopify. */
+/** One scan = +qty (default 1) on that barcode's row; first scan resolves it in Shopify. */
 export async function scanBarcode(
   input: unknown,
 ): Promise<ActionResult<InventoryCountItem>> {
   await requireAdmin();
   const parsed = scanSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  const { countId, barcode } = parsed.data;
+  const { countId, barcode, qty } = parsed.data;
 
   const supabase = await createServerClient();
   const { data: count } = await supabase
@@ -80,7 +81,7 @@ export async function scanBarcode(
   if (existing) {
     const { data, error } = await supabase
       .from("inventory_count_items")
-      .update({ qty: existing.qty + 1 })
+      .update({ qty: existing.qty + qty })
       .eq("id", existing.id)
       .select()
       .single();
@@ -99,7 +100,7 @@ export async function scanBarcode(
       sku: hit?.sku ?? null,
       product_title: hit?.productTitle ?? "Unknown barcode",
       variant_title: hit?.variantTitle ?? null,
-      qty: 1,
+      qty,
       expected: hit?.inventoryQuantity ?? null,
       unknown: !hit,
     })
@@ -107,6 +108,74 @@ export async function scanBarcode(
     .single();
   if (error) return { ok: false, error: dbError(error) };
   return { ok: true, data };
+}
+
+export type BarcodePeek = {
+  barcode: string;
+  sku: string | null;
+  productTitle: string;
+  variantTitle: string | null;
+  shopifyQty: number | null;
+  currentQty: number;
+  unknown: boolean;
+};
+
+/** Resolve a barcode WITHOUT counting it — powers the confirm-before-count card. */
+export async function peekBarcode(
+  input: unknown,
+): Promise<ActionResult<BarcodePeek>> {
+  await requireAdmin();
+  const parsed = scanSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { countId, barcode } = parsed.data;
+
+  const supabase = await createServerClient();
+  const { data: count } = await supabase
+    .from("inventory_counts")
+    .select("id, status")
+    .eq("id", countId)
+    .maybeSingle();
+  if (!count) return { ok: false, error: "Count not found." };
+  if (count.status !== "open") {
+    return { ok: false, error: "This count is finalized — start a new one." };
+  }
+
+  const { data: existing } = await supabase
+    .from("inventory_count_items")
+    .select("sku, product_title, variant_title, qty, expected, unknown")
+    .eq("count_id", countId)
+    .eq("barcode", barcode)
+    .maybeSingle();
+  if (existing) {
+    return {
+      ok: true,
+      data: {
+        barcode,
+        sku: existing.sku,
+        productTitle: existing.product_title,
+        variantTitle: existing.variant_title,
+        shopifyQty: existing.expected,
+        currentQty: existing.qty,
+        unknown: existing.unknown,
+      },
+    };
+  }
+
+  const hit = isShopifyConfigured()
+    ? await lookupVariantByBarcode(barcode).catch(() => null)
+    : null;
+  return {
+    ok: true,
+    data: {
+      barcode,
+      sku: hit?.sku ?? null,
+      productTitle: hit?.productTitle ?? "Unknown barcode",
+      variantTitle: hit?.variantTitle ?? null,
+      shopifyQty: hit?.inventoryQuantity ?? null,
+      currentQty: 0,
+      unknown: !hit,
+    },
+  };
 }
 
 const adjustSchema = z.object({

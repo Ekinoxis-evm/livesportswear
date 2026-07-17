@@ -274,7 +274,11 @@ Shopify (`runShopifySync` — cron + admin button) or entered manually.
 ### `inventory_counts` + `inventory_count_items` (added 0032)
 Physical inventory counts, admin-only (`/admin/inventory`): scan barcodes on
 the floor (external HID scanner or camera `BarcodeDetector`), tally per
-variant, and compare against Shopify's `inventoryQuantity` at finalize. Math
+variant, and compare against Shopify's `inventoryQuantity` at finalize.
+Scans go through a confirm card by default (`peekBarcode` resolves the
+product, admin sets a qty and confirms); a "Confirm each scan" toggle
+restores instant +1 for fast rack scanning. UI label for Shopify's stock is
+"In Shopify" (column `expected` internally). Math
 is pure in `src/lib/inventory-count.ts`; Shopify lookups in
 `lookupVariantByBarcode` / `fetchAllTrackedVariants` (`src/lib/shopify.ts`).
 - `inventory_counts`: `id`, `location_id fk`, `status ('open'|'final')`,

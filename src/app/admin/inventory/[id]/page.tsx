@@ -108,7 +108,7 @@ export default async function InventoryCountPage({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Counted units" value={String(t.countedUnits)} />
-        <Kpi label="Expected units" value={String(t.expectedUnits)} />
+        <Kpi label="Units in Shopify" value={String(t.expectedUnits)} />
         <Kpi
           label="Missing units"
           value={String(t.missingUnits)}
@@ -141,7 +141,7 @@ export default async function InventoryCountPage({
                   <TableHead>Product</TableHead>
                   <TableHead className="hidden sm:table-cell">SKU</TableHead>
                   <TableHead className="text-right">Counted</TableHead>
-                  <TableHead className="text-right">Expected</TableHead>
+                  <TableHead className="text-right">In Shopify</TableHead>
                   <TableHead className="text-right">Diff</TableHead>
                 </TableRow>
               </TableHeader>
