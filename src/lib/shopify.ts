@@ -73,10 +73,12 @@ type RestOrder = {
   user_id: number | null;
   cancelled_at: string | null;
   test: boolean;
-  current_total_price: string;
+  current_subtotal_price: string;
 };
 
-const ORDER_FIELDS = "id,user_id,cancelled_at,test,current_total_price";
+// current_subtotal_price = NET sales: after discounts and refunds, excluding
+// taxes and shipping — the metric every sales number in the app uses.
+const ORDER_FIELDS = "id,user_id,cancelled_at,test,current_subtotal_price";
 
 export type StaffSales = {
   /** staff user_id (numeric string) → summed current order totals */
@@ -86,7 +88,8 @@ export type StaffSales = {
 };
 
 /**
- * Per-staff sales totals for [start, endExclusive) — UTC ISO instants (callers
+ * Per-staff NET sales totals (after discounts/refunds, excl. taxes+shipping)
+ * for [start, endExclusive) — UTC ISO instants (callers
  * pass store-local month boundaries). Only POS-attributed orders (user_id);
  * cancelled and test orders are excluded. Paginates fully.
  */
@@ -108,7 +111,7 @@ export async function fetchStaffSales(
     for (const o of body.orders) {
       if (!o.user_id || o.cancelled_at || o.test) continue;
       const staffId = String(o.user_id);
-      const amount = Number(o.current_total_price) || 0;
+      const amount = Number(o.current_subtotal_price) || 0;
       totals.set(staffId, (totals.get(staffId) ?? 0) + amount);
       if (!sampleOrder.has(staffId)) sampleOrder.set(staffId, o.id);
     }
@@ -122,7 +125,7 @@ export async function fetchStaffSales(
 export type DaySales = { total: number; currency: string | null; orders: number };
 
 /**
- * The store's total sales for [start, endExclusive) — all non-cancelled,
+ * The store's total NET sales for [start, endExclusive) — all non-cancelled,
  * non-test orders regardless of staff attribution (the day's money line).
  */
 export async function fetchDaySales(
@@ -130,7 +133,7 @@ export async function fetchDaySales(
   endExclusive: string,
 ): Promise<DaySales> {
   const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
-  const fields = "id,cancelled_at,test,current_total_price,currency";
+  const fields = "id,cancelled_at,test,current_subtotal_price,currency";
   let total = 0;
   let orders = 0;
   let currency: string | null = null;
@@ -143,7 +146,7 @@ export async function fetchDaySales(
       await shopifyRest(path);
     for (const o of page.body.orders) {
       if (o.cancelled_at || o.test) continue;
-      total += Number(o.current_total_price) || 0;
+      total += Number(o.current_subtotal_price) || 0;
       orders++;
       currency ??= o.currency ?? null;
     }
