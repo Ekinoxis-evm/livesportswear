@@ -21,8 +21,8 @@ This project uses Next.js 16 (App Router). APIs, conventions, and file structure
 |---|---|
 | A pure scheduling rule, stat, or publish logic | `src/lib/scheduling/*.ts` (no DB calls allowed) |
 | A DB write or mutation | `src/server/<domain>.ts` (server actions) |
-| An admin page | `src/app/(admin)/...` |
-| A public/employee-facing page | `src/app/(public)/...` |
+| An admin page | `src/app/admin/...` |
+| A public/employee-facing page | `src/app/{s,w,portal,store}/...` |
 | A cron handler | `src/app/api/cron/<name>/route.ts` |
 | An email template | `src/lib/emails/<template>.tsx` |
 | A new DB table | A new file in `supabase/migrations/` |
@@ -42,7 +42,7 @@ This project uses Next.js 16 (App Router). APIs, conventions, and file structure
 - `validateSchedule()` is the only entry point.
 - Returns `Violation[]` with `level: "block" | "warn"`.
 - Hard rules (block): `OVERLAPPING_SHIFTS`, `ON_TIME_OFF`, `MAX_DAYS_EXCEEDED`, `BELOW_MIN_DAYS_OFF`.
-- Soft rules (warn): `BELOW_COVERAGE`, `ABOVE_HOUR_TARGET`, `PREFERRED_DAY_OFF_USED`.
+- Soft rules (warn): `BELOW_COVERAGE`, `ABOVE_HOUR_TARGET`, `ABOVE_BIWEEKLY_HOURS`.
 - Tests live in `tests/rules.spec.ts`. Adding a rule? Add at least three tests.
 
 ## Before you submit

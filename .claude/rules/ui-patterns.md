@@ -13,16 +13,20 @@
   (`sidebar-accent`). Palette hexes trace to `public/branding.md`.
 
 ## When to use what
-- **Dialog**: focused, modal interactions — confirming a publish, editing a shift template.
-- **Sheet (right side)**: side-panel forms — adding an employee, editing a shift on the grid.
-- **Drawer (bottom on mobile)**: avoid in v1; sheet is enough.
+- **Wizard (`src/components/shared/wizard.tsx`)**: any multi-step create/edit
+  flow — the canonical pattern for complex forms (contest wizard in a centered
+  Dialog, employee wizard as a full page). Progress pills, per-step validation,
+  back-clickable steps.
+- **Dialog**: focused, modal interactions — confirming a publish or delete.
+- **Sheet (right side)**: simple side-panel edits — editing a shift on the grid.
+- **Drawer (bottom on mobile)**: avoid; sheet/wizard is enough.
 - **Sonner toast**: success / error confirmations after server actions.
 - **Inline `<Alert>`**: persistent state messages on a page (e.g. "This schedule has 3 warnings").
 
 ## Layout
 - Single fixed-width container `max-w-7xl mx-auto` for admin pages.
 - The schedule grid is full-width, scrolls horizontally on narrow screens.
-- Sidebar nav (left) on desktop, top tab nav on mobile (Phase 7).
+- Sidebar nav (left) on desktop; fixed BOTTOM bar on mobile (`admin-mobile-nav.tsx`, driven by the `primary` flag in `NAV_ITEMS`). Performance is a route-tab hub (`performance-tabs.tsx`).
 
 ## Density
 - Comfortable but not airy. Cards use `p-4` to `p-6`. Tables use `py-2`.
@@ -37,7 +41,7 @@
 ## Accessibility
 - Every form input has a visible `<Label>`. No placeholders-as-labels.
 - Color is never the only signal. Violations have both a color and an icon.
-- Keyboard: every dialog and sheet traps focus; ESC closes; Cmd/Ctrl-K opens the global command palette (Phase 6).
+- Keyboard: every dialog and sheet traps focus; ESC closes.
 
 ## Email templates
 - Plain, semantic table layout (`@react-email/components`).

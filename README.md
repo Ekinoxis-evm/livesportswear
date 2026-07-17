@@ -12,7 +12,7 @@ Internal scheduling app for **Live Active Wear** (liveactivewear.com). One admin
 |---|---|
 | Framework | Next.js 16 (App Router) |
 | Language | TypeScript (strict) |
-| Styling | Tailwind v4 + shadcn/ui (dark theme by default) |
+| Styling | Tailwind v4 + shadcn/ui (light by default, dark-mode toggle) |
 | Database | Supabase (Postgres + Auth) |
 | Email | Resend |
 | Hosting | Vercel (Fluid Compute) |
@@ -69,13 +69,17 @@ Open http://localhost:3000.
 ```
 src/
   app/
-    (admin)/      Auth-required admin UI
-    (public)/     Magic-token employee pages + ICS feed
-    api/cron/     Vercel cron handlers
+    admin/        Auth-required admin UI (Performance hub, Sales & Rewards setup, …)
+    portal/       Employee portal (performance, schedule, rewards)
+    store/        Shared store kiosk (check-in, rotation queue, contests)
+    s/ , w/       Magic-token public pages (employee schedule + ICS, store week)
+    api/cron/     Cron handlers (shopify-sync, stale-checkins, photo-retention, meta-sync)
   components/     UI components (shadcn primitives in ui/)
   lib/
-    scheduling/   Rules engine, stats, publish — pure functions
-    supabase/     Server + browser clients
+    scheduling/   Rules engine, stats, week/payroll math — pure functions
+    rewards.ts / floor-queue.ts / floor-state.ts / breaks.ts / commission.ts …
+                  Other pure domain libs (no DB)
+    supabase/     Server + browser + service clients
     emails/       React Email templates
     ical.ts       ICS feed builder
   server/         Server Actions — the only place that writes to the DB
