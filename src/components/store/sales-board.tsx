@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { LogIn, Hand, Undo2, Plus, RotateCcw } from "lucide-react";
+import { LogIn, Hand, Undo2, Plus, RotateCcw, Coffee, MoveRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   storeOpenDay,
   storeTakeClient,
@@ -40,6 +41,7 @@ export type SalesRow = {
   avatarColor: string | null;
   state: "up" | "waiting" | "attending" | "break";
   turn: number | null;
+  turns: number; // clients taken today (rotation fairness, visible on the line)
   arrivedLabel: string;
   walkins: number; // open walk-in customers
   returns: number; // open returns/exchanges
@@ -48,6 +50,67 @@ export type SalesRow = {
 };
 
 type BreakPinFlow = { kind: "start" | "end"; id: string; name: string } | null;
+
+const firstName = (name: string) => name.trim().split(/\s+/)[0];
+
+/** The whole floor in one glance: numbered rotation, then who's busy/away. */
+function OrderStrip({
+  line,
+  attending,
+  onBreak,
+}: {
+  line: SalesRow[];
+  attending: SalesRow[];
+  onBreak: SalesRow[];
+}) {
+  if (line.length + attending.length + onBreak.length < 2) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" aria-label="Turn order">
+      {line.map((r, i) => (
+        <span key={r.employeeId} className="flex items-center gap-1.5">
+          {i > 0 && <MoveRight className="text-muted-foreground size-3.5" aria-hidden />}
+          <span
+            className={cn(
+              "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm font-medium",
+              i === 0 && "border-primary bg-primary text-primary-foreground",
+            )}
+          >
+            <span className="tabular-nums">{i + 1}</span>
+            {firstName(r.name)}
+          </span>
+        </span>
+      ))}
+      {attending.map((r) => (
+        <span
+          key={r.employeeId}
+          className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-sm font-medium text-amber-700 dark:text-amber-400"
+        >
+          {firstName(r.name)}
+          <span className="tabular-nums opacity-80">
+            ·{Math.max(r.walkins + r.returns, 1)}
+          </span>
+        </span>
+      ))}
+      {onBreak.map((r) => (
+        <span
+          key={r.employeeId}
+          className="flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 py-1 text-sm font-medium text-sky-700 dark:text-sky-400"
+        >
+          {firstName(r.name)}
+          <Coffee className="size-3.5" aria-label="on break" />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-muted-foreground -mb-2 text-xs font-semibold uppercase tracking-wide">
+      {children}
+    </h2>
+  );
+}
 
 export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) {
   const router = useRouter();
@@ -160,7 +223,15 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         </Card>
       )}
 
+      {/* The whole floor in one glance */}
+      <OrderStrip line={line} attending={attending} onBreak={onBreak} />
+
       {/* With client(s) now */}
+      {attending.length > 0 && (
+        <SectionLabel>
+          With clients ({attending.length})
+        </SectionLabel>
+      )}
       {attending.map((r) => {
         // Legacy rows can be status-attending with zeroed counters.
         const openTotal = Math.max(r.walkins + r.returns, 1);
@@ -267,6 +338,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
       })}
 
       {/* On break — live timers, PIN to come back */}
+      {onBreak.length > 0 && <SectionLabel>On break ({onBreak.length})</SectionLabel>}
       {onBreak.map((r) => (
         <div
           key={r.employeeId}
@@ -299,13 +371,17 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
       {/* The line — press and drag to reorder */}
       {line.length > 0 && (
         <Card>
-          <CardContent className="pt-2">
+          <CardContent className="pt-4">
+            <h2 className="text-muted-foreground mb-1 text-xs font-semibold uppercase tracking-wide">
+              The line ({line.length})
+            </h2>
             <QueueLine
               entries={line.map((r) => ({
                 employeeId: r.employeeId,
                 name: r.name,
                 avatarColor: r.avatarColor,
                 arrivedLabel: r.arrivedLabel,
+                turns: r.turns,
               }))}
               pending={pending}
               onReorder={(ids) => run(storeReorderQueue(ids), "Line reordered.")}

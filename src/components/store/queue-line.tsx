@@ -19,13 +19,23 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Coffee, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type LineEntry = {
   employeeId: string;
   name: string;
   avatarColor: string | null;
   arrivedLabel: string;
+  turns: number;
 };
+
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
 
 function LineRow({
   entry,
@@ -45,16 +55,18 @@ function LineRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: entry.employeeId, disabled: pending });
 
+  const isUp = index === 0;
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={
-        "bg-background flex items-center justify-between gap-2 py-3" +
-        (isDragging ? " relative z-10 opacity-80" : "")
-      }
+      className={cn(
+        "bg-background flex items-center justify-between gap-2 py-2.5",
+        isUp && "bg-primary/5 -mx-2 rounded-lg px-2",
+        isDragging && "relative z-10 opacity-80",
+      )}
     >
-      <span className="flex items-center gap-2 text-base font-medium">
+      <span className="flex min-w-0 items-center gap-2.5">
         <button
           type="button"
           aria-label={`Drag ${entry.name} to reorder`}
@@ -64,20 +76,39 @@ function LineRow({
         >
           <GripVertical className="size-5" />
         </button>
-        <span className="text-muted-foreground w-6 text-center tabular-nums">
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+            isUp
+              ? "bg-primary text-primary-foreground ring-primary/30 ring-2"
+              : "text-muted-foreground border",
+          )}
+        >
           {index + 1}
         </span>
         <span
           aria-hidden
-          className="size-3 shrink-0 rounded-full border"
-          style={{ backgroundColor: entry.avatarColor ?? "transparent" }}
-        />
-        {entry.name}
-      </span>
-      <div className="flex items-center gap-1">
-        <span className="text-muted-foreground mr-1 text-xs tabular-nums">
-          since {entry.arrivedLabel}
+          className="flex size-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold text-white"
+          style={{ backgroundColor: entry.avatarColor ?? "#9ca3af" }}
+        >
+          {initials(entry.name)}
         </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="flex items-center gap-2 truncate text-lg font-semibold leading-tight">
+            {entry.name}
+            {isUp && (
+              <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                Up next
+              </span>
+            )}
+          </span>
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {entry.turns} {entry.turns === 1 ? "turn" : "turns"} today · since{" "}
+            {entry.arrivedLabel}
+          </span>
+        </span>
+      </span>
+      <div className="flex shrink-0 items-center gap-1">
         {onMakeUpNext && (
           <Button variant="ghost" size="sm" disabled={pending} onClick={onMakeUpNext}>
             Make up next
