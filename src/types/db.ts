@@ -28,6 +28,8 @@ export type SalesContest = Tables<"sales_contests">;
 export type AdminLocation = Tables<"admin_locations">;
 export type FloorCheckin = Tables<"floor_checkins">;
 export type FloorDay = Tables<"floor_days">;
+export type InventoryCount = Tables<"inventory_counts">;
+export type InventoryCountItem = Tables<"inventory_count_items">;
 
 export type EmployeeRole = Enums<"employee_role">;
 export type ScheduleStatus = Enums<"schedule_status">;

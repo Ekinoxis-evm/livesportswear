@@ -10,6 +10,7 @@ import {
   Percent,
   Megaphone,
   MapPin,
+  ScanBarcode,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/admin/performance", label: "Performance", icon: Activity, primary: false },
   { href: "/admin/commission", label: "Sales & Rewards setup", icon: Percent, primary: false },
   { href: "/admin/marketing", label: "Marketing", icon: Megaphone, primary: false },
+  { href: "/admin/inventory", label: "Inventory", icon: ScanBarcode, primary: false },
   { href: "/admin/locations", label: "Locations", icon: MapPin, primary: false },
   { href: "/admin/settings", label: "Settings", icon: Settings, primary: false },
 ];

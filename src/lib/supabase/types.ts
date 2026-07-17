@@ -575,6 +575,106 @@ export type Database = {
           },
         ]
       }
+      inventory_count_items: {
+        Row: {
+          barcode: string
+          count_id: string
+          created_at: string
+          expected: number | null
+          id: string
+          product_title: string
+          qty: number
+          sku: string | null
+          unknown: boolean
+          updated_at: string
+          variant_title: string | null
+        }
+        Insert: {
+          barcode: string
+          count_id: string
+          created_at?: string
+          expected?: number | null
+          id?: string
+          product_title: string
+          qty?: number
+          sku?: string | null
+          unknown?: boolean
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Update: {
+          barcode?: string
+          count_id?: string
+          created_at?: string
+          expected?: number | null
+          id?: string
+          product_title?: string
+          qty?: number
+          sku?: string | null
+          unknown?: boolean
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_count_items_count_id_fkey"
+            columns: ["count_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_counts: {
+        Row: {
+          counted_units: number | null
+          created_at: string
+          expected_units: number | null
+          finalized_at: string | null
+          id: string
+          location_id: string
+          note: string | null
+          started_at: string
+          started_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          counted_units?: number | null
+          created_at?: string
+          expected_units?: number | null
+          finalized_at?: string | null
+          id?: string
+          location_id: string
+          note?: string | null
+          started_at?: string
+          started_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          counted_units?: number | null
+          created_at?: string
+          expected_units?: number | null
+          finalized_at?: string | null
+          id?: string
+          location_id?: string
+          note?: string | null
+          started_at?: string
+          started_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_counts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           active: boolean

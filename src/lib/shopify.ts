@@ -295,6 +295,80 @@ export async function searchProducts(query: string): Promise<ProductHit[]> {
   }));
 }
 
+export type VariantHit = {
+  barcode: string;
+  sku: string | null;
+  productTitle: string;
+  variantTitle: string | null; // usually the size, e.g. "S / 0LJ104"
+  inventoryQuantity: number | null; // Shopify's expected stock
+};
+
+type VariantNodes = {
+  productVariants: {
+    nodes: {
+      barcode: string | null;
+      sku: string | null;
+      title: string | null;
+      inventoryQuantity: number | null;
+      product: { title: string };
+    }[];
+    pageInfo?: { hasNextPage: boolean; endCursor: string | null };
+  };
+};
+
+const variantHit = (v: VariantNodes["productVariants"]["nodes"][number]): VariantHit => ({
+  barcode: v.barcode ?? "",
+  sku: v.sku || null,
+  productTitle: v.product.title,
+  variantTitle: v.title || null,
+  inventoryQuantity: v.inventoryQuantity ?? null,
+});
+
+/** Resolve one scanned barcode to its variant; null when not in the catalog. */
+export async function lookupVariantByBarcode(
+  barcode: string,
+): Promise<VariantHit | null> {
+  const sanitized = barcode.replace(/["\\()]/g, "").trim();
+  if (!sanitized) return null;
+  const data = await shopifyGraphql<VariantNodes>(
+    `query($q: String!) {
+      productVariants(first: 1, query: $q) {
+        nodes { barcode sku title inventoryQuantity product { title } }
+      }
+    }`,
+    { q: `barcode:${sanitized}` },
+  );
+  const v = data.productVariants.nodes[0];
+  return v ? variantHit(v) : null;
+}
+
+/**
+ * The whole catalog's variants with expected stock — the finalize sweep that
+ * finds what a physical count never scanned. Paginated; ~250/page over the
+ * full catalog, so callers run it server-side once per finalize, never per scan.
+ */
+export async function fetchAllTrackedVariants(): Promise<VariantHit[]> {
+  const all: VariantHit[] = [];
+  let cursor: string | null = null;
+  do {
+    const data: VariantNodes = await shopifyGraphql<VariantNodes>(
+      `query($after: String) {
+        productVariants(first: 250, after: $after) {
+          nodes { barcode sku title inventoryQuantity product { title } }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`,
+      { after: cursor },
+    );
+    for (const v of data.productVariants.nodes) {
+      if (v.barcode) all.push(variantHit(v));
+    }
+    const page = data.productVariants.pageInfo;
+    cursor = page?.hasNextPage ? (page.endCursor ?? null) : null;
+  } while (cursor);
+  return all;
+}
+
 export type TenderRow = {
   amount: number; // negative = refund
   payment_method: string; // "cash" | "credit_card" | ...

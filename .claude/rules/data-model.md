@@ -271,6 +271,23 @@ Shopify (`runShopifySync` — cron + admin button) or entered manually.
   nullable) — the decomposition; null on months synced before 0031 until re-synced
 - `source text ('manual'|'shopify')`
 
+### `inventory_counts` + `inventory_count_items` (added 0032)
+Physical inventory counts, admin-only (`/admin/inventory`): scan barcodes on
+the floor (external HID scanner or camera `BarcodeDetector`), tally per
+variant, and compare against Shopify's `inventoryQuantity` at finalize. Math
+is pure in `src/lib/inventory-count.ts`; Shopify lookups in
+`lookupVariantByBarcode` / `fetchAllTrackedVariants` (`src/lib/shopify.ts`).
+- `inventory_counts`: `id`, `location_id fk`, `status ('open'|'final')`,
+  `note`, `started_by` (admin user), `started_at`, `finalized_at`,
+  `expected_units`, `counted_units` (snapshotted at finalize). Partial unique
+  index: ONE open count per location.
+- `inventory_count_items`: `count_id fk cascade`, `barcode`, `sku`,
+  `product_title`, `variant_title`, `qty`, `expected` (Shopify qty at first
+  scan; finalize sweeps the catalog and inserts qty-0 rows for unscanned
+  stock), `unknown` (barcode not in catalog). `unique (count_id, barcode)`.
+- RLS: admin-only via `admin_can_access_location` (items via join to the
+  parent count); no employee/kiosk policies.
+
 ### `attendance_validations` (added 0015 — LEGACY since 0019)
 
 > No longer written: check-ins moved to the store kiosk, whose stamps are
