@@ -82,9 +82,12 @@ export default async function InventoryPage() {
         {locs.map((l) => {
           const book = bookByLoc.get(l.id);
           return (
-            <Link key={l.id} href={`/admin/inventory/book?location=${l.id}`}>
-              <Card className="hover:border-primary h-full transition-colors">
-                <CardContent className="flex flex-col gap-1 pt-6">
+            <Card key={l.id} className="hover:border-primary h-full transition-colors">
+              <CardContent className="flex h-full flex-col gap-1 pt-6">
+                <Link
+                  href={`/admin/inventory/book?location=${l.id}`}
+                  className="flex flex-col gap-1"
+                >
                   <span className="text-muted-foreground text-xs uppercase tracking-wide">
                     Inventory book · {l.name}
                   </span>
@@ -106,9 +109,17 @@ export default async function InventoryPage() {
                       Finalize a count to build the book.
                     </span>
                   )}
-                </CardContent>
-              </Card>
-            </Link>
+                </Link>
+                {book && (
+                  <Link
+                    href={`/admin/inventory/push?location=${l.id}`}
+                    className="text-primary mt-auto pt-2 text-xs font-medium hover:underline"
+                  >
+                    Push to Shopify →
+                  </Link>
+                )}
+              </CardContent>
+            </Card>
           );
         })}
       </div>

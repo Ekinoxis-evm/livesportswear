@@ -369,6 +369,186 @@ export async function fetchAllTrackedVariants(): Promise<VariantHit[]> {
   return all;
 }
 
+// Shopify throttles GraphQL by query cost; the push fetch's nested inventory
+// levels are heavy enough to hit it on big catalogs.
+async function withThrottleRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const throttled = err instanceof Error && err.message.includes("Throttled");
+      if (!throttled || attempt >= 2) throw err;
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+}
+
+export type ShopifyLocation = { id: string; name: string };
+
+export async function fetchShopifyLocations(): Promise<ShopifyLocation[]> {
+  const data = await shopifyGraphql<{
+    locations: { nodes: { id: string; name: string }[] };
+  }>(
+    `query {
+      locations(first: 10, includeInactive: false) {
+        nodes { id name }
+      }
+    }`,
+    {},
+  );
+  return data.locations.nodes;
+}
+
+/** The token's granted scopes, e.g. ["read_inventory", ...] — gates the push. */
+export async function fetchAppAccessScopes(): Promise<string[]> {
+  const data = await shopifyGraphql<{
+    currentAppInstallation: { accessScopes: { handle: string }[] };
+  }>(
+    `query {
+      currentAppInstallation {
+        accessScopes { handle }
+      }
+    }`,
+    {},
+  );
+  return data.currentAppInstallation.accessScopes.map((s) => s.handle);
+}
+
+export type PushVariant = {
+  barcode: string;
+  sku: string | null;
+  productTitle: string;
+  variantTitle: string | null;
+  inventoryItemId: string;
+  tracked: boolean;
+  onHand: number | null; // at the given location; null = no inventory level there
+};
+
+type PushVariantNodes = {
+  productVariants: {
+    nodes: {
+      barcode: string | null;
+      sku: string | null;
+      title: string | null;
+      product: { title: string };
+      inventoryItem: {
+        id: string;
+        tracked: boolean;
+        inventoryLevel: {
+          quantities: { name: string; quantity: number }[];
+        } | null;
+      };
+    }[];
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  };
+};
+
+/**
+ * The whole catalog with each variant's inventory item id and CURRENT on_hand
+ * at the store's Shopify location — what a push draft diffs the book against.
+ * Smaller pages than fetchAllTrackedVariants: the nested level lookup roughly
+ * triples per-node query cost.
+ */
+export async function fetchVariantsForPush(
+  shopifyLocationId: string,
+): Promise<PushVariant[]> {
+  const all: PushVariant[] = [];
+  let cursor: string | null = null;
+  do {
+    const data: PushVariantNodes = await withThrottleRetry(() =>
+      shopifyGraphql<PushVariantNodes>(
+        `query($after: String, $locationId: ID!) {
+          productVariants(first: 150, after: $after) {
+            nodes {
+              barcode
+              sku
+              title
+              product { title }
+              inventoryItem {
+                id
+                tracked
+                inventoryLevel(locationId: $locationId) {
+                  quantities(names: ["on_hand"]) { name quantity }
+                }
+              }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }`,
+        { after: cursor, locationId: shopifyLocationId },
+      ),
+    );
+    for (const v of data.productVariants.nodes) {
+      if (!v.barcode) continue;
+      const onHand = v.inventoryItem.inventoryLevel?.quantities.find(
+        (q) => q.name === "on_hand",
+      );
+      all.push({
+        barcode: v.barcode,
+        sku: v.sku || null,
+        productTitle: v.product.title,
+        variantTitle: v.title || null,
+        inventoryItemId: v.inventoryItem.id,
+        tracked: v.inventoryItem.tracked,
+        onHand: onHand ? onHand.quantity : null,
+      });
+    }
+    const page = data.productVariants.pageInfo;
+    cursor = page.hasNextPage ? (page.endCursor ?? null) : null;
+  } while (cursor);
+  return all;
+}
+
+export type SetOnHandItem = { inventoryItemId: string; quantity: number };
+export type SetOnHandResult =
+  | { ok: true }
+  | { ok: false; message: string; failedIndexes: number[] };
+
+/**
+ * Write absolute on-hand quantities at one location (reason "correction").
+ * Callers pre-chunk to <= 250 items. A userErrors response means the WHOLE
+ * call wrote nothing — the mutation is atomic; failedIndexes point into the
+ * passed items so the caller can name the offending rows.
+ */
+export async function setOnHandQuantities(
+  shopifyLocationId: string,
+  items: SetOnHandItem[],
+  referenceDocumentUri: string,
+): Promise<SetOnHandResult> {
+  const data = await shopifyGraphql<{
+    inventorySetOnHandQuantities: {
+      userErrors: { field: string[] | null; message: string }[];
+    };
+  }>(
+    `mutation($input: InventorySetOnHandQuantitiesInput!) {
+      inventorySetOnHandQuantities(input: $input) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      input: {
+        reason: "correction",
+        referenceDocumentUri,
+        setQuantities: items.map((i) => ({
+          inventoryItemId: i.inventoryItemId,
+          locationId: shopifyLocationId,
+          quantity: i.quantity,
+        })),
+      },
+    },
+  );
+  const errors = data.inventorySetOnHandQuantities.userErrors;
+  if (!errors.length) return { ok: true };
+  const failedIndexes = [
+    ...new Set(
+      errors
+        .map((e) => Number(e.field?.[2]))
+        .filter((n) => Number.isInteger(n) && n >= 0),
+    ),
+  ];
+  return { ok: false, message: errors[0].message, failedIndexes };
+}
+
 export type TenderRow = {
   amount: number; // negative = refund
   payment_method: string; // "cash" | "credit_card" | ...

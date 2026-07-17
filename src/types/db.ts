@@ -31,6 +31,8 @@ export type FloorDay = Tables<"floor_days">;
 export type InventoryCount = Tables<"inventory_counts">;
 export type InventoryCountItem = Tables<"inventory_count_items">;
 export type StoreInventoryRow = Tables<"store_inventory">;
+export type ShopifyPushDraft = Tables<"shopify_push_drafts">;
+export type ShopifyPushDraftItem = Tables<"shopify_push_draft_items">;
 
 export type EmployeeRole = Enums<"employee_role">;
 export type ScheduleStatus = Enums<"schedule_status">;

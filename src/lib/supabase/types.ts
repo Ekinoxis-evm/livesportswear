@@ -978,6 +978,130 @@ export type Database = {
           },
         ]
       }
+      shopify_push_drafts: {
+        Row: {
+          applied_at: string | null
+          applied_by: string | null
+          book_items: number
+          created_at: string
+          created_by: string | null
+          discarded_at: string | null
+          id: string
+          in_sync_items: number
+          location_id: string
+          shopify_location_id: string
+          shopify_location_name: string | null
+          skipped_no_variant: number
+          skipped_unknown: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          applied_at?: string | null
+          applied_by?: string | null
+          book_items?: number
+          created_at?: string
+          created_by?: string | null
+          discarded_at?: string | null
+          id?: string
+          in_sync_items?: number
+          location_id: string
+          shopify_location_id: string
+          shopify_location_name?: string | null
+          skipped_no_variant?: number
+          skipped_unknown?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          applied_at?: string | null
+          applied_by?: string | null
+          book_items?: number
+          created_at?: string
+          created_by?: string | null
+          discarded_at?: string | null
+          id?: string
+          in_sync_items?: number
+          location_id?: string
+          shopify_location_id?: string
+          shopify_location_name?: string | null
+          skipped_no_variant?: number
+          skipped_unknown?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_push_drafts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_push_draft_items: {
+        Row: {
+          apply_error: string | null
+          apply_status: string | null
+          barcode: string
+          book_qty: number
+          created_at: string
+          delta: number
+          draft_id: string
+          excluded: boolean
+          id: string
+          inventory_item_id: string
+          product_title: string
+          shopify_qty: number
+          sku: string | null
+          updated_at: string
+          variant_title: string | null
+        }
+        Insert: {
+          apply_error?: string | null
+          apply_status?: string | null
+          barcode: string
+          book_qty: number
+          created_at?: string
+          delta: number
+          draft_id: string
+          excluded?: boolean
+          id?: string
+          inventory_item_id: string
+          product_title: string
+          shopify_qty: number
+          sku?: string | null
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Update: {
+          apply_error?: string | null
+          apply_status?: string | null
+          barcode?: string
+          book_qty?: number
+          created_at?: string
+          delta?: number
+          draft_id?: string
+          excluded?: boolean
+          id?: string
+          inventory_item_id?: string
+          product_title?: string
+          shopify_qty?: number
+          sku?: string | null
+          updated_at?: string
+          variant_title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_push_draft_items_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_push_drafts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_inventory: {
         Row: {
           barcode: string
