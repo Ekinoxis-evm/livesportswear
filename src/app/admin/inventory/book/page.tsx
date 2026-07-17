@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, Search } from "lucide-react";
+import { ChevronLeft, Search, UploadCloud } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { formatInTimeZone } from "date-fns-tz";
@@ -104,10 +104,18 @@ export default async function InventoryBookPage({
             Our counted truth per barcode — replaced by each finalized count.
           </p>
         </div>
-        <DownloadCsvButton
-          csv={csv}
-          filename={`inventory-book-${location.name.toLowerCase().replace(/\s+/g, "-")}.csv`}
-        />
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/admin/inventory/push?location=${location.id}`}
+            className="border-input hover:bg-muted flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-medium"
+          >
+            <UploadCloud className="size-4" /> Push to Shopify
+          </Link>
+          <DownloadCsvButton
+            csv={csv}
+            filename={`inventory-book-${location.name.toLowerCase().replace(/\s+/g, "-")}.csv`}
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">

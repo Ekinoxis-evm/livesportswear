@@ -298,10 +298,36 @@ establishes zeros). `shopify_qty` = what Shopify believed at count time
 - `sku`, `product_title`, `variant_title`, `qty` (our truth), `shopify_qty`,
   `unknown`, `counted_at`, `count_id fk (on delete set null)`
 - RLS: admin-only via `admin_can_access_location`.
-- **Next phase (not built):** push corrections to Shopify via
-  `inventorySetOnHandQuantities` — requires adding the `write_inventory`
-  scope to the custom app in the Shopify admin (token has read_inventory
-  only today, verified 2026-07-17).
+- Corrections flow back to Shopify only through the staged push flow
+  (`shopify_push_drafts`, below) — never directly. A successful apply also
+  refreshes `shopify_qty` to the written value.
+
+### `shopify_push_drafts` + `shopify_push_draft_items` (added 0034)
+The staged Shopify update (`/admin/inventory/push`): the book is diffed
+against Shopify's CURRENT on-hand into a reviewable DRAFT; an admin reviews
+(exclude rows, CSV), then writes via `inventorySetOnHandQuantities` (reason
+`correction`). Diff math is pure in `src/lib/inventory-push.ts`
+(`buildPushPlan`); actions in `src/server/inventory-push.ts`.
+- `shopify_push_drafts`: `id`, `location_id fk`, `status
+  ('draft'|'applied'|'discarded')`, `shopify_location_id/_name` (resolved at
+  build; exactly ONE active Shopify location supported — mapping deferred),
+  `created_by`, tallies `book_items` / `in_sync_items` / `skipped_unknown` /
+  `skipped_no_variant` (invariant: items + these = book_items),
+  `applied_at/by`, `discarded_at`. Partial unique: ONE `status='draft'` per
+  location.
+- `shopify_push_draft_items`: only the DIFFERENCES (`delta != 0`, writable):
+  `draft_id fk cascade`, `barcode`, `sku`, titles, `inventory_item_id`,
+  `book_qty`, `shopify_qty` (fresh on-hand at build), `delta`, `excluded`,
+  `apply_status ('written'|'failed')` + `apply_error` (per-row write
+  outcomes; retry re-runs only non-written rows). `unique (draft_id, barcode)`.
+- Staleness: a draft with `max(store_inventory.counted_at) > created_at` is
+  stale — banner + hard server-side block on apply.
+- Apply is double-gated: UI button disabled AND `applyPushDraft` re-checks
+  `write_inventory` via `currentAppInstallation.accessScopes` server-side.
+  The scope must be added to the custom app in the Shopify admin (token had
+  read_inventory only as of 2026-07-17).
+- RLS: admin-only via `admin_can_access_location` (items via exists-join to
+  the parent draft); no employee/kiosk policies.
 
 ### `attendance_validations` (added 0015 — LEGACY since 0019)
 
