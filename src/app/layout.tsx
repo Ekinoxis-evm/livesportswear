@@ -23,6 +23,7 @@ export const metadata: Metadata = {
   description:
     "Internal scheduling tool for LIVE! Activewear retail staff across stores.",
   manifest: "/manifest.webmanifest",
+  icons: { apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "LIVE!", statusBarStyle: "black-translucent" },
 };
 
