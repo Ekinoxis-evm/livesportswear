@@ -1,6 +1,14 @@
-import { Trophy, Medal, Award, Lock, Check } from "lucide-react";
+import { Trophy, Medal, Award, Lock, Check, Gift } from "lucide-react";
 import { formatMoney } from "@/lib/commission";
-import { prizeLabel, type ContestResults, type ContestStandings } from "@/lib/rewards";
+import {
+  conditionsLabel,
+  ordinal,
+  placeLabelList,
+  prizesForEmployee,
+  type ContestResults,
+  type ContestStandings,
+  type PrizeBlocker,
+} from "@/lib/rewards";
 import { cn } from "@/lib/utils";
 
 const PLACE_ICONS = [Trophy, Medal, Award];
@@ -60,12 +68,33 @@ export function StandingsBoard({
   currency: string;
   highlightEmployeeId?: string;
 }) {
-  const prizeByPlace = new Map(standings.places.map((p) => [p.place, p]));
+  const blockerText = (b: PrizeBlocker, conditions: { position: number | null; min_sales: number | null }): string => {
+    switch (b) {
+      case "position":
+        return conditions.position !== null
+          ? `needs ${ordinal(conditions.position)} place`
+          : "needs position";
+      case "min_sales":
+        return conditions.min_sales !== null
+          ? `needs ${formatMoney(conditions.min_sales, currency)}`
+          : "needs minimum";
+      case "store_goal":
+        return "needs store goal";
+      case "personal_goal":
+        return "needs their personal goal";
+    }
+  };
+
   return (
     <ul className="flex flex-col divide-y">
       {standings.ranking.map((r) => {
-        const place = prizeByPlace.get(r.place);
         const me = r.employeeId === highlightEmployeeId;
+        const myPrizes = prizesForEmployee(standings, r.employeeId);
+        // Show what this rep is winning, plus what they're one step away from
+        // (position blockers hidden for non-holders — that's just "not you").
+        const relevant = myPrizes.filter(
+          (p) => p.unlocked || !p.blockers.includes("position"),
+        );
         return (
           <li
             key={r.employeeId}
@@ -76,7 +105,7 @@ export function StandingsBoard({
           >
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="flex items-center gap-2">
-                {place ? (
+                {r.place <= 3 ? (
                   <PlaceIcon place={r.place} />
                 ) : (
                   <span className="text-muted-foreground w-4 text-center tabular-nums">
@@ -86,70 +115,44 @@ export function StandingsBoard({
                 {r.name}
                 {me && <span className="text-primary text-xs">(you)</span>}
               </span>
-              {place && (
+              {relevant.length > 0 && (
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-6">
-                  {place.items.map((item, i) => (
+                  {relevant.map((p, i) => (
                     <span
                       key={i}
                       className={cn(
                         "flex items-center gap-1 text-xs",
-                        item.unlocked ? "text-primary" : "text-muted-foreground",
+                        p.unlocked ? "text-primary" : "text-muted-foreground",
                       )}
                     >
-                      {item.unlocked ? (
+                      {p.unlocked ? (
                         <Check className="size-3" />
                       ) : (
                         <Lock className="size-3" />
                       )}
-                      {prizeLabel(item, currency)}
-                      {!item.unlocked && (
+                      {placeLabelList(p.items, currency)}
+                      {!p.unlocked && (
                         <span className="text-muted-foreground">
-                          (
-                          {place.holder && !place.thresholdMet && place.min_sales !== null
-                            ? `needs ${formatMoney(place.min_sales, currency)}`
-                            : item.requires_personal && place.holder && !place.holder.personalMet
-                              ? "needs their personal goal"
-                              : "needs store goal"}
-                          )
+                          ({p.blockers.map((b) => blockerText(b, p.conditions)).join(", ")})
                         </span>
                       )}
                     </span>
                   ))}
                 </span>
               )}
-              {place &&
-                place.holder &&
-                !place.thresholdMet &&
-                place.min_sales !== null &&
-                place.min_sales > 0 && (
-                  <span className="flex items-center gap-2 pl-6">
-                    <span className="bg-muted h-1.5 w-24 overflow-hidden rounded-full">
-                      <span
-                        className="bg-primary block h-full rounded-full"
-                        style={{
-                          width: `${Math.round(Math.min(1, place.holder.amount / place.min_sales) * 100)}%`,
-                        }}
-                      />
-                    </span>
-                    <span className="text-muted-foreground text-xs tabular-nums">
-                      {formatMoney(Math.max(0, place.min_sales - place.holder.amount), currency)}{" "}
-                      to the minimum
-                    </span>
-                  </span>
-                )}
               {r.personalGoal !== null && !r.personalMet && (
                 <span className="flex items-center gap-2 pl-6">
                   <span className="bg-muted h-1.5 w-24 overflow-hidden rounded-full">
                     <span
                       className="bg-primary block h-full rounded-full"
                       style={{
-                        width: `${Math.round(Math.min(1, r.amount / r.personalGoal) * 100)}%`,
+                        width: `${Math.round(Math.min(1, r.personalProgress / r.personalGoal) * 100)}%`,
                       }}
                     />
                   </span>
                   <span className="text-muted-foreground text-xs tabular-nums">
-                    {formatMoney(Math.max(0, r.personalGoal - r.amount), currency)} to
-                    their goal
+                    {formatMoney(Math.max(0, r.personalGoal - r.personalProgress), currency)}{" "}
+                    to their goal
                   </span>
                 </span>
               )}
@@ -227,52 +230,6 @@ export function ResultsBoard({
   );
 }
 
-/**
- * The employee's own second bar: distance to the minimum attached to the
- * place they currently hold (the store-goal bar is GateProgress).
- */
-export function MyPlaceProgress({
-  standings,
-  employeeId,
-  currency,
-}: {
-  standings: ContestStandings;
-  employeeId: string;
-  currency: string;
-}) {
-  const me = standings.ranking.find((r) => r.employeeId === employeeId);
-  if (!me) return null;
-  const place = standings.places.find((p) => p.place === me.place);
-  if (!place || place.min_sales === null || place.min_sales <= 0) return null;
-
-  const met = me.amount >= place.min_sales;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-1.5">
-          {met ? (
-            <Check className="text-primary size-4" />
-          ) : (
-            <Lock className="text-muted-foreground size-4" />
-          )}
-          Your minimum for {me.place === 1 ? "1st" : me.place === 2 ? "2nd" : me.place === 3 ? "3rd" : `${me.place}th`} place
-        </span>
-        <span className="text-muted-foreground tabular-nums">
-          {met
-            ? "done"
-            : `${formatMoney(place.min_sales - me.amount, currency)} to go`}
-        </span>
-      </div>
-      <div className="bg-muted h-2 overflow-hidden rounded-full">
-        <div
-          className="bg-primary h-full rounded-full"
-          style={{ width: `${Math.round(Math.min(1, me.amount / place.min_sales) * 100)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 /** The employee's personal-goal bar (third bar on the portal). */
 export function MyPersonalProgress({
   standings,
@@ -299,17 +256,52 @@ export function MyPersonalProgress({
           Your personal goal {formatMoney(me.personalGoal, currency)}
         </span>
         <span className="text-muted-foreground tabular-nums">
-          {met ? "done" : `${formatMoney(me.personalGoal - me.amount, currency)} to go`}
+          {met ? "done" : `${formatMoney(me.personalGoal - me.personalProgress, currency)} to go`}
         </span>
       </div>
       <div className="bg-muted h-2 overflow-hidden rounded-full">
         <div
           className="bg-primary h-full rounded-full"
           style={{
-            width: `${Math.round(Math.min(1, me.amount / me.personalGoal) * 100)}%`,
+            width: `${Math.round(Math.min(1, me.personalProgress / me.personalGoal) * 100)}%`,
           }}
         />
       </div>
     </div>
+  );
+}
+
+/** The contest's prizes with their conditions — "what's at stake" up top. */
+export function PrizeList({
+  standings,
+  currency,
+}: {
+  standings: ContestStandings;
+  currency: string;
+}) {
+  if (standings.prizes.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {standings.prizes.map((p, i) => (
+        <li key={i} className="flex items-start gap-2 text-sm">
+          <Gift className="text-primary mt-0.5 size-4 shrink-0" />
+          <span className="min-w-0">
+            <span className="font-medium">{placeLabelList(p.items, currency)}</span>
+            <span className="text-muted-foreground">
+              {" — "}
+              {conditionsLabel(p.conditions, currency) === "everyone"
+                ? "everyone wins this"
+                : conditionsLabel(p.conditions, currency)}
+            </span>
+            {p.winners.length > 0 && (
+              <span className="text-primary text-xs">
+                {" · "}
+                {p.winners.map((w) => w.name).join(", ")}
+              </span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

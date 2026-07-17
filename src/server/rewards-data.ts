@@ -34,9 +34,44 @@ export function toContest(row: SalesContest): Contest {
     end_date: row.end_date,
     store_threshold: Number(row.store_threshold),
     goal_source: row.goal_source === "monthly" ? "monthly" : "custom",
+    personal_source: row.personal_source === "monthly" ? "monthly" : "custom",
     personal_goals: asPersonalGoals(row.personal_goals),
     prizes: asPrizes(row.prizes),
   };
+}
+
+/**
+ * Monthly personal mode: each rep's end-date-month net total (monthly_sales)
+ * measured against their configured monthly goal (employee_goals).
+ */
+async function monthlyPersonal(
+  service: Service,
+  locationId: string,
+  endDate: string,
+): Promise<Record<string, { goal: number | null; total: number }>> {
+  const month = endDate.slice(0, 7);
+  const year = Number(month.slice(0, 4));
+  const monthNum = Number(month.slice(5, 7));
+  const [{ data: emps }, { data: goals }, { data: sales }] = await Promise.all([
+    service.from("employees").select("id").eq("location_id", locationId),
+    service
+      .from("employee_goals")
+      .select("employee_id, goal_amount")
+      .eq("year", year)
+      .eq("month", monthNum),
+    service.from("monthly_sales").select("employee_id, amount").eq("month", month),
+  ]);
+  const goalBy = new Map((goals ?? []).map((g) => [g.employee_id, Number(g.goal_amount)]));
+  const salesBy = new Map((sales ?? []).map((s) => [s.employee_id, Number(s.amount)]));
+  const out: Record<string, { goal: number | null; total: number }> = {};
+  for (const e of emps ?? []) {
+    const goal = goalBy.get(e.id);
+    out[e.id] = {
+      goal: goal !== undefined && goal > 0 ? goal : null,
+      total: salesBy.get(e.id) ?? 0,
+    };
+  }
+  return out;
 }
 
 /**
@@ -103,14 +138,17 @@ export async function getContestStandings(
 ): Promise<ContestStandings | null> {
   const contest = toContest(row);
   const service = createServiceClient();
-  const [sales, gateOverride] = await Promise.all([
+  const [sales, gate, personal] = await Promise.all([
     contestSales(row.location_id, contest, tz),
     contest.goal_source === "monthly"
       ? monthlyGate(service, row.location_id, contest.end_date)
       : Promise.resolve(undefined),
+    contest.personal_source === "monthly"
+      ? monthlyPersonal(service, row.location_id, contest.end_date)
+      : Promise.resolve(undefined),
   ]);
   if (sales === null) return null;
-  return computeStandings(contest, sales, businessDate(tz), gateOverride);
+  return computeStandings(contest, sales, businessDate(tz), { gate, personal });
 }
 
 /**

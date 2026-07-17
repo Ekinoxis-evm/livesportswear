@@ -302,6 +302,41 @@ export type Database = {
           },
         ]
       }
+      employee_goals: {
+        Row: {
+          created_at: string
+          employee_id: string
+          goal_amount: number
+          month: number
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          goal_amount?: number
+          month: number
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          goal_amount?: number
+          month?: number
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_goals_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           active: boolean
@@ -634,6 +669,7 @@ export type Database = {
           created_at: string
           end_date: string
           goal_source: string
+          personal_source: string
           id: string
           location_id: string
           name: string
@@ -648,6 +684,7 @@ export type Database = {
           created_at?: string
           end_date: string
           goal_source?: string
+          personal_source?: string
           id?: string
           location_id: string
           name: string
@@ -662,6 +699,7 @@ export type Database = {
           created_at?: string
           end_date?: string
           goal_source?: string
+          personal_source?: string
           id?: string
           location_id?: string
           name?: string

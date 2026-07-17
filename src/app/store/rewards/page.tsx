@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import {
   GateProgress,
+  PrizeList,
   ResultsBoard,
   StandingsBoard,
 } from "@/components/rewards/standings";
@@ -78,10 +79,8 @@ export default async function StoreRewardsPage() {
                 </p>
               ) : (
                 <>
-                  <GateProgress
-                    standings={standings}
-                    currency={currency}
-                  />
+                  <PrizeList standings={standings} currency={currency} />
+                  <GateProgress standings={standings} currency={currency} />
                   <StandingsBoard standings={standings} currency={currency} />
                 </>
               )}
