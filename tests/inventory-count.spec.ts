@@ -85,7 +85,7 @@ describe("buildInventoryCsv", () => {
       [item({ qty: 2, expected: 3 })],
     );
     expect(csv).toContain("Inventory count — Miami Lincoln Road");
-    expect(csv).toContain("Counted 2 units · expected 3 · missing 1 · over 0");
+    expect(csv).toContain("Counted 2 units · in Shopify 3 · missing 1 · over 0");
     expect(csv).toContain("Jog Pants,S,84939.S,790,2,3,-1,");
   });
 });
