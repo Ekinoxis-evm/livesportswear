@@ -181,6 +181,71 @@ export async function fetchDaySales(
   return { ...b, total: b.net, currency, orders };
 }
 
+export type RecentOrder = {
+  id: string;
+  name: string; // Shopify order name, e.g. "#1234"
+  createdAt: string;
+  net: number;
+  currency: string | null;
+  customer: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+  } | null;
+};
+
+type RestRecentOrder = RestOrder & {
+  name: string | null;
+  created_at: string;
+  currency: string | null;
+  customer: {
+    id: number;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+};
+
+/**
+ * The store's most recent orders, newest first — the pick-list the kiosk
+ * shows when a rep marks SOLD, so the client event links the real order and
+ * its customer. Customer contact must never be logged (security.md).
+ */
+export async function fetchRecentOrders(limit = 6): Promise<RecentOrder[]> {
+  const fields =
+    "id,name,created_at,cancelled_at,test,current_subtotal_price,currency,customer";
+  // Over-fetch a little so filtered cancelled/test orders don't shrink the list.
+  const { body } = await shopifyRest<{ orders: RestRecentOrder[] }>(
+    `/orders.json?status=any&limit=${limit + 4}&fields=${fields}`,
+  );
+  return body.orders
+    .filter((o) => !o.cancelled_at && !o.test)
+    .slice(0, limit)
+    .map((o) => {
+      const customerName = [o.customer?.first_name, o.customer?.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      return {
+        id: String(o.id),
+        name: o.name ?? `#${o.id}`,
+        createdAt: o.created_at,
+        net: Number(o.current_subtotal_price ?? 0),
+        currency: o.currency ?? null,
+        customer: o.customer
+          ? {
+              id: String(o.customer.id),
+              name: customerName || "Customer",
+              email: o.customer.email ?? null,
+              phone: o.customer.phone ?? null,
+            }
+          : null,
+      };
+    });
+}
+
 type RestEvent = { verb: string; author: string | null };
 
 /**

@@ -1,6 +1,11 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { workedHours, stampStatus } from "@/lib/attendance";
-import { productLabel, type ReportCheckin, type ReportEvent } from "@/lib/day-report-csv";
+import {
+  orderLabel,
+  productLabel,
+  type ReportCheckin,
+  type ReportEvent,
+} from "@/lib/day-report-csv";
 
 /**
  * Pure builder for the Daily Report XML attachment — a generic,
@@ -71,6 +76,8 @@ export function buildDayReportXml({
     .map(
       (e) =>
         `    <event time="${esc(time(e.attended_at))}" employee="${esc(e.employeeName)}" kind="${esc(e.kind ?? "walkin")}" sold="${e.sold}" gotContact="${e.got_contact}">` +
+        tag("order", orderLabel(e) || null) +
+        tag("customer", e.customerName || null) +
         tag("reasons", (e.reasons ?? []).join("; ") || null) +
         tag("products", (e.products ?? []).map(productLabel).join("; ") || null) +
         tag("note", e.note || null) +

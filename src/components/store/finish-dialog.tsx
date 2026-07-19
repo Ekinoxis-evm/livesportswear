@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Search, X } from "lucide-react";
-import { storeSearchProducts } from "@/server/store-floor";
-import type { FinishInput } from "@/lib/finish-schema";
-import type { ProductHit } from "@/lib/shopify";
+import { Check, Receipt, Search, X } from "lucide-react";
+import { storeSearchProducts, storeRecentOrders } from "@/server/store-floor";
+import type { FinishInput, FinishOrder } from "@/lib/finish-schema";
+import type { ProductHit, RecentOrder } from "@/lib/shopify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,7 +73,9 @@ function FinishSteps({
   pending: boolean;
   onSubmit: (employeeId: string, input: FinishInput) => void;
 }) {
-  const [step, setStep] = useState<"choice" | "contact" | "reasons">("choice");
+  const [step, setStep] = useState<"choice" | "order" | "contact" | "reasons">("choice");
+  const [orders, setOrders] = useState<RecentOrder[] | null>(null);
+  const [order, setOrder] = useState<RecentOrder | null>(null);
   const [reasons, setReasons] = useState<string[]>([]);
   const [products, setProducts] = useState<ProductHit[]>([]);
   const [note, setNote] = useState("");
@@ -166,7 +168,13 @@ function FinishSteps({
             size="lg"
             className="h-14 flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
             disabled={pending}
-            onClick={() => setStep("contact")}
+            onClick={() => {
+              setStep("order");
+              // Fetched on demand — never on the 45s refresh loop.
+              void storeRecentOrders().then((res) => {
+                setOrders(res.ok ? (res.data ?? []) : []);
+              });
+            }}
           >
             <Check className="mr-1.5 size-5" /> Sold
           </Button>
@@ -175,11 +183,89 @@ function FinishSteps({
     );
   }
 
+  if (step === "order") {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>{target.name} — which order?</DialogTitle>
+          <DialogDescription>
+            Link the Shopify order so the sale knows its client.
+          </DialogDescription>
+        </DialogHeader>
+        {orders === null ? (
+          <p className="text-muted-foreground py-4 text-sm">Loading orders…</p>
+        ) : orders.length === 0 ? (
+          <p className="text-muted-foreground py-4 text-sm">
+            Couldn&apos;t load orders right now — continue without linking.
+          </p>
+        ) : (
+          <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+            {orders.map((o, i) => (
+              <Button
+                key={o.id}
+                variant={i === 0 ? "default" : "outline"}
+                size="lg"
+                className="h-14 justify-start gap-2.5"
+                disabled={pending}
+                onClick={() => {
+                  setOrder(o);
+                  setStep("contact");
+                }}
+              >
+                <Receipt className="size-4 shrink-0" />
+                <span className="flex min-w-0 flex-col items-start leading-tight">
+                  <span className="font-semibold tabular-nums">
+                    {o.name} · ${o.net.toFixed(2)}
+                  </span>
+                  <span className="truncate text-xs font-normal opacity-80">
+                    {o.createdAt.slice(11, 16)} ·{" "}
+                    {o.customer?.name ?? "no customer on the order"}
+                  </span>
+                </span>
+                {i === 0 && (
+                  <span className="ml-auto shrink-0 text-xs opacity-80">latest</span>
+                )}
+              </Button>
+            ))}
+          </div>
+        )}
+        <Button
+          variant="ghost"
+          className="text-muted-foreground"
+          disabled={pending}
+          onClick={() => {
+            setOrder(null);
+            setStep("contact");
+          }}
+        >
+          Skip — no order to link
+        </Button>
+      </>
+    );
+  }
+
   if (step === "contact") {
+    const linkedOrder: FinishOrder | undefined = order
+      ? {
+          id: order.id,
+          name: order.name,
+          total: order.net,
+          customer_id: order.customer?.id ?? null,
+          customer_name: order.customer?.name ?? null,
+          customer_email: order.customer?.email ?? null,
+          customer_phone: order.customer?.phone ?? null,
+        }
+      : undefined;
     return (
       <>
         <DialogHeader>
           <DialogTitle>{target.name} — got contact?</DialogTitle>
+          {order && (
+            <DialogDescription className="tabular-nums">
+              Linked to {order.name}
+              {order.customer?.name ? ` · ${order.customer.name}` : ""}
+            </DialogDescription>
+          )}
         </DialogHeader>
         <div className="flex gap-3">
           <Button
@@ -188,7 +274,12 @@ function FinishSteps({
             className="h-14 flex-1"
             disabled={pending}
             onClick={() =>
-              onSubmit(target.employeeId, { kind: "walkin", sold: true, got_contact: false })
+              onSubmit(target.employeeId, {
+                kind: "walkin",
+                sold: true,
+                got_contact: false,
+                order: linkedOrder,
+              })
             }
           >
             No
@@ -198,7 +289,12 @@ function FinishSteps({
             className="h-14 flex-1"
             disabled={pending}
             onClick={() =>
-              onSubmit(target.employeeId, { kind: "walkin", sold: true, got_contact: true })
+              onSubmit(target.employeeId, {
+                kind: "walkin",
+                sold: true,
+                got_contact: true,
+                order: linkedOrder,
+              })
             }
           >
             Yes

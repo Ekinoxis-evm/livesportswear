@@ -109,7 +109,7 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
       service
         .from("client_events")
         .select(
-          "employee_id, attended_at, kind, sold, got_contact, reasons, note, products, employees(name)",
+          "employee_id, attended_at, kind, sold, got_contact, reasons, note, products, shopify_order_name, order_total, customer_name, employees(name)",
         )
         .eq("location_id", locationId)
         .eq("business_date", bd)
@@ -165,6 +165,9 @@ async function buildDayReportData(locationId: string): Promise<DayReportData> {
     reasons: e.reasons,
     products: (e.products as { title: string; sku?: string | null }[] | null) ?? null,
     note: e.note,
+    orderName: e.shopify_order_name,
+    orderTotal: e.order_total != null ? Number(e.order_total) : null,
+    customerName: e.customer_name,
   }));
   const reportCheckins: ReportCheckin[] = checkins.map((c) => ({
     employeeName: nameOf(c),

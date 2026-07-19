@@ -281,6 +281,15 @@ export type FinishResult = {
   reasons?: string[]; // mandatory (app layer) when a walk-in didn't buy
   products?: { id: string; title: string; sku?: string | null }[];
   note?: string;
+  order?: {
+    id: string;
+    name: string;
+    total: number;
+    customer_id?: string | null;
+    customer_name?: string | null;
+    customer_email?: string | null;
+    customer_phone?: string | null;
+  };
 };
 
 /**
@@ -315,6 +324,13 @@ export async function doFinishCustomer(
     reasons: result.reasons ?? null,
     products: result.products ?? null,
     note: result.note ?? null,
+    shopify_order_id: result.order?.id ?? null,
+    shopify_order_name: result.order?.name ?? null,
+    order_total: result.order?.total ?? null,
+    shopify_customer_id: result.order?.customer_id ?? null,
+    customer_name: result.order?.customer_name ?? null,
+    customer_email: result.order?.customer_email ?? null,
+    customer_phone: result.order?.customer_phone ?? null,
   });
   if (ins.error) return { ok: false, error: ins.error.message };
 

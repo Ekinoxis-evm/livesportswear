@@ -14,6 +14,9 @@ describe("buildDayReportCsv", () => {
           attended_at: "2026-07-09T15:30:00Z", // 11:30 EDT
           sold: true,
           got_contact: true,
+          orderName: "#1042",
+          orderTotal: 118.4,
+          customerName: "Anastasia B",
         },
         {
           employeeName: "Veriana",
@@ -40,8 +43,12 @@ describe("buildDayReportCsv", () => {
 
     const lines = csv.split("\r\n");
     expect(lines[0]).toBe("Daily Report 2026-07-09");
-    expect(lines).toContain("11:30,Maryna,walkin,sold,,,,yes");
-    expect(lines).toContain("12:00,Veriana,walkin,no sale,No size; No color,,wanted the blue one,no");
+    expect(lines).toContain(
+      "11:30,Maryna,walkin,sold,#1042 ($118.40),Anastasia B,,,,yes",
+    );
+    expect(lines).toContain(
+      "12:00,Veriana,walkin,no sale,,,No size; No color,,wanted the blue one,no",
+    );
     expect(lines).toContain("Maryna,09:30,17:30,8,25,validated,validated");
   });
 

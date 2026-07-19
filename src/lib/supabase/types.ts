@@ -162,42 +162,63 @@ export type Database = {
           attended_at: string
           business_date: string
           created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
           employee_id: string
           got_contact: boolean
           id: string
           kind: string
           location_id: string
           note: string | null
+          order_total: number | null
           products: Json | null
           reasons: string[] | null
+          shopify_customer_id: string | null
+          shopify_order_id: string | null
+          shopify_order_name: string | null
           sold: boolean
         }
         Insert: {
           attended_at?: string
           business_date: string
           created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           employee_id: string
           got_contact?: boolean
           id?: string
           kind?: string
           location_id: string
           note?: string | null
+          order_total?: number | null
           products?: Json | null
           reasons?: string[] | null
+          shopify_customer_id?: string | null
+          shopify_order_id?: string | null
+          shopify_order_name?: string | null
           sold?: boolean
         }
         Update: {
           attended_at?: string
           business_date?: string
           created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
           employee_id?: string
           got_contact?: boolean
           id?: string
           kind?: string
           location_id?: string
           note?: string | null
+          order_total?: number | null
           products?: Json | null
           reasons?: string[] | null
+          shopify_customer_id?: string | null
+          shopify_order_id?: string | null
+          shopify_order_name?: string | null
           sold?: boolean
         }
         Relationships: [
