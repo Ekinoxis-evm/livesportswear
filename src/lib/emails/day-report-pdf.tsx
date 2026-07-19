@@ -6,6 +6,7 @@ import {
   View,
 } from "@react-pdf/renderer";
 import {
+  orderLabel,
   productLabel,
   type ReportCheckin,
   type ReportEvent,
@@ -158,6 +159,8 @@ export function DayReportPdf({
               </Text>
               <Text style={[s.cell, { width: eventCols[4] }]}>
                 {[
+                  orderLabel(e),
+                  e.customerName ?? "",
                   (e.reasons ?? []).join("; "),
                   (e.products ?? []).map(productLabel).join("; "),
                   e.note ?? "",

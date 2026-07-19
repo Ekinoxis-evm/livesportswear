@@ -24,7 +24,12 @@ import {
   type CloseDayDraft,
 } from "@/server/conversion-core";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { searchProducts, type ProductHit } from "@/lib/shopify";
+import {
+  searchProducts,
+  fetchRecentOrders,
+  type ProductHit,
+  type RecentOrder,
+} from "@/lib/shopify";
 import { finishSchema, type FinishInput } from "@/lib/finish-schema";
 import { firstError, type ActionResult } from "@/server/shared";
 
@@ -453,6 +458,7 @@ export async function storeFinish(
     reasons: d.kind === "walkin" && !d.sold ? d.reasons : undefined,
     products: d.kind === "walkin" && !d.sold ? d.products : undefined,
     note: d.kind === "walkin" && !d.sold ? d.note : undefined,
+    order: d.kind === "walkin" && d.sold ? d.order : undefined,
   });
   if (res.ok) {
     revalidatePath("/store", "layout");
@@ -472,6 +478,20 @@ export async function storeSearchProducts(
   if (!isShopifyConfigured()) return { ok: true, data: [] };
   try {
     return { ok: true, data: await searchProducts(parsed.data) };
+  } catch {
+    return { ok: true, data: [] };
+  }
+}
+
+/**
+ * The store's latest orders for the sold→order pick step; degrades to []
+ * when Shopify is down so a sale is never blocked on the link.
+ */
+export async function storeRecentOrders(): Promise<ActionResult<RecentOrder[]>> {
+  await requireStore();
+  if (!isShopifyConfigured()) return { ok: true, data: [] };
+  try {
+    return { ok: true, data: await fetchRecentOrders() };
   } catch {
     return { ok: true, data: [] };
   }

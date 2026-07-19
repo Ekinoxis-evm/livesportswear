@@ -13,6 +13,18 @@ const productSchema = z.object({
   sku: z.string().trim().min(1).max(60).nullish(),
 });
 
+// The Shopify order (and its customer) a sold walk-in links to.
+const orderSchema = z.object({
+  id: z.string().min(1).max(30),
+  name: z.string().min(1).max(30),
+  total: z.number().min(0),
+  customer_id: z.string().max(30).nullish(),
+  customer_name: z.string().max(120).nullish(),
+  customer_email: z.string().max(200).nullish(),
+  customer_phone: z.string().max(40).nullish(),
+});
+export type FinishOrder = z.input<typeof orderSchema>;
+
 // A walk-in that didn't buy REQUIRES at least one reason.
 const walkinSchema = z
   .object({
@@ -22,6 +34,7 @@ const walkinSchema = z
     reasons: z.array(z.string().trim().min(1).max(60)).max(6).optional(),
     products: z.array(productSchema).max(5).optional(),
     note: z.string().trim().max(300).optional(),
+    order: orderSchema.optional(),
   })
   .refine((v) => v.sold || (v.reasons?.length ?? 0) > 0, {
     message: "Pick at least one reason.",

@@ -18,7 +18,17 @@ export type ReportEvent = {
   reasons?: string[] | null;
   products?: { title: string; sku?: string | null }[] | null;
   note?: string | null;
+  orderName?: string | null; // linked Shopify order, e.g. "#1234"
+  orderTotal?: number | null;
+  customerName?: string | null;
 };
+
+export const orderLabel = (e: Pick<ReportEvent, "orderName" | "orderTotal">) =>
+  e.orderName
+    ? e.orderTotal != null
+      ? `${e.orderName} ($${e.orderTotal.toFixed(2)})`
+      : e.orderName
+    : "";
 
 export const productLabel = (p: { title: string; sku?: string | null }) =>
   p.sku ? `${p.title} [${p.sku}]` : p.title;
@@ -53,6 +63,8 @@ export function buildDayReportCsv({
     e.employeeName,
     e.kind ?? "walkin",
     e.sold ? "sold" : "no sale",
+    orderLabel(e),
+    e.customerName ?? "",
     (e.reasons ?? []).join("; "),
     (e.products ?? []).map(productLabel).join("; "),
     e.note ?? "",
@@ -78,7 +90,7 @@ export function buildDayReportCsv({
     [`Daily Report ${businessDate}`],
     [],
     ["Client events"],
-    ["Time", "Employee", "Kind", "Result", "Reasons", "Products", "Note", "Got contact"],
+    ["Time", "Employee", "Kind", "Result", "Order", "Customer", "Reasons", "Products", "Note", "Got contact"],
     ...eventRows,
     [],
     ["Check-ins"],

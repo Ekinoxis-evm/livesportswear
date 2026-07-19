@@ -123,6 +123,12 @@ layer (counts), not money.
 - `attended_at timestamptz not null default now()` — when the rep marked it
 - `sold boolean not null default false`
 - `got_contact boolean not null default false`
+- `shopify_order_id/_name`, `order_total`, `shopify_customer_id`,
+  `customer_name/_email/_phone` (added 0037) — a sold walk-in optionally
+  links the real Shopify order + its customer (picked from the last orders
+  on the kiosk). The client-history seed. PII: stays in the DB under the
+  existing RLS; NEVER log customer contact. Partial index
+  `(location_id, shopify_customer_id)` for the future clients view.
 - index `(location_id, business_date)`, `(employee_id, business_date)`
 
 ### `store_day_closes` (added 0009)
