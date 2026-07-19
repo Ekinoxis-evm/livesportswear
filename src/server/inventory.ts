@@ -193,6 +193,15 @@ export async function adjustItem(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
   const supabase = await createServerClient();
+  const { data: item } = await supabase
+    .from("inventory_count_items")
+    .select("id, inventory_counts(status)")
+    .eq("id", parsed.data.itemId)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Row not found." };
+  if (item.inventory_counts?.status !== "open") {
+    return { ok: false, error: "This count is finalized — start a new one." };
+  }
   const { error } = await supabase
     .from("inventory_count_items")
     .update({ qty: parsed.data.qty })
@@ -207,6 +216,15 @@ export async function removeItem(itemId: string): Promise<ActionResult> {
     return { ok: false, error: "Invalid item." };
   }
   const supabase = await createServerClient();
+  const { data: item } = await supabase
+    .from("inventory_count_items")
+    .select("id, inventory_counts(status)")
+    .eq("id", itemId)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Row not found." };
+  if (item.inventory_counts?.status !== "open") {
+    return { ok: false, error: "This count is finalized — start a new one." };
+  }
   const { error } = await supabase
     .from("inventory_count_items")
     .delete()
@@ -233,7 +251,15 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
   if (!count) return { ok: false, error: "Count not found." };
   if (count.status !== "open") return { ok: false, error: "Already finalized." };
 
-  if (isShopifyConfigured()) {
+  // The finalize sweep is what makes the book total truth — without Shopify
+  // it would silently degrade to "only what was scanned". Refuse instead.
+  if (!isShopifyConfigured()) {
+    return {
+      ok: false,
+      error: "Shopify isn't connected — the finalize sweep needs it.",
+    };
+  }
+  {
     let catalog;
     try {
       catalog = await fetchAllTrackedVariants();
@@ -277,7 +303,7 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
   const totals = countTotals((items ?? []) as CountItem[]);
 
   const finalizedAt = new Date().toISOString();
-  const { data: finalized, error } = await supabase
+  const { data: finalizedRows, error } = await supabase
     .from("inventory_counts")
     .update({
       status: "final",
@@ -286,9 +312,11 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
       expected_units: totals.expectedUnits,
     })
     .eq("id", countId)
-    .select("location_id")
-    .single();
+    .eq("status", "open")
+    .select("location_id");
   if (error) return { ok: false, error: dbError(error) };
+  const finalized = finalizedRows?.[0];
+  if (!finalized) return { ok: false, error: "Already finalized." };
 
   // The finalized count becomes the store's inventory book: our counted
   // truth per barcode, zeros included (a total count establishes zeros).
@@ -311,6 +339,16 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
       .upsert(bookRows.slice(i, i + 500), { onConflict: "location_id,barcode" });
     if (bookErr) return { ok: false, error: dbError(bookErr) };
   }
+  // A finalized count REPLACES the book: every current row was just stamped
+  // with this count_id, so anything else is a stale leftover (e.g. an item
+  // that sold out since the last count) — without this, the push would write
+  // phantom stock back to Shopify.
+  const { error: staleErr } = await supabase
+    .from("store_inventory")
+    .delete()
+    .eq("location_id", finalized.location_id)
+    .or(`count_id.is.null,count_id.neq.${countId}`);
+  if (staleErr) return { ok: false, error: dbError(staleErr) };
 
   revalidatePath("/admin/inventory");
   return { ok: true };

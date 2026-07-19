@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createServerClient } from "@/lib/supabase/server";
 import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
-import { primaryTimezone } from "@/lib/business-tz";
 import { spanDays } from "@/lib/date-range";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { customRangeInTz } from "@/lib/shopify-range";
@@ -44,13 +43,6 @@ export default async function SalesTabPage({
 }) {
   const sp = await searchParams;
   const supabase = await createServerClient();
-  const today = businessDate(await primaryTimezone());
-  const currentYear = Number(today.slice(0, 4));
-  const monthNum = Number(today.slice(5, 7));
-  const chartYear =
-    sp.year && /^\d{4}$/.test(sp.year)
-      ? Math.min(Math.max(Number(sp.year), 2024), currentYear)
-      : currentYear;
 
   const { data: locationRows } = await supabase
     .from("locations")
@@ -65,6 +57,14 @@ export default async function SalesTabPage({
     return <p className="text-muted-foreground text-sm">No active stores.</p>;
   }
   const location = locations.find((l) => l.id === sp.location) ?? locations[0];
+  // "Today" means the BROWSED store's business day — never another store's tz.
+  const today = businessDate(location.timezone);
+  const currentYear = Number(today.slice(0, 4));
+  const monthNum = Number(today.slice(5, 7));
+  const chartYear =
+    sp.year && /^\d{4}$/.test(sp.year)
+      ? Math.min(Math.max(Number(sp.year), 2024), currentYear)
+      : currentYear;
   const { mode, from, to } = resolveSalesPeriod(sp, today);
 
   // Every internal link keeps the other filters alive.

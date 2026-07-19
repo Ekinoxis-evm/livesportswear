@@ -247,6 +247,24 @@ export async function applyPushDraft(
   let written = 0;
 
   for (let i = 0; i < items.length; i += 250) {
+    // Re-check staleness per chunk: a count finalized mid-apply must stop
+    // the remaining writes instead of overwriting the newer truth.
+    if (i > 0) {
+      const { data: newer } = await supabase
+        .from("store_inventory")
+        .select("counted_at")
+        .eq("location_id", draft.location_id)
+        .order("counted_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (newer && newer.counted_at > draft.created_at) {
+        revalidatePath("/admin/inventory/push");
+        return {
+          ok: false,
+          error: `Applied ${written} of ${items.length} rows, then a newer count was finalized — discard and rebuild the draft.`,
+        };
+      }
+    }
     const chunk = items.slice(i, i + 250);
     let result;
     try {

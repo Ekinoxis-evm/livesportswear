@@ -1,7 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { fetchStaffSales } from "@/lib/shopify";
-import { weekRangeInTz } from "@/lib/shopify-range";
+import { weekRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
 import type { SalesBreakdown } from "@/lib/sales-breakdown";
 
 /**
@@ -37,5 +37,30 @@ export function getShareWeekSales(
     },
     ["share-week-sales", locationId, monday],
     { revalidate: 600, tags: [weekSalesTag(locationId, monday)] },
+  )();
+}
+
+export function daySalesTag(locationId: string, date: string): string {
+  return `share-day-sales:${locationId}:${date}`;
+}
+
+/**
+ * Day-sales cache for the public share page's "Today" pill — same distributed
+ * posture as the week cache so bursty anonymous traffic can't multiply
+ * Shopify calls (the in-memory range cache is per-instance and won't do).
+ */
+export function getShareDaySales(
+  locationId: string,
+  date: string,
+  tz: string,
+): Promise<ShareWeekSales> {
+  return unstable_cache(
+    async () => {
+      const range = dayRangeInTz(date, tz);
+      const { totals } = await fetchStaffSales(range.start, range.endExclusive);
+      return { entries: [...totals.entries()], fetchedAt: Date.now() };
+    },
+    ["share-day-sales", locationId, date],
+    { revalidate: 600, tags: [daySalesTag(locationId, date)] },
   )();
 }

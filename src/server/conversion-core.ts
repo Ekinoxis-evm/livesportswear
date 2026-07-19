@@ -364,24 +364,29 @@ export async function closeDayFor(closer: {
     };
   }
 
-  const { error: upErr } = await service.from("store_day_closes").upsert(
-    {
-      location_id: closer.location_id,
-      business_date: d.bd,
-      closed_by: closer.id,
-      attended_count: d.t.attended,
-      sold_count: d.t.sold,
-      contact_count: d.t.contacts,
-      shopify_sales: d.shopify?.net ?? null,
-      gross_sales: d.shopify?.gross ?? null,
-      discounts: d.shopify?.discounts ?? null,
-      returns_value: d.shopify?.returns ?? null,
-      cash_sales: d.tenders?.cashNet ?? null,
-      currency: d.shopify?.currency ?? null,
-    },
-    { onConflict: "location_id,business_date" },
-  );
-  if (upErr) return { ok: false, error: upErr.message };
+  // Plain INSERT so the unique (location, business_date) constraint is the
+  // real idempotency guard — two simultaneous closes race the pre-check, and
+  // an upsert would let BOTH proceed to email every admin.
+  const { error: upErr } = await service.from("store_day_closes").insert({
+    location_id: closer.location_id,
+    business_date: d.bd,
+    closed_by: closer.id,
+    attended_count: d.t.attended,
+    sold_count: d.t.sold,
+    contact_count: d.t.contacts,
+    shopify_sales: d.shopify?.net ?? null,
+    gross_sales: d.shopify?.gross ?? null,
+    discounts: d.shopify?.discounts ?? null,
+    returns_value: d.shopify?.returns ?? null,
+    cash_sales: d.tenders?.cashNet ?? null,
+    currency: d.shopify?.currency ?? null,
+  });
+  if (upErr) {
+    if (upErr.code === "23505") {
+      return { ok: false, error: "The day is already closed." };
+    }
+    return { ok: false, error: upErr.message };
+  }
 
   const money = (v: number | null) =>
     v === null ? "—" : formatMoney(v, d.currency);

@@ -111,17 +111,25 @@ export function CountScreen({
 
   const count = (barcode: string, qty: number) => {
     setScanning(true);
-    queueRef.current = queueRef.current.then(async () => {
-      const res = await scanBarcode({ countId, barcode, qty });
-      if (res.ok && res.data) {
-        applyRow(res.data);
-        if (res.data.unknown) toast.warning(`Barcode ${barcode} isn't in the catalog.`);
-      } else if (!res.ok) {
-        toast.error(res.error);
-      }
-      setScanning(false);
-      inputRef.current?.focus();
-    });
+    queueRef.current = queueRef.current
+      .then(async () => {
+        const res = await scanBarcode({ countId, barcode, qty });
+        if (res.ok && res.data) {
+          applyRow(res.data);
+          if (res.data.unknown) toast.warning(`Barcode ${barcode} isn't in the catalog.`);
+        } else if (!res.ok) {
+          toast.error(res.error);
+        }
+      })
+      // A thrown call (network blip) must not poison the chain — every later
+      // scan would silently no-op until a reload.
+      .catch(() => {
+        toast.error(`Scan ${barcode} failed to save — scan it again.`);
+      })
+      .finally(() => {
+        setScanning(false);
+        inputRef.current?.focus();
+      });
   };
 
   const scan = (raw: string) => {

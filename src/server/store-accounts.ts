@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, accessibleLocationIds } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { tempPassword } from "@/lib/temp-password";
 import type { ActionResult } from "@/server/shared";
@@ -23,6 +23,11 @@ export async function createStoreAccount(
   await requireAdmin();
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
+  // A location-scoped admin may only manage kiosk logins for THEIR stores.
+  const access = await accessibleLocationIds();
+  if (access !== "all" && !access.includes(parsed.data.location_id)) {
+    return { ok: false, error: "You don't manage that store." };
+  }
 
   const service = createServiceClient();
   const { data: loc } = await service
@@ -63,6 +68,13 @@ export async function resetStorePassword(
       (u.app_metadata as { role?: string } | undefined)?.role === "store",
   );
   if (!user) return { ok: false, error: "No store account with that email." };
+  // Scope check against the target account's location claim.
+  const targetLoc = (user.app_metadata as { location_id?: string } | undefined)
+    ?.location_id;
+  const access = await accessibleLocationIds();
+  if (access !== "all" && (!targetLoc || !access.includes(targetLoc))) {
+    return { ok: false, error: "You don't manage that store." };
+  }
 
   const password = tempPassword();
   const upd = await service.auth.admin.updateUserById(user.id, {

@@ -113,6 +113,10 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
   const [pending, start] = useTransition();
   const [finishTarget, setFinishTarget] = useState<FinishTarget | null>(null);
   const [returnPicker, setReturnPicker] = useState(false);
+  // Which employee's action is in flight. One page-wide `pending` used to
+  // disable EVERY button, silently swallowing other reps' taps on a busy
+  // floor — per-row busy keeps the rest of the board alive.
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const line = rows.filter((r) => r.state === "up" || r.state === "waiting");
   const attending = rows.filter((r) => r.state === "attending");
@@ -127,7 +131,9 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
   function run(
     action: Promise<{ ok: boolean; error?: string }>,
     okMsg: string,
+    forEmployee?: string,
   ): Promise<boolean> {
+    if (forEmployee) setBusyId(forEmployee);
     return new Promise((resolve) => {
       start(async () => {
         const res = await action;
@@ -138,11 +144,13 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         } else {
           toast.error(res.error ?? "Something went wrong.");
         }
+        setBusyId(null);
         router.refresh();
         resolve(res.ok);
       });
     });
   }
+  const busy = (employeeId: string) => busyId === employeeId;
 
   const submitFinish = (employeeId: string, input: FinishInput) => {
     run(
@@ -190,8 +198,10 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           <Button
             size="lg"
             className="h-16 w-full text-lg"
-            disabled={pending}
-            onClick={() => run(storeTakeClient(up.employeeId), "")}
+            disabled={busy(up.employeeId)}
+            onClick={() =>
+              run(storeTakeClient(up.employeeId), `${up.name} is with a client.`, up.employeeId)
+            }
           >
             <Hand className="mr-2 size-6" /> Take client
           </Button>
@@ -237,7 +247,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 <Button
                   size="lg"
                   className="h-14 flex-1"
-                  disabled={pending}
+                  disabled={busy(r.employeeId)}
                   onClick={() =>
                     setFinishTarget({
                       employeeId: r.employeeId,
@@ -254,7 +264,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                   size="lg"
                   variant="outline"
                   className="h-14 flex-1"
-                  disabled={pending}
+                  disabled={busy(r.employeeId)}
                   onClick={() =>
                     setFinishTarget({
                       employeeId: r.employeeId,
@@ -270,8 +280,14 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 size="lg"
                 variant="outline"
                 className="h-14"
-                disabled={pending}
-                onClick={() => run(storeTakeClient(r.employeeId), "")}
+                disabled={busy(r.employeeId)}
+                onClick={() =>
+                  run(
+                    storeTakeClient(r.employeeId),
+                    `${r.name}: now with ${openTotal + 1} clients.`,
+                    r.employeeId,
+                  )
+                }
                 aria-label={`${r.name} takes one more client`}
               >
                 <Plus className="size-5" />
@@ -286,11 +302,12 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                   size="sm"
                   variant="ghost"
                   className="text-muted-foreground"
-                  disabled={pending}
+                  disabled={busy(r.employeeId)}
                   onClick={() =>
                     run(
                       storeUndoTake(r.employeeId, "walkin"),
                       "Removed — nothing recorded.",
+                      r.employeeId,
                     )
                   }
                 >
@@ -302,11 +319,12 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                   size="sm"
                   variant="ghost"
                   className="text-muted-foreground"
-                  disabled={pending}
+                  disabled={busy(r.employeeId)}
                   onClick={() =>
                     run(
                       storeUndoTake(r.employeeId, "return"),
                       "Removed — nothing recorded.",
+                      r.employeeId,
                     )
                   }
                 >
@@ -377,8 +395,10 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={pending}
-                  onClick={() => run(storeSetAvailable(r.employeeId), "")}
+                  disabled={busy(r.employeeId)}
+                  onClick={() =>
+                    run(storeSetAvailable(r.employeeId), "", r.employeeId)
+                  }
                 >
                   Back to line
                 </Button>
@@ -428,9 +448,13 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 variant={r.employeeId === returnSuggestion?.employeeId ? "default" : "outline"}
                 size="lg"
                 className="h-14 justify-start gap-2.5"
-                disabled={pending}
+                disabled={busy(r.employeeId)}
                 onClick={() =>
-                  run(storeStartReturn(r.employeeId), `${r.name} takes the return.`)
+                  run(
+                    storeStartReturn(r.employeeId),
+                    `${r.name} takes the return.`,
+                    r.employeeId,
+                  )
                 }
               >
                 {tile(r.avatarColor)}

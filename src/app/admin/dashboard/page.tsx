@@ -157,10 +157,11 @@ export default async function DashboardPage({
       .select("location_id, goal_amount, tiers")
       .eq("year", year)
       .eq("month", monthNum),
+    // No active filter: a rep who left keeps their history — a browsed past
+    // month must not lose their revenue from store totals and the ranking.
     supabase
       .from("employees")
-      .select("id, name, location_id, avatar_color, shopify_staff_id, locations(name)")
-      .eq("active", true),
+      .select("id, name, location_id, avatar_color, active, shopify_staff_id, locations(name)"),
     supabase
       .from("client_events")
       .select("sold")
@@ -215,6 +216,7 @@ export default async function DashboardPage({
   }
   const salesRowBy = new Map((salesRes.data ?? []).map((r) => [r.employee_id, r]));
   const ranking = monthEmployees
+    .filter((e) => e.active || salesRowBy.has(e.id))
     .map((e) => {
       const row = salesRowBy.get(e.id);
       const amount = Number(row?.amount ?? 0);
@@ -269,7 +271,7 @@ export default async function DashboardPage({
       if (entries) {
         rankRows = staffRowsFromEntries(
           entries,
-          monthEmployees.map((e) => ({
+          monthEmployees.filter((e) => e.active).map((e) => ({
             name: e.name,
             shopify_staff_id: e.shopify_staff_id,
             store: (e.locations as { name: string } | null)?.name ?? "—",
