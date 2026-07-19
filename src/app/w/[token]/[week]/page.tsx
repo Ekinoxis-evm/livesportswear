@@ -14,10 +14,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { RefreshSalesButton } from "@/components/shared/refresh-sales-button";
-import {
-  SalesBreakdownBlock,
-  SalesBreakdownSubline,
-} from "@/components/shared/sales-breakdown-view";
+import { SalesBreakdownBlock } from "@/components/shared/sales-breakdown-view";
 import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -309,27 +306,42 @@ export default async function StoreWeekPage({
               </span>
             </div>
             <SalesBreakdownBlock sales={weekTotal} className="max-w-xs" />
-            <ul className="flex flex-col divide-y">
-              {weekRanking.map((r, i) => (
-                <li
-                  key={r.name}
-                  className="flex items-center justify-between gap-3 py-2 text-sm"
-                >
-                  <span>
-                    <span className="text-muted-foreground mr-2 tabular-nums">
-                      {i + 1}.
-                    </span>
-                    {r.name}
-                  </span>
-                  <span className="flex flex-col items-end">
-                    <span className="font-medium tabular-nums">
-                      {formatMoney(r.sales.net)}
-                    </span>
-                    <SalesBreakdownSubline sales={r.sales} />
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted-foreground border-b text-left">
+                    <th className="py-2 font-medium">#</th>
+                    <th className="py-2 font-medium">Employee</th>
+                    <th className="py-2 text-right font-medium">Value</th>
+                    <th className="py-2 text-right font-medium">Discounts</th>
+                    <th className="py-2 text-right font-medium">Returns</th>
+                    <th className="py-2 text-right font-medium">Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekRanking.map((r, i) => (
+                    <tr key={r.name} className="border-b last:border-0">
+                      <td className="text-muted-foreground py-2 tabular-nums">{i + 1}</td>
+                      <td className="py-2 font-medium">{r.name}</td>
+                      <td className="text-muted-foreground py-2 text-right tabular-nums">
+                        {formatMoney(r.sales.gross)}
+                      </td>
+                      <td className="text-muted-foreground py-2 text-right tabular-nums">
+                        {r.sales.discounts > 0
+                          ? `−${formatMoney(r.sales.discounts)}`
+                          : "—"}
+                      </td>
+                      <td className="text-muted-foreground py-2 text-right tabular-nums">
+                        {r.sales.returns > 0 ? `−${formatMoney(r.sales.returns)}` : "—"}
+                      </td>
+                      <td className="py-2 text-right font-semibold tabular-nums">
+                        {formatMoney(r.sales.net)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
       )}
