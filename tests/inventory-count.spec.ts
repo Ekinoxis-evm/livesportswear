@@ -11,6 +11,7 @@ const item = (over: Partial<CountItem>): CountItem => ({
   barcode: "790",
   sku: "84939.S",
   product_title: "Jog Pants",
+  product_type: "PANTS",
   variant_title: "S",
   qty: 0,
   expected: null,
@@ -65,6 +66,7 @@ describe("buildBookCsv", () => {
         barcode: "790",
         sku: "84939.S",
         product_title: "Jog Pants",
+        product_type: "PANTS",
         variant_title: "S",
         qty: 4,
         shopify_qty: 3,
@@ -74,7 +76,7 @@ describe("buildBookCsv", () => {
     ]);
     expect(csv).toContain("Inventory book — Miami Lincoln Road");
     expect(csv).toContain("1 items · 4 units on hand");
-    expect(csv).toContain("Jog Pants,S,84939.S,790,4,3,2026-07-17,");
+    expect(csv).toContain("Jog Pants,PANTS,S,84939.S,790,4,3,2026-07-17,");
   });
 });
 
@@ -86,6 +88,6 @@ describe("buildInventoryCsv", () => {
     );
     expect(csv).toContain("Inventory count — Miami Lincoln Road");
     expect(csv).toContain("Counted 2 units · in Shopify 3 · missing 1 · over 0");
-    expect(csv).toContain("Jog Pants,S,84939.S,790,2,3,-1,");
+    expect(csv).toContain("Jog Pants,PANTS,S,84939.S,790,2,3,-1,");
   });
 });

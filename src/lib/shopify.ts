@@ -299,6 +299,7 @@ export type VariantHit = {
   barcode: string;
   sku: string | null;
   productTitle: string;
+  productType: string | null; // Shopify productType, e.g. "LEGGING"
   variantTitle: string | null; // usually the size, e.g. "S / 0LJ104"
   inventoryQuantity: number | null; // Shopify's expected stock
 };
@@ -310,7 +311,7 @@ type VariantNodes = {
       sku: string | null;
       title: string | null;
       inventoryQuantity: number | null;
-      product: { title: string };
+      product: { title: string; productType: string | null };
     }[];
     pageInfo?: { hasNextPage: boolean; endCursor: string | null };
   };
@@ -320,6 +321,7 @@ const variantHit = (v: VariantNodes["productVariants"]["nodes"][number]): Varian
   barcode: v.barcode ?? "",
   sku: v.sku || null,
   productTitle: v.product.title,
+  productType: v.product.productType || null,
   variantTitle: v.title || null,
   inventoryQuantity: v.inventoryQuantity ?? null,
 });
@@ -333,7 +335,7 @@ export async function lookupVariantByBarcode(
   const data = await shopifyGraphql<VariantNodes>(
     `query($q: String!) {
       productVariants(first: 1, query: $q) {
-        nodes { barcode sku title inventoryQuantity product { title } }
+        nodes { barcode sku title inventoryQuantity product { title productType } }
       }
     }`,
     { q: `barcode:${sanitized}` },
@@ -354,7 +356,7 @@ export async function fetchAllTrackedVariants(): Promise<VariantHit[]> {
     const data: VariantNodes = await shopifyGraphql<VariantNodes>(
       `query($after: String) {
         productVariants(first: 250, after: $after) {
-          nodes { barcode sku title inventoryQuantity product { title } }
+          nodes { barcode sku title inventoryQuantity product { title productType } }
           pageInfo { hasNextPage endCursor }
         }
       }`,

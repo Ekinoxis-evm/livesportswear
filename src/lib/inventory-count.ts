@@ -10,6 +10,7 @@ export type CountItem = {
   barcode: string;
   sku: string | null;
   product_title: string;
+  product_type: string | null;
   variant_title: string | null;
   qty: number;
   expected: number | null;
@@ -75,6 +76,7 @@ export type BookRow = {
   barcode: string;
   sku: string | null;
   product_title: string;
+  product_type: string | null;
   variant_title: string | null;
   qty: number;
   shopify_qty: number | null;
@@ -87,6 +89,7 @@ export function buildBookCsv(locationName: string, rows: BookRow[]): string {
   const units = rows.reduce((a, r) => a + r.qty, 0);
   const body: CsvCell[][] = rows.map((r) => [
     r.product_title,
+    r.product_type ?? "",
     r.variant_title ?? "",
     r.sku ?? "",
     r.barcode,
@@ -99,7 +102,7 @@ export function buildBookCsv(locationName: string, rows: BookRow[]): string {
     [`Inventory book — ${locationName}`],
     [`${rows.length} items · ${units} units on hand`],
     [],
-    ["Product", "Variant", "SKU", "Barcode", "On hand", "Shopify at count", "Counted", "Note"],
+    ["Product", "Type", "Variant", "SKU", "Barcode", "On hand", "Shopify at count", "Counted", "Note"],
     ...body,
   ]);
 }
@@ -111,6 +114,7 @@ export function buildInventoryCsv(
   const t = countTotals(items);
   const rows: CsvCell[][] = varianceRows(items).map((r) => [
     r.product_title,
+    r.product_type ?? "",
     r.variant_title ?? "",
     r.sku ?? "",
     r.barcode,
@@ -126,7 +130,7 @@ export function buildInventoryCsv(
       `Counted ${t.countedUnits} units · in Shopify ${t.expectedUnits} · missing ${t.missingUnits} · over ${t.overUnits}`,
     ],
     [],
-    ["Product", "Variant", "SKU", "Barcode", "Counted", "In Shopify", "Diff", "Note"],
+    ["Product", "Type", "Variant", "SKU", "Barcode", "Counted", "In Shopify", "Diff", "Note"],
     ...rows,
   ]);
 }

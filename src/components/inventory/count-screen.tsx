@@ -29,8 +29,19 @@ import {
 
 type Item = Pick<
   InventoryCountItem,
-  "id" | "barcode" | "sku" | "product_title" | "variant_title" | "qty" | "expected" | "unknown"
+  | "id"
+  | "barcode"
+  | "sku"
+  | "product_title"
+  | "product_type"
+  | "variant_title"
+  | "qty"
+  | "expected"
+  | "unknown"
 >;
+
+const PAGE_SIZE = 25;
+const NO_TYPE = "OTHER";
 
 export function CountScreen({
   countId,
@@ -50,6 +61,8 @@ export function CountScreen({
   const [pendingScan, setPendingScan] = useState<BarcodePeek | null>(null);
   const [confirmQty, setConfirmQty] = useState(1);
   const [peeking, setPeeking] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
   const [pending, start] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   // Scans run strictly one after another — concurrent inserts of the same new
@@ -59,6 +72,29 @@ export function CountScreen({
   useEffect(() => inputRef.current?.focus(), []);
 
   const totals = useMemo(() => countTotals(items as CountItem[]), [items]);
+
+  const typeOf = (it: Item) => it.product_type ?? NO_TYPE;
+
+  const categories = useMemo(() => {
+    const byType = new Map<string, number>();
+    for (const it of items) byType.set(typeOf(it), (byType.get(typeOf(it)) ?? 0) + 1);
+    return [...byType.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+  }, [items]);
+
+  const filtered = useMemo(
+    () => (typeFilter ? items.filter((it) => typeOf(it) === typeFilter) : items),
+    [items, typeFilter],
+  );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const shown = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  const pickType = (type: string | null) => {
+    setTypeFilter(type);
+    setPage(0);
+  };
 
   const applyRow = (row: Item) => {
     setItems((cur) => {
@@ -261,16 +297,48 @@ export function CountScreen({
         </CardContent>
       </Card>
 
-      {/* Counted items, most recent first */}
+      {/* Counted items, categorized by type, most recent first */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="flex flex-col gap-4 pt-6">
+          {items.length > 0 && categories.length > 1 && (
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              <button
+                type="button"
+                onClick={() => pickType(null)}
+                className={
+                  "shrink-0 rounded-full border px-3 py-1 text-sm " +
+                  (typeFilter === null
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-muted")
+                }
+              >
+                All ({items.length})
+              </button>
+              {categories.map(([type, n]) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => pickType(type)}
+                  className={
+                    "shrink-0 rounded-full border px-3 py-1 text-sm " +
+                    (typeFilter === type
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "hover:bg-muted")
+                  }
+                >
+                  {type} ({n})
+                </button>
+              ))}
+            </div>
+          )}
+
           {items.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               Nothing scanned yet — point the scanner at the first garment.
             </p>
           ) : (
             <div className="flex flex-col divide-y">
-              {items.map((it) => (
+              {shown.map((it) => (
                 <div key={it.id} className="flex items-center gap-3 py-2.5">
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-medium">
@@ -286,6 +354,7 @@ export function CountScreen({
                     </span>
                     <span className="text-muted-foreground text-xs tabular-nums">
                       {it.sku ?? it.barcode}
+                      {it.product_type && ` · ${it.product_type}`}
                       {it.expected != null && ` · in Shopify ${it.expected}`}
                     </span>
                   </span>
@@ -326,6 +395,30 @@ export function CountScreen({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between border-t pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage === 0}
+                onClick={() => setPage(safePage - 1)}
+              >
+                ‹ Prev
+              </Button>
+              <span className="text-muted-foreground text-sm tabular-nums">
+                Page {safePage + 1} of {pageCount} · {filtered.length} items
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage(safePage + 1)}
+              >
+                Next ›
+              </Button>
             </div>
           )}
         </CardContent>
@@ -382,6 +475,7 @@ export function CountScreen({
                 </DialogTitle>
                 <DialogDescription className="tabular-nums">
                   {pendingScan.sku ?? pendingScan.barcode}
+                  {pendingScan.productType && ` · ${pendingScan.productType}`}
                   {pendingScan.shopifyQty != null &&
                     ` · in Shopify ${pendingScan.shopifyQty}`}
                   {pendingScan.currentQty > 0 &&

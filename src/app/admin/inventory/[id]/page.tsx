@@ -47,7 +47,7 @@ export default async function InventoryCountPage({
       .maybeSingle(),
     supabase
       .from("inventory_count_items")
-      .select("id, barcode, sku, product_title, variant_title, qty, expected, unknown, updated_at")
+      .select("id, barcode, sku, product_title, product_type, variant_title, qty, expected, unknown, updated_at")
       .eq("count_id", id)
       .order("updated_at", { ascending: false }),
   ]);
@@ -153,6 +153,11 @@ export default async function InventoryCountPage({
                       {r.variant_title && (
                         <span className="text-muted-foreground ml-2 text-xs">
                           {r.variant_title}
+                        </span>
+                      )}
+                      {r.product_type && (
+                        <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wide">
+                          {r.product_type}
                         </span>
                       )}
                       {r.unknown && (

@@ -43,9 +43,10 @@ export default async function InventoryBookPage({
 
   let query = supabase
     .from("store_inventory")
-    .select("barcode, sku, product_title, variant_title, qty, shopify_qty, unknown, counted_at", {
-      count: "exact",
-    })
+    .select(
+      "barcode, sku, product_title, product_type, variant_title, qty, shopify_qty, unknown, counted_at",
+      { count: "exact" },
+    )
     .eq("location_id", location.id);
   if (q) {
     const like = `%${q.replace(/[%_]/g, "")}%`;
@@ -73,7 +74,7 @@ export default async function InventoryBookPage({
   // CSV covers the full filtered set when small, else the whole book unfiltered.
   const { data: csvRows } = await supabase
     .from("store_inventory")
-    .select("barcode, sku, product_title, variant_title, qty, shopify_qty, unknown, counted_at")
+    .select("barcode, sku, product_title, product_type, variant_title, qty, shopify_qty, unknown, counted_at")
     .eq("location_id", location.id)
     .order("product_title")
     .order("variant_title");
@@ -196,6 +197,11 @@ export default async function InventoryBookPage({
                           {r.variant_title && (
                             <span className="text-muted-foreground ml-2 text-xs">
                               {r.variant_title}
+                            </span>
+                          )}
+                          {r.product_type && (
+                            <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wide">
+                              {r.product_type}
                             </span>
                           )}
                           {r.unknown && (
