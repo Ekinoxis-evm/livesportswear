@@ -23,6 +23,7 @@ export function PeriodPills({
   to,
   hidden = {},
   periods = ["today", "week", "month", "custom"],
+  defaultPeriod = periods[0],
   labels = {},
 }: {
   basePath: string;
@@ -31,11 +32,12 @@ export function PeriodPills({
   to: string;
   hidden?: Record<string, string>;
   periods?: SalesPeriod[];
+  defaultPeriod?: SalesPeriod;
   labels?: Partial<Record<SalesPeriod, string>>;
 }) {
   const href = (period: SalesPeriod) => {
     const p = new URLSearchParams(hidden);
-    if (period !== periods[0]) p.set("period", period);
+    if (period !== defaultPeriod) p.set("period", period);
     const qs = p.toString();
     return qs ? `${basePath}?${qs}` : basePath;
   };

@@ -28,7 +28,9 @@ export function resolveSalesPeriod(
   sp: { period?: string; from?: string; to?: string },
   today: string,
   allowed: SalesPeriod[] = ["today", "week", "month", "custom"],
+  defaultPeriod?: SalesPeriod,
 ): { mode: SalesPeriod; from: string; to: string } {
+  const fallback = defaultPeriod ?? allowed[0];
   const { from, to } = resolveDateRange(sp, today);
   const wanted: SalesPeriod =
     sp.from || sp.to || sp.period === "custom"
@@ -39,8 +41,8 @@ export function resolveSalesPeriod(
           ? "month"
           : sp.period === "today"
             ? "today"
-            : allowed[0];
-  const mode = allowed.includes(wanted) ? wanted : allowed[0];
+            : fallback;
+  const mode = allowed.includes(wanted) ? wanted : fallback;
   return { mode, from, to };
 }
 

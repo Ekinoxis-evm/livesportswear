@@ -57,6 +57,7 @@ export default async function DashboardPage({
     period?: string;
     from?: string;
     to?: string;
+    loc?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -143,6 +144,10 @@ export default async function DashboardPage({
     const y = next.year ?? chartYear;
     if (m !== currentMonth) p.set("month", m);
     if (y !== currentYear) p.set("year", String(y));
+    if (sp.loc) p.set("loc", sp.loc);
+    if (sp.period) p.set("period", sp.period);
+    if (sp.from) p.set("from", sp.from);
+    if (sp.to) p.set("to", sp.to);
     const s = p.toString();
     return s ? `/admin/dashboard?${s}` : "/admin/dashboard";
   };
@@ -233,7 +238,7 @@ export default async function DashboardPage({
       return {
         id: e.id,
         name: e.name,
-        store: (e.locations as { name: string } | null)?.name ?? "—",
+        location_id: e.location_id,
         amount,
         breakdown,
         ...commissionFor(amount, tiers),
@@ -245,15 +250,18 @@ export default async function DashboardPage({
   // The standard sales-period module — Month (default, with commission) reads
   // the synced DB and follows the ‹ › month pager; the live periods rank
   // attributed Shopify sales without commission (tiers are monthly).
-  const { mode, from, to } = resolveSalesPeriod(sp, today, [
+  const { mode, from, to } = resolveSalesPeriod(
+    sp,
+    today,
+    ["today", "week", "month", "custom"],
     "month",
-    "today",
-    "week",
-    "custom",
-  ]);
-  let rankRows: SalesRankRow[] = ranking.map((r) => ({
+  );
+  // Store FILTER (pills) instead of a Store column in the table.
+  const selectedLoc = locations.find((l) => l.id === sp.loc) ?? null;
+  let rankRows: SalesRankRow[] = ranking
+    .filter((r) => !selectedLoc || r.location_id === selectedLoc.id)
+    .map((r) => ({
     name: r.name,
-    store: r.store,
     breakdown: r.breakdown,
     net: r.amount,
     rate: r.rate,
@@ -271,11 +279,11 @@ export default async function DashboardPage({
       if (entries) {
         rankRows = staffRowsFromEntries(
           entries,
-          monthEmployees.filter((e) => e.active).map((e) => ({
-            name: e.name,
-            shopify_staff_id: e.shopify_staff_id,
-            store: (e.locations as { name: string } | null)?.name ?? "—",
-          })),
+          monthEmployees
+            .filter(
+              (e) => e.active && (!selectedLoc || e.location_id === selectedLoc.id),
+            )
+            .map((e) => ({ name: e.name, shopify_staff_id: e.shopify_staff_id })),
         );
       }
     }
@@ -283,6 +291,7 @@ export default async function DashboardPage({
   const periodHidden: Record<string, string> = {};
   if (month !== currentMonth) periodHidden.month = month;
   if (chartYear !== currentYear) periodHidden.year = String(chartYear);
+  if (selectedLoc) periodHidden.loc = selectedLoc.id;
 
   const yearRows = (yearSalesRes.data ?? []).map((r) => ({
     employee_id: r.employee_id,
@@ -481,19 +490,52 @@ export default async function DashboardPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {locations.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              {[null, ...locations].map((l) => {
+                const p = new URLSearchParams(periodHidden);
+                p.delete("loc");
+                if (l) p.set("loc", l.id);
+                if (mode !== "month") {
+                  if (mode === "custom") {
+                    p.set("from", from);
+                    p.set("to", to);
+                  } else {
+                    p.set("period", mode);
+                  }
+                }
+                const qsStr = p.toString();
+                const active = l ? selectedLoc?.id === l.id : selectedLoc === null;
+                return (
+                  <Link
+                    key={l?.id ?? "all"}
+                    href={qsStr ? `/admin/dashboard?${qsStr}` : "/admin/dashboard"}
+                    className={
+                      "rounded-full border px-3 py-1 text-sm " +
+                      (active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "hover:bg-muted")
+                    }
+                  >
+                    {l?.name ?? "All stores"}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
           <PeriodPills
             basePath="/admin/dashboard"
             mode={mode}
             from={from}
             to={to}
             hidden={periodHidden}
-            periods={["month", "today", "week", "custom"]}
+            periods={["today", "week", "month", "custom"]}
+            defaultPeriod="month"
             labels={{ month: monthLabel(month) }}
           />
           <SalesRankTable
             rows={rankRows}
             currency={currency}
-            showStore
             showCommission={mode === "month"}
           />
         </CardContent>
