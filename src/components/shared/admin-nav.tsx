@@ -12,6 +12,7 @@ import {
   MapPin,
   ScanBarcode,
   Settings,
+  Contact,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, primary: true },
   { href: "/admin/schedules", label: "Schedules", icon: CalendarDays, primary: true },
   { href: "/admin/employees", label: "Employees", icon: Users, primary: true },
+  { href: "/admin/clients", label: "Clients", icon: Contact, primary: false },
   { href: "/admin/performance", label: "Performance", icon: Activity, primary: false },
   { href: "/admin/commission", label: "Sales & Rewards setup", icon: Percent, primary: false },
   { href: "/admin/marketing", label: "Marketing", icon: Megaphone, primary: false },
