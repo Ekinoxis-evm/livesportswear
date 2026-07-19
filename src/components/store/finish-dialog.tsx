@@ -20,6 +20,7 @@ import {
 const NO_SALE_REASONS = [
   "No size",
   "No color",
+  "No design available",
   "Price too expensive",
   "Just browsing",
   "No reason",

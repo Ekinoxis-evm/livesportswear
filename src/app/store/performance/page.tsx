@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
@@ -10,6 +11,7 @@ import { customRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
 import { getStaffSalesCached } from "@/lib/shopify-range-cache";
 import { formatMoney } from "@/lib/commission";
 import { shortDate, monthLabel } from "@/lib/format-date";
+import { cn } from "@/lib/utils";
 import { DateRangeForm } from "@/components/shared/date-range-form";
 import {
   SalesBreakdownBlock,
@@ -28,10 +30,17 @@ import {
   type CloserEntry,
 } from "@/components/store/close-day-dialog";
 
+type SalesRow = {
+  name: string;
+  breakdown: SalesBreakdown | null; // null = month synced before the columns
+  net: number;
+  goalPct: number | null; // month mode only
+};
+
 export default async function StorePerformancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; period?: string }>;
 }) {
   const sp = await searchParams;
   const { locationId } = await requireStore();
@@ -46,6 +55,16 @@ export default async function StorePerformancePage({
   const bd = businessDate(tz);
   const month = bd.slice(0, 7);
   const [year, monthNum] = [Number(bd.slice(0, 4)), Number(bd.slice(5, 7))];
+
+  // One sales table, three periods: custom dates win, then ?period=month,
+  // else today.
+  const hasRange = Boolean(sp.from || sp.to);
+  const mode: "today" | "month" | "custom" = hasRange
+    ? "custom"
+    : sp.period === "month"
+      ? "month"
+      : "today";
+  const { from, to } = resolveDateRange(sp, bd);
 
   const [
     { data: eventRows },
@@ -69,7 +88,7 @@ export default async function StorePerformancePage({
       .eq("business_date", bd),
     service
       .from("employees")
-      .select("id, name")
+      .select("id, name, shopify_staff_id")
       .eq("location_id", locationId)
       .eq("active", true)
       .order("name"),
@@ -87,7 +106,9 @@ export default async function StorePerformancePage({
       .eq("schedules.location_id", locationId),
     service
       .from("monthly_sales")
-      .select("employee_id, amount, employees!inner(location_id)")
+      .select(
+        "employee_id, amount, gross_amount, discounts_amount, returns_amount, employees!inner(location_id)",
+      )
       .eq("month", month)
       .eq("employees.location_id", locationId),
     service
@@ -139,56 +160,77 @@ export default async function StorePerformancePage({
     .map((e) => ({ id: e.id, name: e.name }));
 
   const daySales = await getDaySalesCached(bd, tz);
+  const currency = goalRow?.currency ?? daySales?.currency ?? "USD";
 
-  // This month, from the synced monthly_sales table (DB-only — safe on the
-  // 45s refresh; Shopify itself is never called here).
-  const monthAmountOf = new Map(
-    (monthRows ?? []).map((r) => [r.employee_id, Number(r.amount)]),
-  );
-  const monthTotal = [...monthAmountOf.values()].reduce((a, v) => a + v, 0);
+  // Month numbers from the synced monthly_sales table (DB-only).
+  const monthRowBy = new Map((monthRows ?? []).map((r) => [r.employee_id, r]));
+  const monthTotal = [...monthRowBy.values()].reduce((a, r) => a + Number(r.amount), 0);
   const monthGoal = goalRow ? Number(goalRow.goal_amount) : 0;
-  const monthCurrency = goalRow?.currency ?? daySales?.currency ?? "USD";
   const personalGoalOf = new Map(
     (personalGoalRows ?? []).map((r) => [r.employee_id, Number(r.goal_amount)]),
   );
-  const monthReps = roster
-    .map((e) => ({
-      name: e.name,
-      amount: monthAmountOf.get(e.id) ?? 0,
-      goal: personalGoalOf.get(e.id) ?? null,
-    }))
-    .filter((r) => r.amount > 0 || r.goal != null)
-    .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
 
-  // Range section only fetches when the kiosk asked for a range — the default
-  // 45s auto-refresh loop must not add Shopify calls.
-  const hasRange = Boolean(sp.from || sp.to);
-  const { from, to } = resolveDateRange(sp, bd);
-  let rangeRows: { name: string; sales: SalesBreakdown }[] | null = null;
-  if (hasRange && isShopifyConfigured()) {
-    const range = customRangeInTz(from, to, tz);
-    const [entries, { data: mapped }] = await Promise.all([
-      getStaffSalesCached(range.start, range.endExclusive),
-      service
-        .from("employees")
-        .select("name, shopify_staff_id")
-        .eq("location_id", locationId)
-        .eq("active", true)
-        .not("shopify_staff_id", "is", null),
-    ]);
+  // Per-rep rows for the active period. Today and custom pull attributed live
+  // Shopify sales; the 60s range cache absorbs the kiosk's 45s auto-refresh
+  // (today's range key is stable all business day).
+  let rows: SalesRow[] = [];
+  let salesUnavailable = false;
+  let unmappedCount = 0;
+  if (mode === "month") {
+    rows = roster
+      .map((e) => {
+        const r = monthRowBy.get(e.id);
+        const amount = Number(r?.amount ?? 0);
+        const breakdown: SalesBreakdown | null =
+          r?.gross_amount != null
+            ? {
+                gross: Number(r.gross_amount),
+                discounts: Number(r.discounts_amount ?? 0),
+                returns: Number(r.returns_amount ?? 0),
+                net: amount,
+              }
+            : null;
+        const goal = personalGoalOf.get(e.id) ?? null;
+        return {
+          name: e.name,
+          breakdown,
+          net: amount,
+          goalPct: goal && goal > 0 ? amount / goal : null,
+        };
+      })
+      .filter((r) => r.net > 0 || r.goalPct != null)
+      .sort((a, b) => b.net - a.net || a.name.localeCompare(b.name));
+  } else if (isShopifyConfigured()) {
+    const range =
+      mode === "today" ? customRangeInTz(bd, bd, tz) : customRangeInTz(from, to, tz);
+    const entries = await getStaffSalesCached(range.start, range.endExclusive);
+    const mapped = roster.filter((e) => e.shopify_staff_id);
+    unmappedCount = roster.length - mapped.length;
     if (entries) {
       const byStaff = new Map(entries);
-      rangeRows = (mapped ?? [])
-        .map((e) => ({
-          name: e.name,
-          sales:
+      rows = mapped
+        .map((e) => {
+          const sales =
             byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ??
-            zeroBreakdown(),
-        }))
-        .sort((a, b) => b.sales.net - a.sales.net || a.name.localeCompare(b.name));
+            zeroBreakdown();
+          return { name: e.name, breakdown: sales, net: sales.net, goalPct: null };
+        })
+        .sort((a, b) => b.net - a.net || a.name.localeCompare(b.name));
+    } else {
+      salesUnavailable = true;
     }
+  } else {
+    salesUnavailable = true;
   }
-  const rangeTotal = sumBreakdowns((rangeRows ?? []).map((r) => r.sales));
+  const periodTotal = sumBreakdowns(
+    rows.map((r) => r.breakdown).filter((b): b is SalesBreakdown => b !== null),
+  );
+
+  const pill = (active: boolean) =>
+    cn(
+      "rounded-full border px-3 py-1 text-sm",
+      active ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
+    );
 
   return (
     <div className="flex flex-col gap-5">
@@ -216,6 +258,162 @@ export default async function StorePerformancePage({
         </Card>
       </div>
 
+      {/* One sales table, switchable period */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Sales</CardTitle>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/store/performance" className={pill(mode === "today")}>
+                Today
+              </Link>
+              <Link
+                href="/store/performance?period=month"
+                className={pill(mode === "month")}
+              >
+                {monthLabel(month)}
+              </Link>
+              {mode === "custom" && (
+                <span className={pill(true)}>
+                  {shortDate(from)} – {shortDate(to)}
+                </span>
+              )}
+            </div>
+          </div>
+          <CardDescription>
+            {mode === "month"
+              ? "Net sales (synced from Shopify)"
+              : mode === "custom"
+                ? `${spanDays(from, to)}d · attributed to this store's team`
+                : "Attributed to this store's team, live from Shopify"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <DateRangeForm from={from} to={to} action="/store/performance" />
+
+          {mode === "month" && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-2xl font-bold tabular-nums">
+                  {formatMoney(monthTotal, currency)}
+                </span>
+                {monthGoal > 0 ? (
+                  <span className="text-muted-foreground text-sm tabular-nums">
+                    goal {formatMoney(monthGoal, currency)} ·{" "}
+                    <span
+                      className={
+                        monthTotal >= monthGoal
+                          ? "font-semibold text-emerald-600"
+                          : "text-foreground font-semibold"
+                      }
+                    >
+                      {Math.round((monthTotal / monthGoal) * 100)}%
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground text-sm">no goal set</span>
+                )}
+              </div>
+              {monthGoal > 0 && (
+                <div
+                  className="bg-muted h-2.5 w-full overflow-hidden rounded-full"
+                  role="progressbar"
+                  aria-valuenow={Math.min(Math.round((monthTotal / monthGoal) * 100), 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Store monthly goal progress"
+                >
+                  <div
+                    className={
+                      monthTotal >= monthGoal ? "h-full bg-emerald-500" : "bg-primary h-full"
+                    }
+                    style={{ width: `${Math.min((monthTotal / monthGoal) * 100, 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {mode !== "month" &&
+            (salesUnavailable ? (
+              <p className="text-muted-foreground text-sm">
+                Sales are unavailable right now.
+              </p>
+            ) : (
+              <SalesBreakdownBlock
+                sales={periodTotal}
+                currency={currency}
+                className="max-w-xs"
+              />
+            ))}
+
+          {rows.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted-foreground border-b text-left">
+                    <th className="py-2 font-medium">#</th>
+                    <th className="py-2 font-medium">Employee</th>
+                    <th className="py-2 text-right font-medium">Value</th>
+                    <th className="py-2 text-right font-medium">Discounts</th>
+                    <th className="py-2 text-right font-medium">Returns</th>
+                    <th className="py-2 text-right font-medium">Net</th>
+                    {mode === "month" && (
+                      <th className="py-2 text-right font-medium">Goal</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={r.name} className="border-b last:border-0">
+                      <td className="text-muted-foreground py-2 tabular-nums">{i + 1}</td>
+                      <td className="py-2 font-medium">{r.name}</td>
+                      <td className="text-muted-foreground py-2 text-right tabular-nums">
+                        {r.breakdown ? formatMoney(r.breakdown.gross, currency) : "—"}
+                      </td>
+                      <td className="text-muted-foreground py-2 text-right tabular-nums">
+                        {r.breakdown && r.breakdown.discounts > 0
+                          ? `−${formatMoney(r.breakdown.discounts, currency)}`
+                          : "—"}
+                      </td>
+                      <td className="text-muted-foreground py-2 text-right tabular-nums">
+                        {r.breakdown && r.breakdown.returns > 0
+                          ? `−${formatMoney(r.breakdown.returns, currency)}`
+                          : "—"}
+                      </td>
+                      <td className="py-2 text-right font-semibold tabular-nums">
+                        {formatMoney(r.net, currency)}
+                      </td>
+                      {mode === "month" && (
+                        <td
+                          className={cn(
+                            "py-2 text-right tabular-nums",
+                            r.goalPct != null && r.goalPct >= 1
+                              ? "font-semibold text-emerald-600"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {r.goalPct != null ? `${Math.round(r.goalPct * 100)}%` : "—"}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {mode !== "month" && unmappedCount > 0 && (
+            <p className="text-muted-foreground text-xs">
+              {unmappedCount} team member{unmappedCount === 1 ? "" : "s"} without a
+              Shopify staff mapping {unmappedCount === 1 ? "doesn't" : "don't"} appear
+              here.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Clients attended — below the sales */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
           <CardHeader>
@@ -261,99 +459,6 @@ export default async function StorePerformancePage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{monthLabel(month)}</CardTitle>
-          <CardDescription>Net sales (synced from Shopify)</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-2xl font-bold tabular-nums">
-                {formatMoney(monthTotal, monthCurrency)}
-              </span>
-              {monthGoal > 0 ? (
-                <span className="text-muted-foreground text-sm tabular-nums">
-                  goal {formatMoney(monthGoal, monthCurrency)} ·{" "}
-                  <span
-                    className={
-                      monthTotal >= monthGoal
-                        ? "font-semibold text-emerald-600"
-                        : "text-foreground font-semibold"
-                    }
-                  >
-                    {Math.round((monthTotal / monthGoal) * 100)}%
-                  </span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground text-sm">no goal set</span>
-              )}
-            </div>
-            {monthGoal > 0 && (
-              <div
-                className="bg-muted h-2.5 w-full overflow-hidden rounded-full"
-                role="progressbar"
-                aria-valuenow={Math.min(Math.round((monthTotal / monthGoal) * 100), 100)}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Store monthly goal progress"
-              >
-                <div
-                  className={
-                    monthTotal >= monthGoal ? "h-full bg-emerald-500" : "bg-primary h-full"
-                  }
-                  style={{
-                    width: `${Math.min((monthTotal / monthGoal) * 100, 100)}%`,
-                  }}
-                />
-              </div>
-            )}
-          </div>
-
-          {monthReps.length > 0 && (
-            <ul className="flex flex-col divide-y">
-              {monthReps.map((r, i) => (
-                <li key={r.name} className="flex flex-col gap-1 py-2">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span>
-                      <span className="text-muted-foreground mr-2 tabular-nums">
-                        {i + 1}.
-                      </span>
-                      <span className="font-medium">{r.name}</span>
-                    </span>
-                    <span className="tabular-nums">
-                      {formatMoney(r.amount, monthCurrency)}
-                      {r.goal != null && r.goal > 0 && (
-                        <span
-                          className={
-                            r.amount >= r.goal
-                              ? "ml-2 font-semibold text-emerald-600"
-                              : "text-muted-foreground ml-2"
-                          }
-                        >
-                          {Math.round((r.amount / r.goal) * 100)}% of{" "}
-                          {formatMoney(r.goal, monthCurrency)}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  {r.goal != null && r.goal > 0 && (
-                    <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
-                      <div
-                        className={
-                          r.amount >= r.goal ? "h-full bg-emerald-500" : "bg-primary h-full"
-                        }
-                        style={{ width: `${Math.min((r.amount / r.goal) * 100, 100)}%` }}
-                      />
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-base">Team today</CardTitle>
         </CardHeader>
         <CardContent>
@@ -395,73 +500,6 @@ export default async function StorePerformancePage({
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Sales for a range</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <DateRangeForm from={from} to={to} action="/store/performance" />
-          {hasRange &&
-            (rangeRows === null ? (
-              <p className="text-muted-foreground text-sm">
-                Sales are unavailable right now.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <p className="text-muted-foreground text-sm">
-                  {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d
-                  (attributed to this store&apos;s team)
-                </p>
-                <SalesBreakdownBlock
-                  sales={rangeTotal}
-                  currency={daySales?.currency}
-                  className="max-w-xs"
-                />
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-muted-foreground border-b text-left">
-                        <th className="py-2 font-medium">#</th>
-                        <th className="py-2 font-medium">Employee</th>
-                        <th className="py-2 text-right font-medium">Value</th>
-                        <th className="py-2 text-right font-medium">Discounts</th>
-                        <th className="py-2 text-right font-medium">Returns</th>
-                        <th className="py-2 text-right font-medium">Net</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rangeRows.map((r, i) => (
-                        <tr key={r.name} className="border-b last:border-0">
-                          <td className="text-muted-foreground py-2 tabular-nums">
-                            {i + 1}
-                          </td>
-                          <td className="py-2 font-medium">{r.name}</td>
-                          <td className="text-muted-foreground py-2 text-right tabular-nums">
-                            {formatMoney(r.sales.gross, daySales?.currency ?? "USD")}
-                          </td>
-                          <td className="text-muted-foreground py-2 text-right tabular-nums">
-                            {r.sales.discounts > 0
-                              ? `−${formatMoney(r.sales.discounts, daySales?.currency ?? "USD")}`
-                              : "—"}
-                          </td>
-                          <td className="text-muted-foreground py-2 text-right tabular-nums">
-                            {r.sales.returns > 0
-                              ? `−${formatMoney(r.sales.returns, daySales?.currency ?? "USD")}`
-                              : "—"}
-                          </td>
-                          <td className="py-2 text-right font-semibold tabular-nums">
-                            {formatMoney(r.sales.net, daySales?.currency ?? "USD")}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
         </CardContent>
       </Card>
 
