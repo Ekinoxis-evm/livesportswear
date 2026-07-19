@@ -7,15 +7,19 @@ import { weekStart, weekDays, addDays, isoWeekday, formatWeekRange } from "@/lib
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { SHIFT_SLOTS, templateForSlot, shiftMatchesSlot } from "@/lib/shift-slots";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { normalizeStaffId } from "@/lib/shopify-range";
+import { dayRangeInTz } from "@/lib/shopify-range";
+import { getStaffSalesCached } from "@/lib/shopify-range-cache";
 import { getShareWeekSales } from "@/lib/share-sales-cache";
+import { staffRowsFromEntries, type SalesRankRow } from "@/lib/sales-period";
+import { PeriodPills } from "@/components/shared/period-pills";
+import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { formatMoney } from "@/lib/commission";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { RefreshSalesButton } from "@/components/shared/refresh-sales-button";
 import { SalesBreakdownBlock } from "@/components/shared/sales-breakdown-view";
-import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
+import { sumBreakdowns, type SalesBreakdown } from "@/lib/sales-breakdown";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hhmm = (t: string) => t.slice(0, 5);
@@ -53,10 +57,13 @@ function Chip({ shift, withTime }: { shift: ShiftRow; withTime?: boolean }) {
 
 export default async function StoreWeekPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string; week: string }>;
+  searchParams: Promise<{ period?: string }>;
 }) {
   const { token, week } = await params;
+  const sp = await searchParams;
   if (!DATE_RE.test(week)) notFound();
 
   const supabase = createServiceClient();
@@ -104,14 +111,22 @@ export default async function StoreWeekPage({
   const today = businessDate(loc.timezone);
   const thisWeek = weekStart(today);
 
-  // Week sales ranking — every mapped, active employee of this store appears,
-  // $0 included (a quiet week must not make anyone vanish from the list).
-  // Sales by staff we can't attribute to someone at this store are left out.
-  let weekRanking: { name: string; sales: SalesBreakdown }[] = [];
+  // Sales ranking — the standard module, limited to This week · Today on the
+  // public page. Every mapped, active employee appears, $0 included (a quiet
+  // period must not make anyone vanish from the list).
+  const salesMode: "week" | "today" = sp.period === "today" ? "today" : "week";
+  let rankRows: SalesRankRow[] = [];
   if (schedule && isShopifyConfigured()) {
     try {
-      const [{ entries }, { data: emps }] = await Promise.all([
-        getShareWeekSales(loc.id, monday, loc.timezone),
+      const entriesPromise =
+        salesMode === "today"
+          ? (async () => {
+              const dr = dayRangeInTz(today, loc.timezone);
+              return (await getStaffSalesCached(dr.start, dr.endExclusive)) ?? [];
+            })()
+          : getShareWeekSales(loc.id, monday, loc.timezone).then((r) => r.entries);
+      const [entries, { data: emps }] = await Promise.all([
+        entriesPromise,
         supabase
           .from("employees")
           .select("name, shopify_staff_id")
@@ -119,20 +134,14 @@ export default async function StoreWeekPage({
           .eq("active", true)
           .not("shopify_staff_id", "is", null),
       ]);
-      const byStaff = new Map(entries);
-      weekRanking = (emps ?? [])
-        .map((e) => ({
-          name: e.name,
-          sales:
-            byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ??
-            zeroBreakdown(),
-        }))
-        .sort((a, b) => b.sales.net - a.sales.net || a.name.localeCompare(b.name));
+      rankRows = staffRowsFromEntries(entries, emps ?? []);
     } catch {
       // section hidden when Shopify is unreachable
     }
   }
-  const weekTotal = sumBreakdowns(weekRanking.map((r) => r.sales));
+  const weekTotal = sumBreakdowns(
+    rankRows.map((r) => r.breakdown).filter((b): b is SalesBreakdown => b !== null),
+  );
 
   const slots = SHIFT_SLOTS.map((slot) => ({ slot, tpl: templateForSlot(slot, templates) }));
   const inAnySlot = (s: ShiftRow) =>
@@ -293,55 +302,31 @@ export default async function StoreWeekPage({
         </div>
       )}
 
-      {weekRanking.length > 0 && (
+      {rankRows.length > 0 && (
         <Card>
           <CardContent className="flex flex-col gap-3 pt-6">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-sm font-semibold">
-                <Trophy className="size-4 text-amber-500" /> Sales this week
-                <RefreshSalesButton token={token} week={monday} />
+                <Trophy className="size-4 text-amber-500" />
+                {salesMode === "today" ? "Sales today" : "Sales this week"}
+                {salesMode === "week" && (
+                  <RefreshSalesButton token={token} week={monday} />
+                )}
               </span>
               <span className="text-sm font-semibold tabular-nums">
                 {formatMoney(weekTotal.net)} net
               </span>
             </div>
+            <PeriodPills
+              basePath={`/w/${token}/${monday}`}
+              mode={salesMode}
+              from={monday}
+              to={today}
+              periods={["week", "today"]}
+              labels={{ week: "This week" }}
+            />
             <SalesBreakdownBlock sales={weekTotal} className="max-w-xs" />
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground border-b text-left">
-                    <th className="py-2 font-medium">#</th>
-                    <th className="py-2 font-medium">Employee</th>
-                    <th className="py-2 text-right font-medium">Value</th>
-                    <th className="py-2 text-right font-medium">Discounts</th>
-                    <th className="py-2 text-right font-medium">Returns</th>
-                    <th className="py-2 text-right font-medium">Net</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {weekRanking.map((r, i) => (
-                    <tr key={r.name} className="border-b last:border-0">
-                      <td className="text-muted-foreground py-2 tabular-nums">{i + 1}</td>
-                      <td className="py-2 font-medium">{r.name}</td>
-                      <td className="text-muted-foreground py-2 text-right tabular-nums">
-                        {formatMoney(r.sales.gross)}
-                      </td>
-                      <td className="text-muted-foreground py-2 text-right tabular-nums">
-                        {r.sales.discounts > 0
-                          ? `−${formatMoney(r.sales.discounts)}`
-                          : "—"}
-                      </td>
-                      <td className="text-muted-foreground py-2 text-right tabular-nums">
-                        {r.sales.returns > 0 ? `−${formatMoney(r.sales.returns)}` : "—"}
-                      </td>
-                      <td className="py-2 text-right font-semibold tabular-nums">
-                        {formatMoney(r.sales.net)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <SalesRankTable rows={rankRows} currency="USD" />
           </CardContent>
         </Card>
       )}

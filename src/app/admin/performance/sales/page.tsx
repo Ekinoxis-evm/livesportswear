@@ -4,11 +4,10 @@ import { createServerClient } from "@/lib/supabase/server";
 import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
-import { resolveDateRange, spanDays } from "@/lib/date-range";
+import { spanDays } from "@/lib/date-range";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { customRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
+import { customRangeInTz } from "@/lib/shopify-range";
 import { getStaffSalesCached, getShopSalesCached } from "@/lib/shopify-range-cache";
-import { formatMoney } from "@/lib/commission";
 import { repMonthlyData } from "@/lib/monthly-series";
 import { shortDate } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
@@ -19,23 +18,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { DateRangeForm } from "@/components/shared/date-range-form";
 import { SalesBreakdownBlock } from "@/components/shared/sales-breakdown-view";
-import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
+import { sumBreakdowns, type SalesBreakdown } from "@/lib/sales-breakdown";
+import {
+  monthRows,
+  periodBounds,
+  resolveSalesPeriod,
+  staffRowsFromEntries,
+  type SalesRankRow,
+} from "@/lib/sales-period";
+import { PeriodPills } from "@/components/shared/period-pills";
+import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
 export default async function SalesTabPage({
   searchParams,
 }: {
-  searchParams: Promise<{ location?: string; from?: string; to?: string; year?: string }>;
+  searchParams: Promise<{
+    location?: string;
+    from?: string;
+    to?: string;
+    year?: string;
+    period?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const supabase = await createServerClient();
@@ -60,16 +65,20 @@ export default async function SalesTabPage({
     return <p className="text-muted-foreground text-sm">No active stores.</p>;
   }
   const location = locations.find((l) => l.id === sp.location) ?? locations[0];
-  const { from, to } = resolveDateRange(sp, today);
+  const { mode, from, to } = resolveSalesPeriod(sp, today);
 
   // Every internal link keeps the other filters alive.
-  const qs = (next: Partial<{ location: string; from: string; to: string; year: number }>) => {
+  const qs = (next: Partial<{ location: string; year: number }>) => {
     const p = new URLSearchParams({
       location: next.location ?? location.id,
-      from: next.from ?? from,
-      to: next.to ?? to,
       year: String(next.year ?? chartYear),
     });
+    if (mode === "custom") {
+      p.set("from", from);
+      p.set("to", to);
+    } else if (mode !== "today") {
+      p.set("period", mode);
+    }
     return `/admin/performance/sales?${p}`;
   };
 
@@ -101,45 +110,45 @@ export default async function SalesTabPage({
     chartYear === currentYear ? monthNum : 12,
   );
 
-  // Range view (live Shopify).
-  let rangeRows: { name: string; sales: SalesBreakdown }[] = [];
+  // The standard sales-period module: month reads the synced DB; the live
+  // periods (today/week/custom) pull attributed Shopify sales.
+  const locActive = allEmployees.filter(
+    (e) => e.location_id === location.id && e.active,
+  );
+  const bounds = periodBounds(mode, { today, from, to });
+  let rankRows: SalesRankRow[] = [];
   let shopTotal: (SalesBreakdown & { orders: number }) | null = null;
-  let unmappedCount = 0;
-  if (isShopifyConfigured()) {
-    const range = customRangeInTz(from, to, location.timezone);
+  const unmappedCount = locActive.filter((e) => !e.shopify_staff_id).length;
+  if (mode === "month") {
+    const { data: monthSalesRows } = await supabase
+      .from("monthly_sales")
+      .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
+      .eq("month", today.slice(0, 7));
+    rankRows = monthRows(monthSalesRows ?? [], locActive, { keepZeros: true });
+  } else if (isShopifyConfigured()) {
+    const range = customRangeInTz(bounds.from, bounds.to, location.timezone);
     const [entries, shop] = await Promise.all([
       getStaffSalesCached(range.start, range.endExclusive),
       getShopSalesCached(range.start, range.endExclusive),
     ]);
-    const mapped = allEmployees.filter(
-      (e) => e.location_id === location.id && e.active && e.shopify_staff_id,
-    );
-    unmappedCount = allEmployees.filter(
-      (e) => e.location_id === location.id && e.active && !e.shopify_staff_id,
-    ).length;
-    if (entries) {
-      const byStaff = new Map(entries);
-      rangeRows = mapped
-        .map((e) => ({
-          name: e.name,
-          sales:
-            byStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ??
-            zeroBreakdown(),
-        }))
-        .sort((a, b) => b.sales.net - a.sales.net || a.name.localeCompare(b.name));
-    }
+    if (entries) rankRows = staffRowsFromEntries(entries, locActive);
     if (shop) shopTotal = { ...shop, orders: shop.orders };
   }
-  const rangeTotal = sumBreakdowns(rangeRows.map((r) => r.sales));
+  const rangeTotal = sumBreakdowns(
+    rankRows.map((r) => r.breakdown).filter((b): b is SalesBreakdown => b !== null),
+  );
+  for (const r of rankRows) {
+    r.sharePct = rangeTotal.net > 0 ? r.net / rangeTotal.net : null;
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Custom range · live Shopify */}
+      {/* The standard sales-period module */}
       <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wide">Custom range</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide">Sales</h2>
         <p className="text-muted-foreground mt-1 text-sm">
-          Net Shopify sales between two dates, attributed per employee. Long
-          ranges may take a few seconds.
+          Net sales attributed per employee — Today, Week, Month, or custom
+          dates. Long custom ranges may take a few seconds.
         </p>
       </div>
 
@@ -160,14 +169,15 @@ export default async function SalesTabPage({
         ))}
       </div>
 
-      <DateRangeForm
+      <PeriodPills
+        basePath="/admin/performance/sales"
+        mode={mode}
         from={from}
         to={to}
-        action="/admin/performance/sales"
         hidden={{ location: location.id, year: String(chartYear) }}
       />
 
-      {!isShopifyConfigured() ? (
+      {!isShopifyConfigured() && mode !== "month" ? (
         <p className="text-muted-foreground text-sm">
           Shopify isn&apos;t connected yet — connect it in Settings to see sales.
         </p>
@@ -182,83 +192,38 @@ export default async function SalesTabPage({
                 <SalesBreakdownBlock sales={rangeTotal} currency={currency} />
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardDescription>Whole shop (all stores + web)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {shopTotal ? (
-                  <SalesBreakdownBlock sales={shopTotal} currency={currency} />
-                ) : (
-                  <p className="text-muted-foreground text-sm">—</p>
-                )}
-              </CardContent>
-            </Card>
+            {mode !== "month" && (
+              <Card>
+                <CardHeader>
+                  <CardDescription>Whole shop (all stores + web)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {shopTotal ? (
+                    <SalesBreakdownBlock sales={shopTotal} currency={currency} />
+                  ) : (
+                    <p className="text-muted-foreground text-sm">—</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader>
                 <CardDescription>Period</CardDescription>
                 <CardTitle className="text-base tabular-nums">
-                  {shortDate(from)} – {shortDate(to)} · {spanDays(from, to)}d
-                  {shopTotal ? ` · ${shopTotal.orders} orders` : ""}
+                  {shortDate(bounds.from)} – {shortDate(bounds.to)} ·{" "}
+                  {spanDays(bounds.from, bounds.to)}d
+                  {mode !== "month" && shopTotal ? ` · ${shopTotal.orders} orders` : ""}
+                  {mode === "month" ? " · synced" : ""}
                 </CardTitle>
               </CardHeader>
             </Card>
           </div>
 
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead className="hidden text-right sm:table-cell">Value</TableHead>
-                  <TableHead className="hidden text-right sm:table-cell">Discounts</TableHead>
-                  <TableHead className="hidden text-right sm:table-cell">Returns</TableHead>
-                  <TableHead className="text-right">Net sales</TableHead>
-                  <TableHead className="text-right">Share</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rangeRows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground text-center">
-                      No mapped employees or Shopify unreachable.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {rangeRows.map((r, i) => (
-                  <TableRow key={r.name}>
-                    <TableCell>
-                      <span className="text-muted-foreground mr-2 tabular-nums">
-                        {i + 1}.
-                      </span>
-                      {r.name}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums sm:table-cell">
-                      {formatMoney(r.sales.gross, currency)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums sm:table-cell">
-                      {r.sales.discounts > 0
-                        ? `−${formatMoney(r.sales.discounts, currency)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums sm:table-cell">
-                      {r.sales.returns > 0
-                        ? `−${formatMoney(r.sales.returns, currency)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      {formatMoney(r.sales.net, currency)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-right tabular-nums">
-                      {rangeTotal.net > 0
-                        ? `${Math.round((r.sales.net / rangeTotal.net) * 100)}%`
-                        : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <Card>
+            <CardContent className="pt-6">
+              <SalesRankTable rows={rankRows} currency={currency} showShare />
+            </CardContent>
+          </Card>
 
           {unmappedCount > 0 && (
             <p className="text-muted-foreground text-xs">

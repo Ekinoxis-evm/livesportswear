@@ -21,6 +21,15 @@
 - **Sheet (right side)**: simple side-panel edits — editing a shift on the grid.
 - **Drawer (bottom on mobile)**: avoid; sheet/wizard is enough.
 - **Sonner toast**: success / error confirmations after server actions.
+- **Ranked employee sales**: ALWAYS the sales-period module — `PeriodPills`
+  (Today · Week · Month · Custom; Custom is a pill that reveals
+  `DateRangeForm`) + `SalesRankTable` (`# · Employee (· Store) · Value ·
+  Discounts · Returns · Net` + optional Goal/Share/commission columns),
+  driven by `resolveSalesPeriod`/`periodBounds`/`staffRowsFromEntries`/
+  `monthRows` in `src/lib/sales-period.ts`. Used on kiosk Performance,
+  admin Dashboard (commission columns in Month view only), admin
+  Performance→Sales, and the public week page (Week · Today only). Don't
+  hand-roll new period pills or sales tables.
 - **Inline `<Alert>`**: persistent state messages on a page (e.g. "This schedule has 3 warnings").
 
 ## Layout
