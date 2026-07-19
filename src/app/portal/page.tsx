@@ -102,9 +102,10 @@ export default async function PortalPage({
   const service = createServiceClient();
   const { data: peerSales } = await service
     .from("monthly_sales")
-    .select("amount, employees!inner(active)")
+    .select("amount, employees!inner(active, location_id)")
     .eq("month", month)
-    .eq("employees.active", true);
+    .eq("employees.active", true)
+    .eq("employees.location_id", employee.location_id);
   const rank =
     (peerSales ?? []).filter((s) => Number(s.amount) > mySales).length + 1;
 

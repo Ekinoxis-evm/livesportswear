@@ -7,9 +7,7 @@ import { weekStart, weekDays, addDays, isoWeekday, formatWeekRange } from "@/lib
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { SHIFT_SLOTS, templateForSlot, shiftMatchesSlot } from "@/lib/shift-slots";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { dayRangeInTz } from "@/lib/shopify-range";
-import { getStaffSalesCached } from "@/lib/shopify-range-cache";
-import { getShareWeekSales } from "@/lib/share-sales-cache";
+import { getShareDaySales, getShareWeekSales } from "@/lib/share-sales-cache";
 import { staffRowsFromEntries, type SalesRankRow } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
@@ -120,10 +118,7 @@ export default async function StoreWeekPage({
     try {
       const entriesPromise =
         salesMode === "today"
-          ? (async () => {
-              const dr = dayRangeInTz(today, loc.timezone);
-              return (await getStaffSalesCached(dr.start, dr.endExclusive)) ?? [];
-            })()
+          ? getShareDaySales(loc.id, today, loc.timezone).then((r) => r.entries)
           : getShareWeekSales(loc.id, monday, loc.timezone).then((r) => r.entries);
       const [entries, { data: emps }] = await Promise.all([
         entriesPromise,

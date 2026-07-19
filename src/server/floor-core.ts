@@ -224,8 +224,9 @@ export async function doTakeClient(
     status: statusAfter(next),
     attending_count: next.walkins,
     attending_return_count: next.returns,
-    bumped_at: null,
-    manual_pos: null,
+    // Only a walk-in leaves the line — a return must not cost the member
+    // their bump or dragged position (the "returns don't burn a turn" rule).
+    ...(kind === "walkin" ? { bumped_at: null, manual_pos: null } : {}),
   });
 }
 
@@ -307,11 +308,40 @@ export async function doFinishCustomer(
   employeeId: string,
   result: FinishResult,
 ): Promise<ActionResult> {
-  // Guard before the event insert — a finish with nothing open must not
+  // Guard before anything writes — a finish with nothing open must not
   // record a phantom customer or burn a rotation turn.
   const cur = await readCounts(service, locationId, bd, employeeId);
   if (!canClose(cur, cur.status, result.kind)) {
     return { ok: false, error: "No open client to finish." };
+  }
+
+  // Counters FIRST, conditioned on the exact values just read: a double-tap
+  // or a retry after a partial failure matches zero rows here and stops —
+  // the same sale can never be recorded twice. (Insert-then-patch could.)
+  const next = afterClose(cur, result.kind);
+  const { error: patchErr, count } = await service
+    .from("floor_checkins")
+    .update(
+      {
+        status: statusAfter(next),
+        attending_count: next.walkins,
+        attending_return_count: next.returns,
+        rotation_count: rotationAfterFinish(cur.rotation, result.kind),
+        ...(result.kind === "walkin"
+          ? { available_since: new Date().toISOString() }
+          : {}),
+        bumped_at: null,
+      },
+      { count: "exact" },
+    )
+    .eq("location_id", locationId)
+    .eq("business_date", bd)
+    .eq("employee_id", employeeId)
+    .eq("attending_count", cur.walkins)
+    .eq("attending_return_count", cur.returns);
+  if (patchErr) return { ok: false, error: patchErr.message };
+  if (!count) {
+    return { ok: false, error: "Already recorded — the screen will refresh." };
   }
 
   const ins = await service.from("client_events").insert({
@@ -332,17 +362,13 @@ export async function doFinishCustomer(
     customer_email: result.order?.customer_email ?? null,
     customer_phone: result.order?.customer_phone ?? null,
   });
-  if (ins.error) return { ok: false, error: ins.error.message };
-
-  const next = afterClose(cur, result.kind);
-  return patchCheckin(service, locationId, bd, employeeId, {
-    status: statusAfter(next),
-    attending_count: next.walkins,
-    attending_return_count: next.returns,
-    rotation_count: rotationAfterFinish(cur.rotation, result.kind),
-    ...(result.kind === "walkin"
-      ? { available_since: new Date().toISOString() }
-      : {}),
-    bumped_at: null,
-  });
+  if (ins.error) {
+    // The client is closed but the record failed — surface it loudly; the
+    // event can be reconstructed by the admin, a duplicate cannot.
+    return {
+      ok: false,
+      error: "The client was closed but the result failed to record — tell the admin.",
+    };
+  }
+  return { ok: true };
 }
