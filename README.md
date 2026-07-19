@@ -1,10 +1,16 @@
-# Live — Staff Scheduling
+# Live — Store Ops
 
-Internal scheduling app for **Live Active Wear** (liveactivewear.com). One admin builds weekly schedules across multiple store locations; employees receive emails, a personal ICS calendar feed, and a read-only schedule page.
+Internal operations app for **Live Active Wear** (liveactivewear.com), in production at livesportswear.vercel.app. Three surfaces:
 
-> Full architecture & decisions: [`PLAN.md`](./PLAN.md)
+- **Admin** — weekly schedules with a rules engine, a Performance hub (Daily floor · Sales · Rewards), Sales & Rewards setup (goals, commission tiers, contests), the month sales Ranking, and the inventory suite (barcode counts, the store's inventory book, staged Shopify stock corrections).
+- **Store kiosk** — a shared iPad per store: PIN + face-photo check-in/out, the FIFO rotation queue ("up system") with breaks and undo, sold/no-sale logging linked to the real Shopify order and customer, sales tables (Today · Week · Month · Custom), contests, and the close-day report.
+- **Employee portal + public pages** — personal schedule/sales/rewards, magic-token schedule page + ICS feed, and the public store-week page with its sales ranking.
+
+The sales metric everywhere is **NET sales** (Shopify `current_subtotal_price`).
+
 > Working agreement for AI agents: [`AGENTS.md`](./AGENTS.md)
 > Project memory for Claude Code: [`CLAUDE.md`](./CLAUDE.md)
+> Schema source of truth: [`.claude/rules/data-model.md`](./.claude/rules/data-model.md)
 
 ## Stack
 
@@ -69,9 +75,9 @@ Open http://localhost:3000.
 ```
 src/
   app/
-    admin/        Auth-required admin UI (Performance hub, Sales & Rewards setup, …)
+    admin/        Auth-required admin UI (Performance hub, Sales & Rewards setup, inventory, …)
     portal/       Employee portal (performance, schedule, rewards)
-    store/        Shared store kiosk (check-in, rotation queue, contests)
+    store/        Shared store kiosk (check-in, schedule, sales queue, performance, rewards)
     s/ , w/       Magic-token public pages (employee schedule + ICS, store week)
     api/cron/     Cron handlers (shopify-sync, stale-checkins, photo-retention, meta-sync)
   components/     UI components (shadcn primitives in ui/)

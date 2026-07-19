@@ -7,6 +7,8 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createEmployeeWithAccess } from "@/server/employees";
+import { AVATAR_COLORS, pickAvatarColor } from "@/lib/avatar-palette";
+import { ColorSwatches } from "@/components/employee/color-swatches";
 import { DIAL_CODES, DIAL_CODE_ITEMS, joinPhone } from "@/lib/dial-codes";
 import { Wizard, type WizardStep } from "@/components/shared/wizard";
 import { Input } from "@/components/ui/input";
@@ -34,6 +36,7 @@ const schema = z.object({
   email: z.string().trim().email("Enter a valid email."),
   location_id: z.string().uuid("Pick a location."),
   role: z.enum(["sales_rep", "shift_lead", "store_manager"]),
+  avatar_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Pick a color."),
   weekly_hour_target: z.coerce.number().int().min(0).max(80),
   max_days_per_week: z.coerce.number().int().min(1).max(7),
   weekly_days_off: z.coerce.number().int().min(0).max(6),
@@ -44,7 +47,7 @@ type FormValues = z.input<typeof schema>;
 
 const STEPS = ["Profile", "Schedule rules", "Pay & access", "Review"];
 const STEP_FIELDS: (keyof FormValues)[][] = [
-  ["name", "email", "location_id", "role"],
+  ["name", "email", "location_id", "role", "avatar_color"],
   ["weekly_hour_target", "max_days_per_week", "weekly_days_off", "hire_date"],
   ["hourly_rate"],
   [],
@@ -77,6 +80,8 @@ export function EmployeeWizard({
       email: "",
       location_id: locations[0]?.id ?? "",
       role: "sales_rep",
+      // Preselected so every new employee ships with a color.
+      avatar_color: pickAvatarColor(Math.floor(Math.random() * AVATAR_COLORS.length)),
       weekly_hour_target: 40,
       max_days_per_week: 5,
       weekly_days_off: 2,
@@ -202,6 +207,21 @@ export function EmployeeWizard({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+          <Field
+            label="Color"
+            error={errors.avatar_color?.message}
+            htmlFor="avatar_color"
+          >
+            <ColorSwatches
+              value={watch("avatar_color") || null}
+              onChange={(hex) =>
+                setValue("avatar_color", hex, { shouldValidate: true })
+              }
+            />
+            <p className="text-muted-foreground text-xs">
+              Their color on the schedule and the store screen.
+            </p>
           </Field>
         </div>
       ),

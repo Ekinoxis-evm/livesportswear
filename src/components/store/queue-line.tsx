@@ -20,22 +20,16 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { EmployeeAvatar } from "@/components/shared/employee-avatar";
 
 export type LineEntry = {
   employeeId: string;
   name: string;
   avatarColor: string | null;
+  avatarUrl: string | null;
   sinceLabel: string; // when they (re)joined the line
   turns: number;
 };
-
-const initials = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
 
 function LineRow({
   entry,
@@ -84,13 +78,11 @@ function LineRow({
         >
           {index + 1}
         </span>
-        <span
-          aria-hidden
-          className="flex size-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold text-white"
-          style={{ backgroundColor: entry.avatarColor ?? "#9ca3af" }}
-        >
-          {initials(entry.name)}
-        </span>
+        <EmployeeAvatar
+          name={entry.name}
+          color={entry.avatarColor}
+          url={entry.avatarUrl}
+        />
         <span className="flex min-w-0 flex-col">
           <span className="flex items-center gap-2 truncate text-lg font-semibold leading-tight">
             {entry.name}

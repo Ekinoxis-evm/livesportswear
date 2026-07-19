@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { PinPad } from "@/components/store/pin-pad";
 import { CameraCapture } from "@/components/store/camera-capture";
 import { BreakTimer } from "@/components/store/break-timer";
+import { EmployeeAvatar } from "@/components/shared/employee-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -23,6 +24,7 @@ export type CheckinRow = {
   employeeId: string;
   name: string;
   avatarColor: string | null;
+  avatarUrl: string | null;
   arrivedLabel: string;
   leftLabel: string | null;
   hours: number | null;
@@ -39,6 +41,7 @@ export type RosterEntry = {
   id: string;
   name: string;
   avatarColor: string | null;
+  avatarUrl: string | null;
 };
 
 type Flow = {
@@ -54,29 +57,6 @@ const FLOW_TITLE: Record<Flow["kind"], string> = {
   "break-start": "start break",
   "break-end": "back from break",
 };
-
-const initials = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-
-function Avatar({ name, color, className }: { name: string; color: string | null; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "flex size-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold text-white",
-        className,
-      )}
-      style={{ backgroundColor: color ?? "#9ca3af" }}
-    >
-      {initials(name)}
-    </span>
-  );
-}
 
 export function CheckinBoard({
   checkins,
@@ -180,7 +160,7 @@ export function CheckinBoard({
                 className="h-20 justify-start gap-3 text-base"
                 onClick={() => setFlow({ kind: "in", id: e.id, name: e.name, pin: null })}
               >
-                <Avatar name={e.name} color={e.avatarColor} />
+                <EmployeeAvatar name={e.name} color={e.avatarColor} url={e.avatarUrl} className="size-10" />
                 <span className="truncate font-semibold">{e.name}</span>
                 <Lock className="text-muted-foreground ml-auto size-4" />
               </Button>
@@ -213,7 +193,7 @@ export function CheckinBoard({
                         out && "opacity-60",
                       )}
                     >
-                      <Avatar name={r.name} color={r.avatarColor} />
+                      <EmployeeAvatar name={r.name} color={r.avatarColor} url={r.avatarUrl} className="size-10" />
                       <span className="flex min-w-0 flex-1 flex-col">
                         <span className="flex items-center gap-2 truncate text-base font-semibold">
                           {r.name}

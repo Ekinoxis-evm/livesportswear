@@ -7,6 +7,7 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createEmployee, updateEmployee } from "@/server/employees";
+import { ColorSwatches } from "@/components/employee/color-swatches";
 import {
   DIAL_CODES,
   DIAL_CODE_ITEMS,
@@ -304,18 +305,12 @@ export function EmployeeFormSheet({
               error={errors.avatar_color?.message}
               htmlFor="avatar_color"
             >
-              <div className="flex items-center gap-2">
-                <Input
-                  id="avatar_color"
-                  placeholder="#1ea7fd"
-                  {...register("avatar_color")}
-                />
-                <span
-                  aria-hidden
-                  className="size-9 shrink-0 rounded-md border"
-                  style={{ backgroundColor: watch("avatar_color") || "transparent" }}
-                />
-              </div>
+              <ColorSwatches
+                value={watch("avatar_color") || null}
+                onChange={(hex) =>
+                  setValue("avatar_color", hex, { shouldValidate: true })
+                }
+              />
             </Field>
           </div>
 
