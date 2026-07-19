@@ -461,6 +461,7 @@ export type Database = {
           arrived_at: string
           attending_count: number
           attending_return_count: number
+          available_since: string | null
           bumped_at: string | null
           business_date: string
           created_at: string
@@ -485,6 +486,7 @@ export type Database = {
           arrived_at?: string
           attending_count?: number
           attending_return_count?: number
+          available_since?: string | null
           bumped_at?: string | null
           business_date: string
           created_at?: string
@@ -509,6 +511,7 @@ export type Database = {
           arrived_at?: string
           attending_count?: number
           attending_return_count?: number
+          available_since?: string | null
           bumped_at?: string | null
           business_date?: string
           created_at?: string

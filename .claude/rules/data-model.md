@@ -172,16 +172,21 @@ Marks a store day open for the rotation queue ("up system").
 
 ### `floor_checkins` (added 0011)
 One row per employee present on the floor today. Drives who is "up next":
-available members are ordered by `rotation_count` then `arrived_at`; finishing a
-customer increments `rotation_count` (→ back of the line). See
-`src/lib/floor-queue.ts` (`orderFloor`/`upNext`) and `src/server/floor.ts`.
+since 0036 the line is FIFO by `available_since` — first to finish is first
+up. `available_since` is stamped at check-in and on finishing a WALK-IN;
+returns, undo, back-to-line, and break-end keep the old stamp (they never
+cost the spot). `rotation_count` still increments per walk-in finish but is
+display-only ("N turns today"). See `src/lib/floor-queue.ts`
+(`orderFloor`/`upNext`) and `src/server/floor-core.ts`.
 - `id uuid pk`
 - `location_id uuid fk -> locations`, `employee_id uuid fk -> employees`
 - `business_date date not null`
 - `arrived_at timestamptz not null default now()` — the recorded arrival time
 - `left_at timestamptz` (null = on the floor)
 - `status text` — `available | attending`
-- `rotation_count int not null default 0`
+- `rotation_count int not null default 0` — display-only since 0036
+- `available_since timestamptz` (added 0036) — the FIFO ordering key; null
+  on pre-0036 rows (readers fall back to `arrived_at`)
 - `bumped_at timestamptz` (added 0014) — manual "make up next" override by a
   lead; non-null puts the member at the front of the line (latest bump wins),
   cleared when they take a customer or re-check-in

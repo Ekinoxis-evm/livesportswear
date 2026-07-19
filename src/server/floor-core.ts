@@ -50,13 +50,15 @@ export async function doCheckIn(
   const opened = await doOpenDay(service, locationId, bd, employeeId, true);
   if (!opened.ok) return opened;
 
-  // rotation_count omitted so a returning employee keeps their place in line.
+  // rotation_count omitted so the "turns today" tally survives a re-check-in;
+  // available_since IS stamped — (re)arriving joins the end of the line.
   const { error } = await service.from("floor_checkins").upsert(
     {
       location_id: locationId,
       business_date: bd,
       employee_id: employeeId,
       arrived_at: now,
+      available_since: now,
       left_at: null,
       status: "available",
       bumped_at: null,
@@ -231,7 +233,7 @@ export async function doTakeClient(
  * Undo a mistaken take: close ONE open customer of `kind` as if it never
  * happened — no client_events row, no rotation_count change. The bump/manual
  * position the take cleared can't be restored (not persisted anywhere); the
- * member re-enters the line at plain rotation order.
+ * member re-enters the line at their kept available_since spot.
  */
 export async function doUndoTake(
   service: Service,
@@ -284,9 +286,10 @@ export type FinishResult = {
 /**
  * Finish ONE open customer: record the event at the time it happened, then
  * decrement that counter — the employee stays attending until every open
- * customer is closed. A finished walk-in bumps rotation_count (back of the
- * line); a return does NOT burn a turn (the taker is usually the last in
- * line, not the up-next).
+ * customer is closed. A finished walk-in re-stamps available_since (end of
+ * the line — first to finish is first up) and bumps the "turns today"
+ * counter; a return keeps the old stamp, so handling one never costs the
+ * member their spot.
  */
 export async function doFinishCustomer(
   service: Service,
@@ -321,6 +324,9 @@ export async function doFinishCustomer(
     attending_count: next.walkins,
     attending_return_count: next.returns,
     rotation_count: rotationAfterFinish(cur.rotation, result.kind),
+    ...(result.kind === "walkin"
+      ? { available_since: new Date().toISOString() }
+      : {}),
     bumped_at: null,
   });
 }
