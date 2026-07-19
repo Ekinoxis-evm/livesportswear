@@ -14,6 +14,7 @@ import {
   type BarcodePeek,
 } from "@/server/inventory";
 import { countTotals, type CountItem } from "@/lib/inventory-count";
+import { isScannerBurst } from "@/lib/scanner-signal";
 import type { InventoryCountItem } from "@/types/db";
 import { BarcodeCamera } from "@/components/inventory/barcode-camera";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,10 @@ export function CountScreen({
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [confirmMode, setConfirmMode] = useState(true);
   const [pendingScan, setPendingScan] = useState<BarcodePeek | null>(null);
+  const [scannerSeenAt, setScannerSeenAt] = useState<number | null>(null);
+  // Keystroke timestamps for the current input value — a hardware scanner
+  // "types" in a machine-speed burst, which is how we know it's connected.
+  const keyTimesRef = useRef<number[]>([]);
   const [confirmQty, setConfirmQty] = useState(1);
   const [peeking, setPeeking] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
@@ -124,6 +129,8 @@ export function CountScreen({
     if (barcode.length < 4) return;
     // One product at a time while a confirm card is up.
     if (pendingScan || peeking) return;
+    if (isScannerBurst(keyTimesRef.current)) setScannerSeenAt(Date.now());
+    keyTimesRef.current = [];
     setQuery("");
     if (!confirmMode) {
       count(barcode, 1);
@@ -231,7 +238,14 @@ export function CountScreen({
               autoComplete="off"
               placeholder="Scan or type a barcode…"
               className="h-14 text-lg tabular-nums"
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value.length > query.length) {
+                  keyTimesRef.current.push(performance.now());
+                } else if (e.target.value === "") {
+                  keyTimesRef.current = [];
+                }
+                setQuery(e.target.value);
+              }}
             />
             <Button type="submit" size="lg" className="h-14" disabled={!query.trim()}>
               Add
@@ -248,7 +262,7 @@ export function CountScreen({
             </Button>
           </form>
 
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="text-muted-foreground flex cursor-pointer select-none items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -258,9 +272,24 @@ export function CountScreen({
               />
               Confirm each scan — see the product before counting it
             </label>
-            {peeking && (
-              <span className="text-muted-foreground shrink-0 text-xs">looking up…</span>
-            )}
+            <span className="flex shrink-0 items-center gap-2 text-xs">
+              {peeking && <span className="text-muted-foreground">looking up…</span>}
+              {scannerSeenAt ? (
+                <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-700 dark:text-emerald-400">
+                  <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
+                  Scanner active ·{" "}
+                  <span className="tabular-nums">
+                    {new Date(scannerSeenAt).toTimeString().slice(0, 5)}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground flex items-center gap-1.5 rounded-full border px-2.5 py-1">
+                  <span aria-hidden className="bg-muted-foreground/50 size-1.5 rounded-full" />
+                  Scanner not detected — pair it in Bluetooth Settings, then scan
+                  anything
+                </span>
+              )}
+            </span>
           </div>
 
           {lastScan && (
