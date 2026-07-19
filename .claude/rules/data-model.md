@@ -126,9 +126,14 @@ layer (counts), not money.
 - `shopify_order_id/_name`, `order_total`, `shopify_customer_id`,
   `customer_name/_email/_phone` (added 0037) — a sold walk-in optionally
   links the real Shopify order + its customer (picked from the last orders
-  on the kiosk). The client-history seed. PII: stays in the DB under the
-  existing RLS; NEVER log customer contact. Partial index
-  `(location_id, shopify_customer_id)` for the future clients view.
+  on the kiosk). The client-history seed, read by `/admin/clients` (per
+  customer: latest contact, the rep who captured it = first got_contact
+  event, visits, linked totals; live Shopify orders/spend via
+  `fetchCustomersByIds`). PII: stays in the DB under the existing RLS;
+  NEVER log customer contact. Partial index
+  `(location_id, shopify_customer_id)` powers the grouping.
+  **Next phase (not built):** historical attribution for customers created
+  before linking, via each customer's first order's staff `user_id`.
 - index `(location_id, business_date)`, `(employee_id, business_date)`
 
 ### `store_day_closes` (added 0009)

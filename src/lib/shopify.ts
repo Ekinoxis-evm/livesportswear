@@ -246,6 +246,34 @@ export async function fetchRecentOrders(limit = 6): Promise<RecentOrder[]> {
     });
 }
 
+export type CustomerStats = { ordersCount: number; totalSpent: number };
+
+/**
+ * Shopify stats for a set of customer ids — the clients view's live
+ * enrichment. Failures degrade to an empty map; the page must render from
+ * our own data regardless.
+ */
+export async function fetchCustomersByIds(
+  ids: string[],
+): Promise<Map<string, CustomerStats>> {
+  const out = new Map<string, CustomerStats>();
+  for (let i = 0; i < ids.length; i += 250) {
+    const chunk = ids.slice(i, i + 250);
+    const { body } = await shopifyRest<{
+      customers: { id: number; orders_count: number; total_spent: string }[];
+    }>(
+      `/customers.json?ids=${chunk.join(",")}&limit=250&fields=id,orders_count,total_spent`,
+    );
+    for (const c of body.customers) {
+      out.set(String(c.id), {
+        ordersCount: c.orders_count,
+        totalSpent: Number(c.total_spent),
+      });
+    }
+  }
+  return out;
+}
+
 type RestEvent = { verb: string; author: string | null };
 
 /**
