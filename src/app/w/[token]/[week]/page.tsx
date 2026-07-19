@@ -317,7 +317,8 @@ export default async function StoreWeekPage({
               mode={salesMode}
               from={monday}
               to={today}
-              periods={["week", "today"]}
+              periods={["today", "week"]}
+              defaultPeriod="week"
               labels={{ week: "This week" }}
             />
             <SalesBreakdownBlock sales={weekTotal} className="max-w-xs" />

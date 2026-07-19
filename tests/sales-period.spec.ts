@@ -36,6 +36,12 @@ describe("resolveSalesPeriod", () => {
       resolveSalesPeriod({ period: "month" }, "2026-07-19", ["week", "today"]).mode,
     ).toBe("week");
   });
+
+  it("honors an explicit default independent of display order", () => {
+    expect(
+      resolveSalesPeriod({}, "2026-07-19", ["today", "week", "month"], "month").mode,
+    ).toBe("month");
+  });
 });
 
 describe("periodBounds", () => {
