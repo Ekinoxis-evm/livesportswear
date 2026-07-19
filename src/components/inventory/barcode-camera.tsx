@@ -19,16 +19,17 @@ type BarcodeDetectorCtor = new (options?: {
   formats?: string[];
 }) => BarcodeDetectorInstance;
 
-function getDetectorCtor(): BarcodeDetectorCtor | null {
+function getNativeCtor(): BarcodeDetectorCtor | null {
   return (
     (globalThis as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector ?? null
   );
 }
 
 /**
- * Rear-camera barcode scanning via the native BarcodeDetector API (Chrome /
- * Android / Edge). Where the API doesn't exist (iOS Safari), the dialog says
- * so — the external scanner and manual typing always work.
+ * Rear-camera barcode scanning. Native BarcodeDetector where it exists
+ * (Chrome / Android / Edge); elsewhere (iOS Safari) the zxing-wasm ponyfill
+ * is loaded on first open — dynamic import so capable browsers never
+ * download the WASM.
  */
 export function BarcodeCamera({
   open,
@@ -43,10 +44,27 @@ export function BarcodeCamera({
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastHit, setLastHit] = useState<string | null>(null);
-  const supported = typeof window !== "undefined" && getDetectorCtor() !== null;
+  const [ctor, setCtor] = useState<BarcodeDetectorCtor | null>(() => getNativeCtor());
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
-    if (!open || !supported) return;
+    if (!open || ctor || loadFailed) return;
+    let cancelled = false;
+    import("barcode-detector/ponyfill")
+      .then((mod) => {
+        if (cancelled) return;
+        setCtor(() => mod.BarcodeDetector as unknown as BarcodeDetectorCtor);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, ctor, loadFailed]);
+
+  useEffect(() => {
+    if (!open || !ctor) return;
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
     // The same code stays in frame for many detect() ticks — count it once
@@ -69,9 +87,7 @@ export function BarcodeCamera({
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
-        const Ctor = getDetectorCtor();
-        if (!Ctor) return;
-        const detector = new Ctor({
+        const detector = new ctor({
           formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"],
         });
         timer = setInterval(async () => {
@@ -107,7 +123,7 @@ export function BarcodeCamera({
       setLastHit(null);
       setError(null);
     };
-  }, [open, supported, onScan]);
+  }, [open, ctor, onScan]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -118,14 +134,15 @@ export function BarcodeCamera({
             Point at the barcode to scan it.
           </DialogDescription>
         </DialogHeader>
-        {!supported ? (
+        {loadFailed ? (
           <p className="text-muted-foreground text-sm">
-            This browser can&apos;t scan barcodes with the camera (iPhone Safari
-            doesn&apos;t support it yet). Use an external scanner or type the
-            number — or open this page in Chrome on Android.
+            The barcode reader couldn&apos;t load — check the connection and
+            reopen, or use an external scanner / type the number.
           </p>
         ) : error ? (
           <p className="text-destructive text-sm">{error}</p>
+        ) : !ctor ? (
+          <p className="text-muted-foreground text-sm">Starting the camera…</p>
         ) : (
           <>
             <video

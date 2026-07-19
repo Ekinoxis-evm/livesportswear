@@ -583,6 +583,7 @@ export type Database = {
           expected: number | null
           id: string
           product_title: string
+          product_type: string | null
           qty: number
           sku: string | null
           unknown: boolean
@@ -596,6 +597,7 @@ export type Database = {
           expected?: number | null
           id?: string
           product_title: string
+          product_type?: string | null
           qty?: number
           sku?: string | null
           unknown?: boolean
@@ -609,6 +611,7 @@ export type Database = {
           expected?: number | null
           id?: string
           product_title?: string
+          product_type?: string | null
           qty?: number
           sku?: string | null
           unknown?: boolean
@@ -1111,6 +1114,7 @@ export type Database = {
           id: string
           location_id: string
           product_title: string
+          product_type: string | null
           qty: number
           shopify_qty: number | null
           sku: string | null
@@ -1126,6 +1130,7 @@ export type Database = {
           id?: string
           location_id: string
           product_title: string
+          product_type?: string | null
           qty?: number
           shopify_qty?: number | null
           sku?: string | null
@@ -1141,6 +1146,7 @@ export type Database = {
           id?: string
           location_id?: string
           product_title?: string
+          product_type?: string | null
           qty?: number
           shopify_qty?: number | null
           sku?: string | null

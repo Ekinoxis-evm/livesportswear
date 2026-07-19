@@ -286,9 +286,12 @@ is pure in `src/lib/inventory-count.ts`; Shopify lookups in
   `expected_units`, `counted_units` (snapshotted at finalize). Partial unique
   index: ONE open count per location.
 - `inventory_count_items`: `count_id fk cascade`, `barcode`, `sku`,
-  `product_title`, `variant_title`, `qty`, `expected` (Shopify qty at first
+  `product_title`, `product_type` (Shopify productType, added 0035; null on
+  older rows), `variant_title`, `qty`, `expected` (Shopify qty at first
   scan; finalize sweeps the catalog and inserts qty-0 rows for unscanned
   stock), `unknown` (barcode not in catalog). `unique (count_id, barcode)`.
+  The count screen groups by `product_type` (category chips) and paginates
+  25/page.
 - RLS: admin-only via `admin_can_access_location` (items via join to the
   parent count); no employee/kiosk policies.
 
@@ -299,8 +302,9 @@ counted truth. Each `finalizeCount` REPLACES the book rows for that store
 establishes zeros). `shopify_qty` = what Shopify believed at count time
 (drift stays visible on `/admin/inventory/book`).
 - `location_id fk`, `barcode`, `unique (location_id, barcode)`
-- `sku`, `product_title`, `variant_title`, `qty` (our truth), `shopify_qty`,
-  `unknown`, `counted_at`, `count_id fk (on delete set null)`
+- `sku`, `product_title`, `product_type` (0035), `variant_title`, `qty`
+  (our truth), `shopify_qty`, `unknown`, `counted_at`,
+  `count_id fk (on delete set null)`
 - RLS: admin-only via `admin_can_access_location`.
 - Corrections flow back to Shopify only through the staged push flow
   (`shopify_push_drafts`, below) — never directly. A successful apply also

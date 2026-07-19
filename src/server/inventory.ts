@@ -99,6 +99,7 @@ export async function scanBarcode(
       barcode,
       sku: hit?.sku ?? null,
       product_title: hit?.productTitle ?? "Unknown barcode",
+      product_type: hit?.productType ?? null,
       variant_title: hit?.variantTitle ?? null,
       qty,
       expected: hit?.inventoryQuantity ?? null,
@@ -114,6 +115,7 @@ export type BarcodePeek = {
   barcode: string;
   sku: string | null;
   productTitle: string;
+  productType: string | null;
   variantTitle: string | null;
   shopifyQty: number | null;
   currentQty: number;
@@ -142,7 +144,7 @@ export async function peekBarcode(
 
   const { data: existing } = await supabase
     .from("inventory_count_items")
-    .select("sku, product_title, variant_title, qty, expected, unknown")
+    .select("sku, product_title, product_type, variant_title, qty, expected, unknown")
     .eq("count_id", countId)
     .eq("barcode", barcode)
     .maybeSingle();
@@ -153,6 +155,7 @@ export async function peekBarcode(
         barcode,
         sku: existing.sku,
         productTitle: existing.product_title,
+        productType: existing.product_type,
         variantTitle: existing.variant_title,
         shopifyQty: existing.expected,
         currentQty: existing.qty,
@@ -170,6 +173,7 @@ export async function peekBarcode(
       barcode,
       sku: hit?.sku ?? null,
       productTitle: hit?.productTitle ?? "Unknown barcode",
+      productType: hit?.productType ?? null,
       variantTitle: hit?.variantTitle ?? null,
       shopifyQty: hit?.inventoryQuantity ?? null,
       currentQty: 0,
@@ -255,6 +259,7 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
           barcode: v.barcode,
           sku: v.sku,
           product_title: v.productTitle,
+          product_type: v.productType,
           variant_title: v.variantTitle,
           qty: 0,
           expected: v.inventoryQuantity,
@@ -267,7 +272,7 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
 
   const { data: items } = await supabase
     .from("inventory_count_items")
-    .select("barcode, sku, product_title, variant_title, qty, expected, unknown")
+    .select("barcode, sku, product_title, product_type, variant_title, qty, expected, unknown")
     .eq("count_id", countId);
   const totals = countTotals((items ?? []) as CountItem[]);
 
@@ -292,6 +297,7 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
     barcode: it.barcode,
     sku: it.sku,
     product_title: it.product_title,
+    product_type: it.product_type,
     variant_title: it.variant_title,
     qty: it.qty,
     shopify_qty: it.expected,
