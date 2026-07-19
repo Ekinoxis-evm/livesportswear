@@ -35,10 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DateRangeForm } from "@/components/shared/date-range-form";
-import {
-  SalesBreakdownBlock,
-  SalesBreakdownSubline,
-} from "@/components/shared/sales-breakdown-view";
+import { SalesBreakdownBlock } from "@/components/shared/sales-breakdown-view";
 import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
@@ -216,10 +213,13 @@ export default async function SalesTabPage({
                   <TableHead>#</TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead className="hidden sm:table-cell">Store</TableHead>
-                  <TableHead>Net sales</TableHead>
-                  <TableHead>Rate</TableHead>
-                  <TableHead>Commission</TableHead>
-                  <TableHead className="hidden md:table-cell">To next tier</TableHead>
+                  <TableHead className="hidden text-right md:table-cell">Value</TableHead>
+                  <TableHead className="hidden text-right md:table-cell">Discounts</TableHead>
+                  <TableHead className="hidden text-right md:table-cell">Returns</TableHead>
+                  <TableHead className="text-right">Net sales</TableHead>
+                  <TableHead className="text-right">Rate</TableHead>
+                  <TableHead className="text-right">Commission</TableHead>
+                  <TableHead className="hidden text-right lg:table-cell">To next tier</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -230,24 +230,29 @@ export default async function SalesTabPage({
                     <TableCell className="text-muted-foreground hidden sm:table-cell">
                       {r.store}
                     </TableCell>
-                    <TableCell className="tabular-nums">
-                      <span className="flex flex-col">
-                        {formatMoney(r.amount, currency)}
-                        {r.breakdown && (
-                          <SalesBreakdownSubline
-                            sales={r.breakdown}
-                            currency={currency}
-                          />
-                        )}
-                      </span>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
+                      {r.breakdown ? formatMoney(r.breakdown.gross, currency) : "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
+                      {r.breakdown && r.breakdown.discounts > 0
+                        ? `−${formatMoney(r.breakdown.discounts, currency)}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
+                      {r.breakdown && r.breakdown.returns > 0
+                        ? `−${formatMoney(r.breakdown.returns, currency)}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatMoney(r.amount, currency)}
+                    </TableCell>
+                    <TableCell className="text-right">
                       <Badge variant="secondary">{(r.rate * 100).toFixed(1)}%</Badge>
                     </TableCell>
-                    <TableCell className="tabular-nums">
+                    <TableCell className="text-right tabular-nums">
                       {formatMoney(r.earned, currency)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums lg:table-cell">
                       {r.nextTier
                         ? `${formatMoney(r.nextTier.remaining, currency)} → ${(r.nextTier.rate * 100).toFixed(1)}%`
                         : "Top tier"}
@@ -370,6 +375,9 @@ export default async function SalesTabPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Value</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Discounts</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Returns</TableHead>
                   <TableHead className="text-right">Net sales</TableHead>
                   <TableHead className="text-right">Share</TableHead>
                 </TableRow>
@@ -377,7 +385,7 @@ export default async function SalesTabPage({
               <TableBody>
                 {rangeRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-muted-foreground text-center">
+                    <TableCell colSpan={6} className="text-muted-foreground text-center">
                       No mapped employees or Shopify unreachable.
                     </TableCell>
                   </TableRow>
@@ -390,11 +398,21 @@ export default async function SalesTabPage({
                       </span>
                       {r.name}
                     </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums sm:table-cell">
+                      {formatMoney(r.sales.gross, currency)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums sm:table-cell">
+                      {r.sales.discounts > 0
+                        ? `−${formatMoney(r.sales.discounts, currency)}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums sm:table-cell">
+                      {r.sales.returns > 0
+                        ? `−${formatMoney(r.sales.returns, currency)}`
+                        : "—"}
+                    </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
-                      <span className="flex flex-col items-end">
-                        {formatMoney(r.sales.net, currency)}
-                        <SalesBreakdownSubline sales={r.sales} currency={currency} />
-                      </span>
+                      {formatMoney(r.sales.net, currency)}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-right tabular-nums">
                       {rangeTotal.net > 0
