@@ -16,14 +16,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   asTiers,
   commissionFor,
   formatMoney,
@@ -34,7 +26,16 @@ import type { SalesBreakdown } from "@/lib/sales-breakdown";
 import { formatPct } from "@/lib/conversion";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales, type DaySales } from "@/lib/shopify";
-import { monthRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
+import { monthRangeInTz, dayRangeInTz, customRangeInTz } from "@/lib/shopify-range";
+import { getStaffSalesCached } from "@/lib/shopify-range-cache";
+import {
+  periodBounds,
+  resolveSalesPeriod,
+  staffRowsFromEntries,
+  type SalesRankRow,
+} from "@/lib/sales-period";
+import { PeriodPills } from "@/components/shared/period-pills";
+import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
 import { storeMonthlyData } from "@/lib/monthly-series";
 import { SyncSalesButton } from "@/components/commission/sync-sales-button";
@@ -50,11 +51,18 @@ function shiftMonth(month: string, delta: number): string {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string }>;
+  searchParams: Promise<{
+    year?: string;
+    month?: string;
+    period?: string;
+    from?: string;
+    to?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const supabase = await createServerClient();
-  const today = businessDate(await primaryTimezone());
+  const tz = await primaryTimezone();
+  const today = businessDate(tz);
   const { anchor } = await getPayPeriod();
   const sprint = sprintRange(anchor, today);
   const nextPayday = payday(anchor, today);
@@ -151,7 +159,7 @@ export default async function DashboardPage({
       .eq("month", monthNum),
     supabase
       .from("employees")
-      .select("id, name, location_id, avatar_color, locations(name)")
+      .select("id, name, location_id, avatar_color, shopify_staff_id, locations(name)")
       .eq("active", true),
     supabase
       .from("client_events")
@@ -232,6 +240,48 @@ export default async function DashboardPage({
     .sort((a, b) => b.amount - a.amount);
   const salesTotal = ranking.reduce((a, r) => a + r.amount, 0);
 
+  // The standard sales-period module — Month (default, with commission) reads
+  // the synced DB and follows the ‹ › month pager; the live periods rank
+  // attributed Shopify sales without commission (tiers are monthly).
+  const { mode, from, to } = resolveSalesPeriod(sp, today, [
+    "month",
+    "today",
+    "week",
+    "custom",
+  ]);
+  let rankRows: SalesRankRow[] = ranking.map((r) => ({
+    name: r.name,
+    store: r.store,
+    breakdown: r.breakdown,
+    net: r.amount,
+    rate: r.rate,
+    earned: r.earned,
+    nextTierLabel: r.nextTier
+      ? `${formatMoney(r.nextTier.remaining, currency)} → ${(r.nextTier.rate * 100).toFixed(1)}%`
+      : "Top tier",
+  }));
+  if (mode !== "month") {
+    rankRows = [];
+    if (isShopifyConfigured()) {
+      const bounds = periodBounds(mode, { today, from, to });
+      const range = customRangeInTz(bounds.from, bounds.to, tz);
+      const entries = await getStaffSalesCached(range.start, range.endExclusive);
+      if (entries) {
+        rankRows = staffRowsFromEntries(
+          entries,
+          monthEmployees.map((e) => ({
+            name: e.name,
+            shopify_staff_id: e.shopify_staff_id,
+            store: (e.locations as { name: string } | null)?.name ?? "—",
+          })),
+        );
+      }
+    }
+  }
+  const periodHidden: Record<string, string> = {};
+  if (month !== currentMonth) periodHidden.month = month;
+  if (chartYear !== currentYear) periodHidden.year = String(chartYear);
+
   const yearRows = (yearSalesRes.data ?? []).map((r) => ({
     employee_id: r.employee_id,
     month: r.month,
@@ -258,7 +308,6 @@ export default async function DashboardPage({
   const roas = spend > 0 ? revenue / spend : null;
 
   // Store metrics straight from Shopify (orders + tickets aren't in the DB).
-  const tz = await primaryTimezone();
   let shopMonth: DaySales | null = null;
   let shopToday: DaySales | null = null;
   if (isShopifyConfigured()) {
@@ -412,74 +461,39 @@ export default async function DashboardPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Ranking · {monthLabel(month)}</CardTitle>
+          <CardTitle className="text-base">
+            Ranking{mode === "month" ? ` · ${monthLabel(month)}` : ""}
+          </CardTitle>
           <CardDescription>
-            Net sales synced from Shopify — rate uses each rep&apos;s store tiers ·
-            total{" "}
-            <span className="font-semibold tabular-nums">
-              {formatMoney(salesTotal, currency)}
-            </span>
+            {mode === "month" ? (
+              <>
+                Net sales synced from Shopify — rate uses each rep&apos;s store
+                tiers · total{" "}
+                <span className="font-semibold tabular-nums">
+                  {formatMoney(salesTotal, currency)}
+                </span>
+              </>
+            ) : (
+              "Attributed live Shopify sales — commission is monthly, so it shows in Month view."
+            )}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {ranking.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No employees yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead className="hidden sm:table-cell">Store</TableHead>
-                  <TableHead className="hidden text-right md:table-cell">Value</TableHead>
-                  <TableHead className="hidden text-right md:table-cell">Discounts</TableHead>
-                  <TableHead className="hidden text-right md:table-cell">Returns</TableHead>
-                  <TableHead className="text-right">Net sales</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead className="text-right">Commission</TableHead>
-                  <TableHead className="hidden text-right lg:table-cell">To next tier</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ranking.map((r, i) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="tabular-nums">{i + 1}</TableCell>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell className="text-muted-foreground hidden sm:table-cell">
-                      {r.store}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
-                      {r.breakdown ? formatMoney(r.breakdown.gross, currency) : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
-                      {r.breakdown && r.breakdown.discounts > 0
-                        ? `−${formatMoney(r.breakdown.discounts, currency)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
-                      {r.breakdown && r.breakdown.returns > 0
-                        ? `−${formatMoney(r.breakdown.returns, currency)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      {formatMoney(r.amount, currency)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{(r.rate * 100).toFixed(1)}%</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoney(r.earned, currency)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums lg:table-cell">
-                      {r.nextTier
-                        ? `${formatMoney(r.nextTier.remaining, currency)} → ${(r.nextTier.rate * 100).toFixed(1)}%`
-                        : "Top tier"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+        <CardContent className="flex flex-col gap-4">
+          <PeriodPills
+            basePath="/admin/dashboard"
+            mode={mode}
+            from={from}
+            to={to}
+            hidden={periodHidden}
+            periods={["month", "today", "week", "custom"]}
+            labels={{ month: monthLabel(month) }}
+          />
+          <SalesRankTable
+            rows={rankRows}
+            currency={currency}
+            showStore
+            showCommission={mode === "month"}
+          />
         </CardContent>
       </Card>
 
