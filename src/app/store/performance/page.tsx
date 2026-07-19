@@ -9,7 +9,7 @@ import { resolveDateRange, spanDays } from "@/lib/date-range";
 import { customRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
 import { getStaffSalesCached } from "@/lib/shopify-range-cache";
 import { formatMoney } from "@/lib/commission";
-import { shortDate } from "@/lib/format-date";
+import { shortDate, monthLabel } from "@/lib/format-date";
 import { DateRangeForm } from "@/components/shared/date-range-form";
 import {
   SalesBreakdownBlock,
@@ -44,6 +44,8 @@ export default async function StorePerformancePage({
     .maybeSingle();
   const tz = loc?.timezone ?? "UTC";
   const bd = businessDate(tz);
+  const month = bd.slice(0, 7);
+  const [year, monthNum] = [Number(bd.slice(0, 4)), Number(bd.slice(5, 7))];
 
   const [
     { data: eventRows },
@@ -51,6 +53,9 @@ export default async function StorePerformancePage({
     { data: employees },
     { data: closeRow },
     { data: shiftRows },
+    { data: monthRows },
+    { data: goalRow },
+    { data: personalGoalRows },
   ] = await Promise.all([
     service
       .from("client_events")
@@ -80,6 +85,24 @@ export default async function StorePerformancePage({
       .eq("date", bd)
       .eq("schedules.status", "published")
       .eq("schedules.location_id", locationId),
+    service
+      .from("monthly_sales")
+      .select("employee_id, amount, employees!inner(location_id)")
+      .eq("month", month)
+      .eq("employees.location_id", locationId),
+    service
+      .from("store_goals")
+      .select("goal_amount, currency")
+      .eq("location_id", locationId)
+      .eq("year", year)
+      .eq("month", monthNum)
+      .maybeSingle(),
+    service
+      .from("employee_goals")
+      .select("employee_id, goal_amount, employees!inner(location_id)")
+      .eq("year", year)
+      .eq("month", monthNum)
+      .eq("employees.location_id", locationId),
   ]);
 
   const roster = employees ?? [];
@@ -116,6 +139,26 @@ export default async function StorePerformancePage({
     .map((e) => ({ id: e.id, name: e.name }));
 
   const daySales = await getDaySalesCached(bd, tz);
+
+  // This month, from the synced monthly_sales table (DB-only — safe on the
+  // 45s refresh; Shopify itself is never called here).
+  const monthAmountOf = new Map(
+    (monthRows ?? []).map((r) => [r.employee_id, Number(r.amount)]),
+  );
+  const monthTotal = [...monthAmountOf.values()].reduce((a, v) => a + v, 0);
+  const monthGoal = goalRow ? Number(goalRow.goal_amount) : 0;
+  const monthCurrency = goalRow?.currency ?? daySales?.currency ?? "USD";
+  const personalGoalOf = new Map(
+    (personalGoalRows ?? []).map((r) => [r.employee_id, Number(r.goal_amount)]),
+  );
+  const monthReps = roster
+    .map((e) => ({
+      name: e.name,
+      amount: monthAmountOf.get(e.id) ?? 0,
+      goal: personalGoalOf.get(e.id) ?? null,
+    }))
+    .filter((r) => r.amount > 0 || r.goal != null)
+    .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
 
   // Range section only fetches when the kiosk asked for a range — the default
   // 45s auto-refresh loop must not add Shopify calls.
@@ -215,6 +258,99 @@ export default async function StorePerformancePage({
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{monthLabel(month)}</CardTitle>
+          <CardDescription>Net sales (synced from Shopify)</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-2xl font-bold tabular-nums">
+                {formatMoney(monthTotal, monthCurrency)}
+              </span>
+              {monthGoal > 0 ? (
+                <span className="text-muted-foreground text-sm tabular-nums">
+                  goal {formatMoney(monthGoal, monthCurrency)} ·{" "}
+                  <span
+                    className={
+                      monthTotal >= monthGoal
+                        ? "font-semibold text-emerald-600"
+                        : "text-foreground font-semibold"
+                    }
+                  >
+                    {Math.round((monthTotal / monthGoal) * 100)}%
+                  </span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground text-sm">no goal set</span>
+              )}
+            </div>
+            {monthGoal > 0 && (
+              <div
+                className="bg-muted h-2.5 w-full overflow-hidden rounded-full"
+                role="progressbar"
+                aria-valuenow={Math.min(Math.round((monthTotal / monthGoal) * 100), 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Store monthly goal progress"
+              >
+                <div
+                  className={
+                    monthTotal >= monthGoal ? "h-full bg-emerald-500" : "bg-primary h-full"
+                  }
+                  style={{
+                    width: `${Math.min((monthTotal / monthGoal) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {monthReps.length > 0 && (
+            <ul className="flex flex-col divide-y">
+              {monthReps.map((r, i) => (
+                <li key={r.name} className="flex flex-col gap-1 py-2">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span>
+                      <span className="text-muted-foreground mr-2 tabular-nums">
+                        {i + 1}.
+                      </span>
+                      <span className="font-medium">{r.name}</span>
+                    </span>
+                    <span className="tabular-nums">
+                      {formatMoney(r.amount, monthCurrency)}
+                      {r.goal != null && r.goal > 0 && (
+                        <span
+                          className={
+                            r.amount >= r.goal
+                              ? "ml-2 font-semibold text-emerald-600"
+                              : "text-muted-foreground ml-2"
+                          }
+                        >
+                          {Math.round((r.amount / r.goal) * 100)}% of{" "}
+                          {formatMoney(r.goal, monthCurrency)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {r.goal != null && r.goal > 0 && (
+                    <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+                      <div
+                        className={
+                          r.amount >= r.goal ? "h-full bg-emerald-500" : "bg-primary h-full"
+                        }
+                        style={{ width: `${Math.min((r.amount / r.goal) * 100, 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

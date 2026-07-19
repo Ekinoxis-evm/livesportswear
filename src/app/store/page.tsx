@@ -9,6 +9,7 @@ import { SalesBoard, type SalesRow } from "@/components/store/sales-board";
 type CheckinRow = {
   employee_id: string;
   arrived_at: string;
+  available_since: string | null;
   left_at: string | null;
   status: string;
   rotation_count: number;
@@ -41,7 +42,7 @@ export default async function StoreSalesPage() {
       service
         .from("floor_checkins")
         .select(
-          "employee_id, arrived_at, left_at, status, rotation_count, bumped_at, manual_pos, attending_count, attending_return_count",
+          "employee_id, arrived_at, available_since, left_at, status, rotation_count, bumped_at, manual_pos, attending_count, attending_return_count",
         )
         .eq("location_id", locationId)
         .eq("business_date", bd),
@@ -76,6 +77,7 @@ export default async function StoreSalesPage() {
     employeeId: c.employee_id,
     name: nameOf.get(c.employee_id) ?? "—",
     arrivedAt: c.arrived_at,
+    availableSince: c.available_since ?? c.arrived_at,
     leftAt: c.left_at,
     status: c.status === "attending" ? "attending" : "available",
     rotationCount: c.rotation_count,
@@ -96,6 +98,7 @@ export default async function StoreSalesPage() {
       turn: r.turn,
       turns: r.rotationCount,
       arrivedLabel: formatInTimeZone(new Date(r.arrivedAt), tz, "HH:mm"),
+      sinceLabel: formatInTimeZone(new Date(r.availableSince), tz, "HH:mm"),
       walkins: r.attendingCount ?? 0,
       returns: r.returnCount ?? 0,
       breakStartedAt: open?.startedAt ?? null,
