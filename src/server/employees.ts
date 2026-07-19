@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth";
 import { generateMagicToken } from "@/lib/magic-token";
+import { AVATAR_COLORS, pickAvatarColor } from "@/lib/avatar-palette";
 import { hashPin, PIN_RE } from "@/lib/kiosk-pin";
 import { inviteEmployee } from "@/server/employee-accounts";
 import {
@@ -67,7 +68,14 @@ export async function createEmployee(
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("employees")
-    .insert({ ...parsed.data, magic_token: generateMagicToken() })
+    .insert({
+      ...parsed.data,
+      // Every employee gets a color even if the form didn't send one.
+      avatar_color:
+        parsed.data.avatar_color ??
+        pickAvatarColor(Math.floor(Math.random() * AVATAR_COLORS.length)),
+      magic_token: generateMagicToken(),
+    })
     .select("id")
     .single();
 
@@ -159,7 +167,13 @@ export async function createEmployeeWithAccess(
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from("employees")
-    .insert({ ...employee, magic_token: generateMagicToken() })
+    .insert({
+      ...employee,
+      avatar_color:
+        employee.avatar_color ??
+        pickAvatarColor(Math.floor(Math.random() * AVATAR_COLORS.length)),
+      magic_token: generateMagicToken(),
+    })
     .select("id")
     .single();
   if (error) return { ok: false, error: dbError(error, EMAIL_TAKEN) };

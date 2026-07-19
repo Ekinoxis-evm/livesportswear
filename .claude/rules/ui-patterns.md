@@ -45,7 +45,13 @@
 - `primary` for primary CTAs only.
 - `destructive` only for destructive actions (delete, force-unpublish).
 - `muted-foreground` for secondary metadata.
-- Shifts on the calendar: colored by `shift_template.color`. Employee avatars colored by `employee.avatar_color`.
+- Shifts on the calendar: colored by `shift_template.color`. Employee colors
+  come from the fixed palette in `src/lib/avatar-palette.ts`, chosen via the
+  `ColorSwatches` picker (never a free-text hex); every employee has one
+  (0038 backfill + server-side default at create). Avatars everywhere use
+  `EmployeeAvatar` (`components/shared/employee-avatar.tsx`): the uploaded
+  profile photo (`employees.avatar_url`, public bucket) when set, else
+  initials on the employee color.
 
 ## Accessibility
 - Every form input has a visible `<Label>`. No placeholders-as-labels.

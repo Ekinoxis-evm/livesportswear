@@ -21,6 +21,7 @@ import {
   type FinishTarget,
 } from "@/components/store/finish-dialog";
 import { QueueLine } from "@/components/store/queue-line";
+import { EmployeeAvatar } from "@/components/shared/employee-avatar";
 import { BreakTimer } from "@/components/store/break-timer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,6 +37,7 @@ export type SalesRow = {
   employeeId: string;
   name: string;
   avatarColor: string | null;
+  avatarUrl: string | null;
   state: "up" | "waiting" | "attending" | "break";
   turn: number | null;
   turns: number; // clients taken today (fairness tally, visible on the line)
@@ -194,7 +196,15 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           <span className="text-primary text-xs font-semibold uppercase tracking-wide">
             Up next
           </span>
-          <p className="text-4xl font-bold">{up.name}</p>
+          <div className="flex items-center gap-4">
+            <EmployeeAvatar
+              name={up.name}
+              color={up.avatarColor}
+              url={up.avatarUrl}
+              className="size-14 text-lg"
+            />
+            <p className="text-4xl font-bold">{up.name}</p>
+          </div>
           <Button
             size="lg"
             className="h-16 w-full text-lg"
@@ -375,6 +385,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 employeeId: r.employeeId,
                 name: r.name,
                 avatarColor: r.avatarColor,
+                avatarUrl: r.avatarUrl,
                 sinceLabel: r.sinceLabel,
                 turns: r.turns,
               }))}

@@ -48,7 +48,7 @@ export default async function StoreSalesPage() {
         .eq("business_date", bd),
       service
         .from("employees")
-        .select("id, name, avatar_color")
+        .select("id, name, avatar_color, avatar_url")
         .eq("location_id", locationId)
         .eq("active", true)
         .order("name"),
@@ -63,6 +63,7 @@ export default async function StoreSalesPage() {
   const roster = employees ?? [];
   const nameOf = new Map(roster.map((e) => [e.id, e.name]));
   const colorOf = new Map(roster.map((e) => [e.id, e.avatar_color]));
+  const photoOf = new Map(roster.map((e) => [e.id, e.avatar_url]));
 
   const breaksOf = new Map<string, BreakRow[]>();
   for (const b of breakRows ?? []) {
@@ -94,6 +95,7 @@ export default async function StoreSalesPage() {
       employeeId: r.employeeId,
       name: r.name,
       avatarColor: colorOf.get(r.employeeId) ?? null,
+      avatarUrl: photoOf.get(r.employeeId) ?? null,
       state: r.state,
       turn: r.turn,
       turns: r.rotationCount,

@@ -10,7 +10,7 @@ You are the **email template specialist** for Live.
 - `src/lib/emails/*.tsx` — React Email templates
 - `src/lib/resend.ts` — `sendSafe()` wrapper + types
 - `src/lib/ical.ts` — when an ICS attachment is part of an email flow
-- `tests/*.spec.ts` for email/ICS snapshots (create `tests/emails.spec.ts` when adding the first template snapshot — none exists yet)
+- `tests/*.spec.ts` for email/ICS coverage (`ics.spec.ts`, `day-report-csv.spec.ts`, `day-report-xml.spec.ts` exist; create `tests/emails.spec.ts` for the first HTML template snapshot)
 
 ## What you guarantee
 1. Every email template renders to plain text AND HTML, and the plain-text version is meaningful.

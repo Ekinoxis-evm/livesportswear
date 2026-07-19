@@ -34,7 +34,7 @@ export default async function StoreCheckinPage() {
         .order("arrived_at"),
       service
         .from("employees")
-        .select("id, name, avatar_color")
+        .select("id, name, avatar_color, avatar_url")
         .eq("location_id", locationId)
         .eq("active", true)
         .order("name"),
@@ -48,6 +48,7 @@ export default async function StoreCheckinPage() {
   const roster = employees ?? [];
   const nameOf = new Map(roster.map((e) => [e.id, e.name]));
   const colorOf = new Map(roster.map((e) => [e.id, e.avatar_color]));
+  const photoOf = new Map(roster.map((e) => [e.id, e.avatar_url]));
 
   // Private bucket — thumbnails only via short-lived signed URLs (today's rows only).
   const paths = (checkinRows ?? [])
@@ -78,6 +79,7 @@ export default async function StoreCheckinPage() {
       employeeId: c.employee_id,
       name: nameOf.get(c.employee_id) ?? "—",
       avatarColor: colorOf.get(c.employee_id) ?? null,
+      avatarUrl: photoOf.get(c.employee_id) ?? null,
       arrivedLabel: formatInTimeZone(new Date(c.arrived_at), tz, "HH:mm"),
       leftLabel: c.left_at ? formatInTimeZone(new Date(c.left_at), tz, "HH:mm") : null,
       hours: workedHours(c.arrived_at, c.left_at),
@@ -103,7 +105,12 @@ export default async function StoreCheckinPage() {
   );
   const offFloor: RosterEntry[] = roster
     .filter((e) => !onFloor.has(e.id))
-    .map((e) => ({ id: e.id, name: e.name, avatarColor: e.avatar_color }));
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      avatarColor: e.avatar_color,
+      avatarUrl: e.avatar_url,
+    }));
 
   return <CheckinBoard checkins={checkins} offFloor={offFloor} />;
 }

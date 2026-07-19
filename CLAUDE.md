@@ -20,11 +20,11 @@ Next.js 16 (App Router) · TypeScript · Tailwind v4 + shadcn/ui (Base UI) · Su
 - `src/lib/supabase/` — Supabase clients (server, browser, service-role).
 - `src/app/admin/` — admin UI (role=admin). Performance is a route-tab hub (`performance/{daily,sales,rewards}`); `/admin/commission` is the "Sales & Rewards setup" page; old `/admin/{sales,rewards}` are redirect stubs.
 - `src/app/portal/` — employee portal (role=employee): Performance / Schedule / Rewards / Settings.
-- `src/app/store/` — the kiosk (role=store): Sales / Check-in / Performance / Rewards, 45s auto-refresh.
+- `src/app/store/` — the kiosk (role=store): Check-in / Schedule / Sales (center) / Performance / Rewards, 45s auto-refresh.
 - `src/app/s/[token]/` + `src/app/w/[token]/` — public magic-token pages (employee schedule + ICS; store week + sales ranking).
 - `src/app/api/cron/` — `shopify-sync` (also finalizes ended contests), `stale-checkins`, `photo-retention`, `meta-sync`. All check `CRON_SECRET`.
 - `src/lib/emails/` — React Email templates (schedule-published, day-report, credentials, time-off-decision).
-- `supabase/migrations/` — append-only, currently through `0030`.
+- `supabase/migrations/` — append-only, currently through `0038`.
 - `.claude/` — agents, commands, hooks, rules, project skills.
 
 ## Coding standards (short version)
@@ -52,4 +52,4 @@ Next.js 16 (App Router) · TypeScript · Tailwind v4 + shadcn/ui (Base UI) · Su
 - Adding a scheduling rule: `/add-shift-rule` slash command
 
 ## Current state
-In production since 2026-07. Live: scheduling + publish emails/ICS, time-off, store kiosk (PIN/photo check-in, rotation queue, multi-client, breaks, undo, close-day report + CSV), Shopify net-sales sync (10-min GitHub Action + daily cron) with 2024→now history, dashboards + year charts, custom date-range sales, commission tiers, sales contests v3 (prize-centric: position/min-sales/store-goal/personal-goal conditions; monthly store + personal goal modes), per-rep monthly goals, per-location admins, security-hardened RLS helpers.
+In production since 2026-07. Live: scheduling + publish emails/ICS, time-off, store kiosk (PIN/photo check-in, FIFO turn order by available_since with bump/drag overrides, multi-client, breaks on the Check-in tab, undo, close-day report + CSV/XML/PDF), 5-tab kiosk nav (Check-in · Schedule · SALES center button · Performance · Rewards) with a read-only Schedule page (today/week), Shopify net-sales sync (10-min GitHub Action + daily cron) with 2024→now history, dashboards + year charts (month Ranking with commission lives on the Dashboard), the **sales-period module** (PeriodPills + SalesRankTable: Today · Week · Month · Custom — the canonical ranked-sales pattern on kiosk/dashboard/admin-sales/public week page), commission tiers, sales contests v3, per-rep monthly goals, per-location admins, security-hardened RLS helpers, **inventory suite** (barcode counts with confirm-scan + qty, product-type categories, camera scanning incl. iPhone via zxing ponyfill + guided scan zone, scanner-connection indicator, store inventory book, staged Shopify push draft→review→write with write_inventory), **sold→Shopify order + customer linking** (client-history seed: order/customer on client_events, shown in day reports), employee color palette picker + kiosk profile photos, and a 5-area audit hardening pass (scoped store-account admin, atomic finish, true book replace, per-store portal rank, close-day idempotency).

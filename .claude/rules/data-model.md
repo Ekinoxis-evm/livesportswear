@@ -36,7 +36,7 @@ A worker. Always belongs to one location in v1 (no multi-location reps yet).
 - `name text not null`
 - `email text not null unique`
 - `phone text`
-- `avatar_color text`
+- `avatar_color text` — from the app palette (`lib/avatar-palette.ts`); never null since 0038 backfill + create-time default
 - `role text not null` — enum: `sales_rep | shift_lead | store_manager`
 - `weekly_hour_target int not null default 40`
 - `max_days_per_week int not null default 5`        — hard rule
