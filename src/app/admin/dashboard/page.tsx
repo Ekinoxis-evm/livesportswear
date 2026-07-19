@@ -15,7 +15,22 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatMoney } from "@/lib/commission";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  asTiers,
+  commissionFor,
+  formatMoney,
+  resolveTiers,
+  type CommissionTier,
+} from "@/lib/commission";
+import type { SalesBreakdown } from "@/lib/sales-breakdown";
 import { formatPct } from "@/lib/conversion";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales, type DaySales } from "@/lib/shopify";
@@ -125,15 +140,18 @@ export default async function DashboardPage({
   };
 
   const [salesRes, goalsRes, employeesRes, eventsRes, adsRes, cfgRes, yearSalesRes, yearGoalsRes] = await Promise.all([
-    supabase.from("monthly_sales").select("employee_id, amount").eq("month", month),
+    supabase
+      .from("monthly_sales")
+      .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
+      .eq("month", month),
     supabase
       .from("store_goals")
-      .select("location_id, goal_amount")
+      .select("location_id, goal_amount, tiers")
       .eq("year", year)
       .eq("month", monthNum),
     supabase
       .from("employees")
-      .select("id, name, location_id, avatar_color")
+      .select("id, name, location_id, avatar_color, locations(name)")
       .eq("active", true),
     supabase
       .from("client_events")
@@ -145,7 +163,7 @@ export default async function DashboardPage({
       .select("spend, revenue")
       .gte("date", monthStart)
       .lt("date", nextMonthStart),
-    supabase.from("commission_config").select("currency").eq("id", 1).maybeSingle(),
+    supabase.from("commission_config").select("currency, tiers").eq("id", 1).maybeSingle(),
     supabase
       .from("monthly_sales")
       .select("employee_id, month, amount")
@@ -180,10 +198,39 @@ export default async function DashboardPage({
       pct: goal > 0 ? sales / goal : null,
     };
   });
-  const salesRanking = monthEmployees
-    .map((e) => ({ name: e.name, amount: salesByEmployee.get(e.id) ?? 0 }))
+  // The month ranking with commission — rate uses each rep's store tiers for
+  // the browsed month (past months rank with that month's tiers).
+  const globalTiers: CommissionTier[] = asTiers(cfgRes.data?.tiers);
+  const monthTiersByLoc: Record<string, CommissionTier[]> = {};
+  for (const g of goalsRes.data ?? []) {
+    monthTiersByLoc[g.location_id] = resolveTiers(g.tiers, globalTiers);
+  }
+  const salesRowBy = new Map((salesRes.data ?? []).map((r) => [r.employee_id, r]));
+  const ranking = monthEmployees
+    .map((e) => {
+      const row = salesRowBy.get(e.id);
+      const amount = Number(row?.amount ?? 0);
+      const breakdown: SalesBreakdown | null =
+        row?.gross_amount != null
+          ? {
+              gross: Number(row.gross_amount),
+              discounts: Number(row.discounts_amount ?? 0),
+              returns: Number(row.returns_amount ?? 0),
+              net: amount,
+            }
+          : null;
+      const tiers = monthTiersByLoc[e.location_id] ?? globalTiers;
+      return {
+        id: e.id,
+        name: e.name,
+        store: (e.locations as { name: string } | null)?.name ?? "—",
+        amount,
+        breakdown,
+        ...commissionFor(amount, tiers),
+      };
+    })
     .sort((a, b) => b.amount - a.amount);
-  const salesTotal = salesRanking.reduce((a, r) => a + r.amount, 0);
+  const salesTotal = ranking.reduce((a, r) => a + r.amount, 0);
 
   const yearRows = (yearSalesRes.data ?? []).map((r) => ({
     employee_id: r.employee_id,
@@ -365,38 +412,73 @@ export default async function DashboardPage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">
-            Sales by employee · {monthLabel(month)}
-          </CardTitle>
+          <CardTitle className="text-base">Ranking · {monthLabel(month)}</CardTitle>
           <CardDescription>
-            Net sales synced from Shopify POS · store total{" "}
+            Net sales synced from Shopify — rate uses each rep&apos;s store tiers ·
+            total{" "}
             <span className="font-semibold tabular-nums">
               {formatMoney(salesTotal, currency)}
             </span>
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {salesRanking.length === 0 ? (
+          {ranking.length === 0 ? (
             <p className="text-muted-foreground text-sm">No employees yet.</p>
           ) : (
-            <ul className="flex flex-col divide-y">
-              {salesRanking.map((r, i) => (
-                <li
-                  key={r.name + i}
-                  className="flex items-center justify-between py-2 text-sm"
-                >
-                  <span>
-                    <span className="text-muted-foreground mr-2 tabular-nums">
-                      {i + 1}.
-                    </span>
-                    {r.name}
-                  </span>
-                  <span className="font-medium tabular-nums">
-                    {formatMoney(r.amount, currency)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Employee</TableHead>
+                  <TableHead className="hidden sm:table-cell">Store</TableHead>
+                  <TableHead className="hidden text-right md:table-cell">Value</TableHead>
+                  <TableHead className="hidden text-right md:table-cell">Discounts</TableHead>
+                  <TableHead className="hidden text-right md:table-cell">Returns</TableHead>
+                  <TableHead className="text-right">Net sales</TableHead>
+                  <TableHead className="text-right">Rate</TableHead>
+                  <TableHead className="text-right">Commission</TableHead>
+                  <TableHead className="hidden text-right lg:table-cell">To next tier</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ranking.map((r, i) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="tabular-nums">{i + 1}</TableCell>
+                    <TableCell className="font-medium">{r.name}</TableCell>
+                    <TableCell className="text-muted-foreground hidden sm:table-cell">
+                      {r.store}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
+                      {r.breakdown ? formatMoney(r.breakdown.gross, currency) : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
+                      {r.breakdown && r.breakdown.discounts > 0
+                        ? `−${formatMoney(r.breakdown.discounts, currency)}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
+                      {r.breakdown && r.breakdown.returns > 0
+                        ? `−${formatMoney(r.breakdown.returns, currency)}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {formatMoney(r.amount, currency)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant="secondary">{(r.rate * 100).toFixed(1)}%</Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(r.earned, currency)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground hidden text-right tabular-nums lg:table-cell">
+                      {r.nextTier
+                        ? `${formatMoney(r.nextTier.remaining, currency)} → ${(r.nextTier.rate * 100).toFixed(1)}%`
+                        : "Top tier"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

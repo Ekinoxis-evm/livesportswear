@@ -8,15 +8,9 @@ import { resolveDateRange, spanDays } from "@/lib/date-range";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { customRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
 import { getStaffSalesCached, getShopSalesCached } from "@/lib/shopify-range-cache";
-import {
-  commissionFor,
-  formatMoney,
-  asTiers,
-  resolveTiers,
-  type CommissionTier,
-} from "@/lib/commission";
+import { formatMoney } from "@/lib/commission";
 import { repMonthlyData } from "@/lib/monthly-series";
-import { monthLabel, shortDate } from "@/lib/format-date";
+import { shortDate } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -25,7 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -37,7 +30,6 @@ import {
 import { DateRangeForm } from "@/components/shared/date-range-form";
 import { SalesBreakdownBlock } from "@/components/shared/sales-breakdown-view";
 import { sumBreakdowns, zeroBreakdown, type SalesBreakdown } from "@/lib/sales-breakdown";
-import { SyncSalesButton } from "@/components/commission/sync-sales-button";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
 export default async function SalesTabPage({
@@ -48,7 +40,6 @@ export default async function SalesTabPage({
   const sp = await searchParams;
   const supabase = await createServerClient();
   const today = businessDate(await primaryTimezone());
-  const month = today.slice(0, 7);
   const currentYear = Number(today.slice(0, 4));
   const monthNum = Number(today.slice(5, 7));
   const chartYear =
@@ -82,69 +73,22 @@ export default async function SalesTabPage({
     return `/admin/performance/sales?${p}`;
   };
 
-  const [
-    { data: config },
-    { data: goalRows },
-    { data: employees },
-    { data: monthSales },
-    { data: yearSales },
-  ] = await Promise.all([
-    supabase.from("commission_config").select("currency, tiers").eq("id", 1).maybeSingle(),
-    supabase
-      .from("store_goals")
-      .select("location_id, year, month, tiers")
-      .eq("year", currentYear)
-      .eq("month", monthNum),
-    // No active filter: former reps with history belong in past charts;
-    // the series builder only includes employees with sales in the year.
-    supabase
-      .from("employees")
-      .select("id, name, location_id, avatar_color, active, shopify_staff_id, locations(name)")
-      .order("name"),
-    supabase
-      .from("monthly_sales")
-      .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
-      .eq("month", month),
-    supabase
-      .from("monthly_sales")
-      .select("employee_id, month, amount")
-      .like("month", `${chartYear}-%`),
-  ]);
+  const [{ data: config }, { data: employees }, { data: yearSales }] =
+    await Promise.all([
+      supabase.from("commission_config").select("currency").eq("id", 1).maybeSingle(),
+      // No active filter: former reps with history belong in past charts;
+      // the series builder only includes employees with sales in the year.
+      supabase
+        .from("employees")
+        .select("id, name, location_id, avatar_color, active, shopify_staff_id")
+        .order("name"),
+      supabase
+        .from("monthly_sales")
+        .select("employee_id, month, amount")
+        .like("month", `${chartYear}-%`),
+    ]);
   const currency = config?.currency ?? "USD";
-  const globalTiers = asTiers(config?.tiers);
-  const monthTiersByLoc: Record<string, CommissionTier[]> = {};
-  for (const g of goalRows ?? []) {
-    monthTiersByLoc[g.location_id] = resolveTiers(g.tiers, globalTiers);
-  }
   const allEmployees = employees ?? [];
-
-  const salesBy = new Map((monthSales ?? []).map((s) => [s.employee_id, s]));
-  const ranking = allEmployees
-    .filter((e) => e.active)
-    .map((e) => {
-      const row = salesBy.get(e.id);
-      const amount = Number(row?.amount ?? 0);
-      // History synced before the breakdown columns existed has them null.
-      const breakdown: SalesBreakdown | null =
-        row?.gross_amount != null
-          ? {
-              gross: Number(row.gross_amount),
-              discounts: Number(row.discounts_amount ?? 0),
-              returns: Number(row.returns_amount ?? 0),
-              net: amount,
-            }
-          : null;
-      const tiers = monthTiersByLoc[e.location_id] ?? globalTiers;
-      return {
-        id: e.id,
-        name: e.name,
-        store: (e.locations as { name: string } | null)?.name ?? "—",
-        amount,
-        breakdown,
-        ...commissionFor(amount, tiers),
-      };
-    })
-    .sort((a, b) => b.amount - a.amount);
 
   const { series: repSeries, data: repData } = repMonthlyData(
     (yearSales ?? []).map((r) => ({
@@ -190,115 +134,6 @@ export default async function SalesTabPage({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Ranking · this month */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">Ranking · {monthLabel(month)}</CardTitle>
-              <CardDescription>
-                By sales this month — rate uses each rep&apos;s store tiers.
-              </CardDescription>
-            </div>
-            <SyncSalesButton />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {ranking.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No active employees.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead className="hidden sm:table-cell">Store</TableHead>
-                  <TableHead className="hidden text-right md:table-cell">Value</TableHead>
-                  <TableHead className="hidden text-right md:table-cell">Discounts</TableHead>
-                  <TableHead className="hidden text-right md:table-cell">Returns</TableHead>
-                  <TableHead className="text-right">Net sales</TableHead>
-                  <TableHead className="text-right">Rate</TableHead>
-                  <TableHead className="text-right">Commission</TableHead>
-                  <TableHead className="hidden text-right lg:table-cell">To next tier</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ranking.map((r, i) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="tabular-nums">{i + 1}</TableCell>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell className="text-muted-foreground hidden sm:table-cell">
-                      {r.store}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
-                      {r.breakdown ? formatMoney(r.breakdown.gross, currency) : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
-                      {r.breakdown && r.breakdown.discounts > 0
-                        ? `−${formatMoney(r.breakdown.discounts, currency)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums md:table-cell">
-                      {r.breakdown && r.breakdown.returns > 0
-                        ? `−${formatMoney(r.breakdown.returns, currency)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      {formatMoney(r.amount, currency)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{(r.rate * 100).toFixed(1)}%</Badge>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoney(r.earned, currency)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden text-right tabular-nums lg:table-cell">
-                      {r.nextTier
-                        ? `${formatMoney(r.nextTier.remaining, currency)} → ${(r.nextTier.rate * 100).toFixed(1)}%`
-                        : "Top tier"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Rep chart · year */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide">
-          Sales by rep · {chartYear}
-        </h2>
-        <div className="flex items-center gap-1">
-          <Link
-            href={qs({ year: chartYear - 1 })}
-            aria-label="Previous year"
-            className="hover:bg-muted rounded-md border p-1.5"
-          >
-            <ChevronLeft className="size-4" />
-          </Link>
-          {chartYear !== currentYear && (
-            <Link
-              href={qs({ year: currentYear })}
-              className="px-1 text-sm underline-offset-4 hover:underline"
-            >
-              This year
-            </Link>
-          )}
-          {chartYear < currentYear && (
-            <Link
-              href={qs({ year: chartYear + 1 })}
-              aria-label="Next year"
-              className="hover:bg-muted rounded-md border p-1.5"
-            >
-              <ChevronRight className="size-4" />
-            </Link>
-          )}
-        </div>
-      </div>
-      <RepSalesChart year={chartYear} currency={currency} series={repSeries} data={repData} />
-
       {/* Custom range · live Shopify */}
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wide">Custom range</h2>
@@ -435,6 +270,40 @@ export default async function SalesTabPage({
           )}
         </>
       )}
+
+      {/* Rep chart · year */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide">
+          Sales by rep · {chartYear}
+        </h2>
+        <div className="flex items-center gap-1">
+          <Link
+            href={qs({ year: chartYear - 1 })}
+            aria-label="Previous year"
+            className="hover:bg-muted rounded-md border p-1.5"
+          >
+            <ChevronLeft className="size-4" />
+          </Link>
+          {chartYear !== currentYear && (
+            <Link
+              href={qs({ year: currentYear })}
+              className="px-1 text-sm underline-offset-4 hover:underline"
+            >
+              This year
+            </Link>
+          )}
+          {chartYear < currentYear && (
+            <Link
+              href={qs({ year: chartYear + 1 })}
+              aria-label="Next year"
+              className="hover:bg-muted rounded-md border p-1.5"
+            >
+              <ChevronRight className="size-4" />
+            </Link>
+          )}
+        </div>
+      </div>
+      <RepSalesChart year={chartYear} currency={currency} series={repSeries} data={repData} />
     </div>
   );
 }
