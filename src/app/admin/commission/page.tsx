@@ -126,7 +126,7 @@ export default async function CommissionPage() {
         <SyncSalesButton />
       </div>
 
-      <Card>
+      <Card id="commission" className="scroll-mt-6">
         <CardHeader>
           <CardTitle className="text-base">Store setup — goal &amp; commission</CardTitle>
           <CardDescription>
@@ -178,7 +178,7 @@ export default async function CommissionPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="rewards" className="scroll-mt-6">
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <div>

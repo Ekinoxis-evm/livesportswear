@@ -35,7 +35,7 @@
 ## Layout
 - Single fixed-width container `max-w-7xl mx-auto` for admin pages.
 - The schedule grid is full-width, scrolls horizontally on narrow screens.
-- Sidebar nav (left) on desktop; fixed BOTTOM bar on mobile (`admin-mobile-nav.tsx`, driven by the `primary` flag in `NAV_ITEMS`). Performance is a route-tab hub (`performance-tabs.tsx`).
+- Sidebar nav (left) on desktop; fixed BOTTOM bar on mobile (`admin-mobile-nav.tsx`, driven by the `primary` flag in `NAV_ITEMS`; the "More" sheet uses `flatNav()`). The sidebar groups team routes under an **Employees** section (Profiles · Schedule · Performance · Rewards · Commission) — grouping only, no route moves. Performance is a route-tab hub (`performance-tabs.tsx`).
 
 ## Density
 - Comfortable but not airy. Cards use `p-4` to `p-6`. Tables use `py-2`.

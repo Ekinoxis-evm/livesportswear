@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
-import { NAV_ITEMS, isActive } from "@/components/shared/admin-nav";
+import { NAV_ITEMS, flatNav, isActive } from "@/components/shared/admin-nav";
 import { signOut } from "@/server/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export function AdminMobileNav({ email }: { email: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const primary = NAV_ITEMS.filter((i) => i.primary);
+  const sheetItems = flatNav();
 
   return (
     <nav className="bg-background fixed inset-x-0 bottom-0 z-40 flex border-t md:hidden">
@@ -58,12 +59,12 @@ export function AdminMobileNav({ email }: { email: string }) {
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
           <div className="flex flex-col gap-1 px-4 pb-4">
-            {NAV_ITEMS.map((item) => {
+            {sheetItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(pathname, item.href);
               return (
                 <Link
-                  key={item.href}
+                  key={item.label}
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={cn(
