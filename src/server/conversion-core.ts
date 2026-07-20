@@ -20,25 +20,27 @@ import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
 import type { ActionResult } from "@/server/shared";
 
 /**
- * Emails of admins who should receive THIS location's daily report: master
- * admins always; location-scoped admins only when admin_locations maps them
- * to the location (a scoped admin must never see another store's numbers).
+ * The editable recipient list for a location's daily report (store_report_recipients),
+ * seeded from the admins at migration time and freely edited since. Exported so
+ * the admin UI reads the same source. Order is stable by created_at.
+ */
+export async function managedReportEmails(locationId: string): Promise<string[]> {
+  const service = createServiceClient();
+  const { data } = await service
+    .from("store_report_recipients")
+    .select("email")
+    .eq("location_id", locationId)
+    .order("created_at", { ascending: true });
+  return (data ?? []).map((r) => r.email);
+}
+
+/**
+ * Everyone who receives the daily report — the managed list. The
+ * STORE_REPORT_EMAIL env fallback applies only when the list is empty, so a
+ * store is never left unable to receive its report.
  */
 async function reportRecipients(locationId: string): Promise<string[]> {
-  const service = createServiceClient();
-  const [{ data }, { data: mappings }] = await Promise.all([
-    service.auth.admin.listUsers(),
-    service.from("admin_locations").select("admin_user_id").eq("location_id", locationId),
-  ]);
-  const allowed = new Set((mappings ?? []).map((m) => m.admin_user_id));
-  const users = data?.users ?? [];
-  const recipients = users.filter((u) => {
-    const meta = u.app_metadata as { role?: string; admin_scope?: string } | undefined;
-    if (meta?.role !== "admin") return false;
-    if (meta.admin_scope === "location") return allowed.has(u.id);
-    return true; // master admin (no scope claim, or 'master')
-  });
-  const emails = recipients.map((u) => u.email).filter((e): e is string => Boolean(e));
+  const emails = await managedReportEmails(locationId);
   const fallback = process.env.STORE_REPORT_EMAIL;
   return emails.length ? emails : fallback ? [fallback] : [];
 }
@@ -85,7 +87,7 @@ type DayReportData = {
   checkinCount: number;
 };
 
-async function buildDayReportData(locationId: string): Promise<DayReportData> {
+export async function buildDayReportData(locationId: string): Promise<DayReportData> {
   const service = createServiceClient();
 
   const { data: loc } = await service
@@ -388,6 +390,21 @@ export async function closeDayFor(closer: {
     return { ok: false, error: upErr.message };
   }
 
+  await sendDayReport(d, closer.name);
+  return { ok: true };
+}
+
+/**
+ * Render the report PDF + email and send it to every recipient in `d`. Shared
+ * by the real close (`closeDayFor`) and the admin "Send test report" preview.
+ * When `test`, the subject is prefixed `[TEST] ` and NO store_day_closes row is
+ * written (the caller of the test path skips the insert entirely).
+ */
+export async function sendDayReport(
+  d: DayReportData,
+  closedByName: string,
+  opts: { test?: boolean } = {},
+): Promise<void> {
   const money = (v: number | null) =>
     v === null ? "—" : formatMoney(v, d.currency);
   const pdf = await renderToBuffer(
@@ -407,15 +424,16 @@ export async function closeDayFor(closer: {
     { filename: `daily-report-${d.bd}.xml`, content: d.xml },
     { filename: `daily-report-${d.bd}.pdf`, content: pdf.toString("base64") },
   ];
+  const subject = opts.test ? `[TEST] ${d.subject}` : d.subject;
 
   for (const to of d.recipients) {
     await sendSafe({
       to,
-      subject: d.subject,
+      subject,
       react: DayReportEmail({
         locationName: d.locName,
         businessDate: `${weekdayName(d.bd)} · ${shortDate(d.bd)}`,
-        closedByName: closer.name,
+        closedByName,
         attended: d.t.attended,
         sold: d.t.sold,
         contacts: d.t.contacts,
@@ -447,6 +465,4 @@ export async function closeDayFor(closer: {
       attachments,
     });
   }
-
-  return { ok: true };
 }

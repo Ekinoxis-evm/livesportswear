@@ -20,7 +20,7 @@ import { formatInTimeZone } from "date-fns-tz";
  * conversion-core). Same source rows as the CSV/XML; money is NET sales.
  */
 
-const BRAND = "#1f5240";
+const BRAND = "#4a3a32";
 
 const s = StyleSheet.create({
   page: { padding: 32, fontSize: 9, fontFamily: "Helvetica", color: "#1d1d1d" },

@@ -58,6 +58,10 @@ pnpm build
 
 CI runs the same. If you can't get them green, hand back to the user with a clear blocker.
 
+## Applying migrations
+
+Migration files are numbered (`0001..NNNN`), but **`supabase db push` does not work here** — the remote history uses timestamp IDs it can't reconcile with the numbered files. Apply to prod via the Supabase **Management API query endpoint** (`POST /v1/projects/{ref}/database/query`); the exact `curl` is in `.claude/commands/db-migrate.md`. Leave the actual apply to the operator (the Supabase MCP is read-only and DB writes are permission-gated).
+
 ## Never do
 
 - `supabase db reset` against anything that isn't `http://127.0.0.1`.

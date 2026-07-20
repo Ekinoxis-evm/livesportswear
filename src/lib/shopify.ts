@@ -438,6 +438,27 @@ export async function lookupVariantByBarcode(
 }
 
 /**
+ * Resolve one SKU to its variant; null when not in the catalog. Receiving docs
+ * often carry a SKU/style code but no barcode — this is the fallback match after
+ * `lookupVariantByBarcode`. Returns the same shape (incl. barcode) so a matched
+ * line still counts by barcode downstream.
+ */
+export async function lookupVariantBySku(sku: string): Promise<VariantHit | null> {
+  const sanitized = sku.replace(/["\\()]/g, "").trim();
+  if (!sanitized) return null;
+  const data = await shopifyGraphql<VariantNodes>(
+    `query($q: String!) {
+      productVariants(first: 1, query: $q) {
+        nodes { barcode sku title inventoryQuantity product { title productType } }
+      }
+    }`,
+    { q: `sku:${sanitized}` },
+  );
+  const v = data.productVariants.nodes[0];
+  return v ? variantHit(v) : null;
+}
+
+/**
  * The whole catalog's variants with expected stock — the finalize sweep that
  * finds what a physical count never scanned. Paginated; ~250/page over the
  * full catalog, so callers run it server-side once per finalize, never per scan.

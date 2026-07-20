@@ -51,79 +51,79 @@
 
 :root {
   color-scheme: light;
-  /* LIVE! brand light — cream ground, white surfaces, forest-green accent
-     (public/branding.md neutrals; green ties to the reforestation identity). */
-  --background: #f4f0f0;
+  /* LIVE! brand light — warm sepia ground (the "Sepia Brown" hero,
+     public/colorfull.png), white surfaces, deep-sepia accent. */
+  --background: #c8b8a9;
   --foreground: #1d1d1d;
   --card: #ffffff;
   --card-foreground: #1d1d1d;
   --popover: #ffffff;
   --popover-foreground: #1d1d1d;
-  --primary: #1f5240;
+  --primary: #4a3a32;
   --primary-foreground: #f4f0f0;
-  --secondary: #e9e5e0;
+  --secondary: #ded2c4;
   --secondary-foreground: #1d1d1d;
-  --muted: #e9e5e0;
-  --muted-foreground: #6b655e;
-  --accent: #e4ede7;
-  --accent-foreground: #1f5240;
+  --muted: #ded2c4;
+  --muted-foreground: #6b5e52;
+  --accent: #e7ded2;
+  --accent-foreground: #4a3a32;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: #dcd6cf;
-  --input: #dcd6cf;
-  --ring: #1f5240;
-  /* Categorical series slots — green leads for the brand, then hue-distinct
+  --border: #b9a996;
+  --input: #b9a996;
+  --ring: #4a3a32;
+  /* Categorical series slots — warm brand brown leads, then hue-distinct
      steps; ordering CVD-validated on the white card surface (dataviz skill). */
-  --chart-1: #008300;
+  --chart-1: #6b4a34;
   --chart-2: #2a78d6;
   --chart-3: #eda100;
   --chart-4: #4a3aa7;
   --chart-5: #e34948;
   --radius: 0.625rem;
-  --sidebar: #16352a;
+  --sidebar: #2c2926;
   --sidebar-foreground: #f4f0f0;
-  --sidebar-primary: #1f5240;
+  --sidebar-primary: #4a3a32;
   --sidebar-primary-foreground: #f4f0f0;
   --sidebar-accent: #f4f0f0;
-  --sidebar-accent-foreground: #16352a;
+  --sidebar-accent-foreground: #2c2926;
   --sidebar-border: rgb(244 240 240 / 0.12);
-  --sidebar-ring: #7fb89e;
+  --sidebar-ring: #a98e77;
 }
 
 .dark {
   color-scheme: dark;
-  /* LIVE! brand dark — warm neutrals (public/branding.md), forest-green accent. */
-  --background: #1a1714;
+  /* LIVE! brand dark — warm sepia neutrals (public/branding.md), tan accent. */
+  --background: #1a1613;
   --foreground: #f4f0f0;
-  --card: #25211c;
+  --card: #262019;
   --card-foreground: #f4f0f0;
-  --popover: #25211c;
+  --popover: #262019;
   --popover-foreground: #f4f0f0;
-  --primary: #5ca987;
-  --primary-foreground: #10261d;
-  --secondary: #2d2926;
+  --primary: #c8a98c;
+  --primary-foreground: #241b14;
+  --secondary: #2d2520;
   --secondary-foreground: #f4f0f0;
-  --muted: #2d2926;
+  --muted: #2d2520;
   --muted-foreground: #a89f95;
-  --accent: #2d2926;
+  --accent: #2d2520;
   --accent-foreground: #f4f0f0;
   --destructive: oklch(0.704 0.191 22.216);
   --border: rgb(244 240 240 / 0.1);
   --input: rgb(244 240 240 / 0.14);
-  --ring: #5ca987;
+  --ring: #c8a98c;
   /* Same hues stepped for the dark card surface, validated as a set. */
-  --chart-1: #008300;
+  --chart-1: #b78a5f;
   --chart-2: #3987e5;
   --chart-3: #c98500;
   --chart-4: #9085e9;
   --chart-5: #e66767;
-  --sidebar: #16352a;
+  --sidebar: #2c2926;
   --sidebar-foreground: #f4f0f0;
-  --sidebar-primary: #5ca987;
-  --sidebar-primary-foreground: #10261d;
+  --sidebar-primary: #c8a98c;
+  --sidebar-primary-foreground: #241b14;
   --sidebar-accent: #f4f0f0;
-  --sidebar-accent-foreground: #16352a;
+  --sidebar-accent-foreground: #2c2926;
   --sidebar-border: rgb(244 240 240 / 0.1);
-  --sidebar-ring: #7fb89e;
+  --sidebar-ring: #a98e77;
 }
 
 @layer base {

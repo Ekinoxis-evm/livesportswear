@@ -153,6 +153,23 @@ keys are connected.
   net-sales decomposition at close; null on days closed before 0031
 - `unique (location_id, business_date)`
 
+### `store_report_recipients` (added 0039)
+The **editable** recipient list for a store's daily Close-Day report and the sole
+source of truth for `reportRecipients` (`src/server/conversion-core.ts`) — the
+`STORE_REPORT_EMAIL` env fallback applies only when the list is empty. Seeded at
+migration time from each location's current admin emails (master admins
+everywhere; scoped admins for their mapped locations — the rule
+`adminReportEmails` applied), then freely edited: an admin adds outside addresses
+(owner/accountant) and can remove **any** recipient, including the seeded admins.
+New admins added later do NOT auto-appear (the list owns membership). Managed from
+the admin Performance→Daily page (add/remove + a "Send test report" button that
+emails the current list with a `[TEST]` subject and writes no close row).
+- `id uuid pk`
+- `location_id uuid fk -> locations (on delete cascade)`
+- `email text not null`, `created_by uuid` (admin user), `created_at`
+- unique index `(location_id, lower(email))` (case-insensitive), index `(location_id)`
+- RLS: admin-only, location-scoped via `admin_can_access_location(location_id)`.
+
 ### `store_goals` (added 0009)
 Monthly store sales target — 12 months/year per location. Surfaced as progress on
 the admin dashboard.
@@ -298,18 +315,37 @@ restores instant +1 for fast rack scanning. UI label for Shopify's stock is
 is pure in `src/lib/inventory-count.ts`; Shopify lookups in
 `lookupVariantByBarcode` / `fetchAllTrackedVariants` (`src/lib/shopify.ts`).
 - `inventory_counts`: `id`, `location_id fk`, `status ('open'|'final')`,
-  `note`, `started_by` (admin user), `started_at`, `finalized_at`,
-  `expected_units`, `counted_units` (snapshotted at finalize). Partial unique
-  index: ONE open count per location.
+  `kind ('count'|'restock')` (0040, default `'count'`), `note`, `started_by`
+  (admin user), `started_at`, `finalized_at`, `expected_units`,
+  `counted_units` (snapshotted at finalize), `document_path` (0040, restock
+  only — the uploaded arrival doc in the private `receiving-docs` bucket).
+  Partial unique index: ONE open session per **(location, kind)** (0040 — so a
+  Counting and a New Stock session can be open at once).
 - `inventory_count_items`: `count_id fk cascade`, `barcode`, `sku`,
   `product_title`, `product_type` (Shopify productType, added 0035; null on
   older rows), `variant_title`, `qty`, `expected` (Shopify qty at first
   scan; finalize sweeps the catalog and inserts qty-0 rows for unscanned
-  stock), `unknown` (barcode not in catalog). `unique (count_id, barcode)`.
-  The count screen groups by `product_type` (category chips) and paginates
-  25/page.
+  stock), `doc_qty` (0040, restock only — what the arrival document said
+  arrived; `qty` = physically verified arrived), `unknown` (barcode not in
+  catalog). `unique (count_id, barcode)`. The count screen groups by
+  `product_type` (category chips) and paginates 25/page.
 - RLS: admin-only via `admin_can_access_location` (items via join to the
   parent count); no employee/kiosk policies.
+
+**New Stock / receiving mode (0040)** — `kind='restock'`. The opposite of a
+blind Counting: a shipment *arrives* with a supplier document and is **added**
+to current stock (`new on-hand = current + arrived`), never replacing it.
+Flow (`src/server/receiving.ts` + `src/lib/receiving.ts`, UI
+`src/components/inventory/receive-screen.tsx`): upload the arrival doc → extract
+line items (CSV/Excel via `papaparse` + `mapCsvRows`; PDF/photo via a Claude
+vision model through the Vercel AI Gateway, `src/lib/receiving-extract.ts`,
+`AI_GATEWAY_API_KEY`/`RECEIVING_MODEL`) → match to Shopify by barcode then SKU
+(`lookupVariantByBarcode`/`lookupVariantBySku`) → physically scan to verify
+(reuses `scanBarcode`/`adjustItem`) → preview table (current · arrived · new) →
+`receiveStock` re-reads *fresh* on-hand, writes `onHand + arrived` via
+`setOnHandQuantities` (gated on `write_inventory`), bumps `store_inventory`, and
+finalizes. Unmatched lines are flagged for manual match (`matchUnknownItem`) or
+skipped. Extraction math is pure/tested (`tests/receiving.spec.ts`).
 
 ### `store_inventory` (added 0033)
 The store's own inventory book — one row per (location, barcode) holding OUR

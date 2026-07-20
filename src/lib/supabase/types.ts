@@ -604,6 +604,7 @@ export type Database = {
           barcode: string
           count_id: string
           created_at: string
+          doc_qty: number | null
           expected: number | null
           id: string
           product_title: string
@@ -618,6 +619,7 @@ export type Database = {
           barcode: string
           count_id: string
           created_at?: string
+          doc_qty?: number | null
           expected?: number | null
           id?: string
           product_title: string
@@ -632,6 +634,7 @@ export type Database = {
           barcode?: string
           count_id?: string
           created_at?: string
+          doc_qty?: number | null
           expected?: number | null
           id?: string
           product_title?: string
@@ -656,9 +659,11 @@ export type Database = {
         Row: {
           counted_units: number | null
           created_at: string
+          document_path: string | null
           expected_units: number | null
           finalized_at: string | null
           id: string
+          kind: string
           location_id: string
           note: string | null
           started_at: string
@@ -669,9 +674,11 @@ export type Database = {
         Insert: {
           counted_units?: number | null
           created_at?: string
+          document_path?: string | null
           expected_units?: number | null
           finalized_at?: string | null
           id?: string
+          kind?: string
           location_id: string
           note?: string | null
           started_at?: string
@@ -682,9 +689,11 @@ export type Database = {
         Update: {
           counted_units?: number | null
           created_at?: string
+          document_path?: string | null
           expected_units?: number | null
           finalized_at?: string | null
           id?: string
+          kind?: string
           location_id?: string
           note?: string | null
           started_at?: string
@@ -1298,6 +1307,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "store_goals_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_report_recipients: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          email: string
+          id: string
+          location_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          email: string
+          id?: string
+          location_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          id?: string
+          location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_report_recipients_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"

@@ -15,6 +15,8 @@ import { fetchDaySales } from "@/lib/shopify";
 import { dayRangeInTz } from "@/lib/shopify-range";
 import type { SalesBreakdown } from "@/lib/sales-breakdown";
 import { SalesBreakdownSubline } from "@/components/shared/sales-breakdown-view";
+import { listReportRecipients } from "@/server/report-recipients";
+import { ReportRecipientsCard } from "@/components/admin/report-recipients-card";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -196,6 +198,8 @@ export default async function PerformancePage({
       // card shows an em dash
     }
   }
+
+  const recipients = await listReportRecipients({ location_id: location.id });
 
   return (
     <div className="flex flex-col gap-6">
@@ -430,6 +434,14 @@ export default async function PerformancePage({
           </>
         )}
       </Card>
+
+      {recipients.ok && recipients.data && (
+        <ReportRecipientsCard
+          locationId={location.id}
+          locationName={location.name}
+          recipients={recipients.data.recipients}
+        />
+      )}
     </div>
   );
 }

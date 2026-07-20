@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StartCountButton } from "@/components/inventory/start-count-button";
+import { StartReceivingButton } from "@/components/inventory/start-receiving-button";
 
 export default async function InventoryPage() {
   await requireAdmin();
@@ -31,7 +32,7 @@ export default async function InventoryPage() {
         .order("name"),
       supabase
         .from("inventory_counts")
-        .select("id, location_id, status, note, started_at, finalized_at, counted_units, expected_units")
+        .select("id, location_id, status, kind, note, started_at, finalized_at, counted_units, expected_units")
         .order("started_at", { ascending: false })
         .limit(50),
       supabase.from("store_inventory").select("location_id, qty, counted_at"),
@@ -54,8 +55,15 @@ export default async function InventoryPage() {
     bookByLoc.set(r.location_id, cur);
   }
   const locOf = new Map(locs.map((l) => [l.id, l]));
-  const openByLocation = new Set(
-    (counts ?? []).filter((c) => c.status === "open").map((c) => c.location_id),
+  const openCountByLocation = new Set(
+    (counts ?? [])
+      .filter((c) => c.status === "open" && c.kind !== "restock")
+      .map((c) => c.location_id),
+  );
+  const openRestockByLocation = new Set(
+    (counts ?? [])
+      .filter((c) => c.status === "open" && c.kind === "restock")
+      .map((c) => c.location_id),
   );
 
   return (
@@ -64,17 +72,26 @@ export default async function InventoryPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Physical counts — scan every barcode on the floor, then compare
-            against what Shopify expects.
+            <span className="font-medium">Counting</span> updates Shopify to what you scan ·{" "}
+            <span className="font-medium">New Stock</span> adds a received shipment on top.
           </p>
         </div>
-        <StartCountButton
-          locations={locs.map((l) => ({
-            id: l.id,
-            name: l.name,
-            hasOpen: openByLocation.has(l.id),
-          }))}
-        />
+        <div className="flex flex-wrap gap-2">
+          <StartReceivingButton
+            locations={locs.map((l) => ({
+              id: l.id,
+              name: l.name,
+              hasOpen: openRestockByLocation.has(l.id),
+            }))}
+          />
+          <StartCountButton
+            locations={locs.map((l) => ({
+              id: l.id,
+              name: l.name,
+              hasOpen: openCountByLocation.has(l.id),
+            }))}
+          />
+        </div>
       </div>
 
       {/* The book: our counted truth per store */}
@@ -135,9 +152,12 @@ export default async function InventoryPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Store</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Started</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Counted</TableHead>
+                  <TableHead className="text-right">
+                    <span className="hidden sm:inline">Counted / </span>Units
+                  </TableHead>
                   <TableHead className="hidden text-right sm:table-cell">
                     Expected
                   </TableHead>
@@ -148,6 +168,7 @@ export default async function InventoryPage() {
                 {(counts ?? []).map((c) => {
                   const loc = locOf.get(c.location_id);
                   const tz = loc?.timezone ?? "UTC";
+                  const restock = c.kind === "restock";
                   return (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">
@@ -158,21 +179,24 @@ export default async function InventoryPage() {
                           </span>
                         )}
                       </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{restock ? "New Stock" : "Counting"}</Badge>
+                      </TableCell>
                       <TableCell className="text-muted-foreground tabular-nums">
                         {formatInTimeZone(new Date(c.started_at), tz, "MMM d · HH:mm")}
                       </TableCell>
                       <TableCell>
                         {c.status === "open" ? (
-                          <Badge>counting</Badge>
+                          <Badge>{restock ? "receiving" : "counting"}</Badge>
                         ) : (
-                          <Badge variant="secondary">final</Badge>
+                          <Badge variant="secondary">{restock ? "received" : "final"}</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {c.counted_units ?? "—"}
                       </TableCell>
                       <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                        {c.expected_units ?? "—"}
+                        {restock ? "—" : c.expected_units ?? "—"}
                       </TableCell>
                       <TableCell className="text-right">
                         <Link

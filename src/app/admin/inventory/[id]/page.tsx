@@ -21,6 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CountScreen } from "@/components/inventory/count-screen";
+import { ReceiveScreen, type ReceiveItem } from "@/components/inventory/receive-screen";
+import { receivingRows } from "@/lib/receiving";
 import { DownloadCsvButton } from "@/components/inventory/download-csv-button";
 
 export default async function InventoryCountPage({
@@ -34,7 +36,7 @@ export default async function InventoryCountPage({
 
   const { data: count } = await supabase
     .from("inventory_counts")
-    .select("id, location_id, status, note, started_at, finalized_at")
+    .select("id, location_id, status, kind, note, started_at, finalized_at")
     .eq("id", id)
     .maybeSingle();
   if (!count) notFound();
@@ -47,13 +49,14 @@ export default async function InventoryCountPage({
       .maybeSingle(),
     supabase
       .from("inventory_count_items")
-      .select("id, barcode, sku, product_title, product_type, variant_title, qty, expected, unknown, updated_at")
+      .select("id, barcode, sku, product_title, product_type, variant_title, qty, expected, doc_qty, unknown, updated_at")
       .eq("count_id", id)
       .order("updated_at", { ascending: false }),
   ]);
   const tz = loc?.timezone ?? "UTC";
   const startedAtLabel = formatInTimeZone(new Date(count.started_at), tz, "MMM d · HH:mm");
   const rows = items ?? [];
+  const isRestock = count.kind === "restock";
 
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -65,7 +68,7 @@ export default async function InventoryCountPage({
           <ChevronLeft className="size-4" /> Inventory
         </Link>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-          {loc?.name ?? "Store"} · count
+          {loc?.name ?? "Store"} · {isRestock ? "new stock" : "count"}
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Started {startedAtLabel}
@@ -73,12 +76,85 @@ export default async function InventoryCountPage({
         </p>
       </div>
       {count.status === "final" ? (
-        <Badge variant="secondary">final</Badge>
+        <Badge variant="secondary">{isRestock ? "received" : "final"}</Badge>
       ) : (
-        <Badge>counting</Badge>
+        <Badge>{isRestock ? "receiving" : "counting"}</Badge>
       )}
     </div>
   );
+
+  if (isRestock) {
+    const receiveItems: ReceiveItem[] = rows.map((r) => ({
+      id: r.id,
+      barcode: r.barcode,
+      sku: r.sku,
+      product_title: r.product_title,
+      variant_title: r.variant_title,
+      expected: r.expected,
+      doc_qty: r.doc_qty,
+      qty: r.qty,
+      unknown: r.unknown,
+    }));
+
+    if (count.status === "open") {
+      return (
+        <div className="flex flex-col gap-6">
+          {header}
+          <ReceiveScreen countId={count.id} items={receiveItems} />
+        </div>
+      );
+    }
+
+    // Received: a read-only summary of the merge that was written.
+    const rr = receivingRows(receiveItems);
+    const arrived = rr.reduce((s, r) => s + r.qty, 0);
+    return (
+      <div className="flex flex-col gap-6">
+        {header}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Kpi label="Lines received" value={String(rr.filter((r) => !r.unknown).length)} />
+          <Kpi label="Units added" value={String(arrived)} />
+          <Kpi label="Skipped (unmatched)" value={String(rr.filter((r) => r.unknown).length)} />
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Arrived</TableHead>
+                    <TableHead className="text-right">New total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rr.map((r) => (
+                    <TableRow key={r.barcode}>
+                      <TableCell>
+                        <span className="font-medium">{r.product_title}</span>
+                        {r.variant_title && (
+                          <span className="text-muted-foreground ml-2 text-xs">{r.variant_title}</span>
+                        )}
+                        {r.unknown && (
+                          <Badge variant="outline" className="ml-2 text-amber-600">
+                            unmatched · skipped
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{r.qty}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {r.unknown ? "—" : r.newTotal}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (count.status === "open") {
     return (
