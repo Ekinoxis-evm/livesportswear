@@ -74,8 +74,27 @@
 - ICS feed responses: `Content-Type: text/calendar; charset=utf-8`, `Cache-Control: private, no-cache`.
 
 ## PII
-- Don't log full employee email or phone. Mask: `j***@liveactivewear.com`.
+- Don't log full employee email or phone. Mask: `j***@liveactivewear.com` (`sendSafe`
+  masks recipients before logging).
 - Audit log captures the diff but not the magic token field.
+- **Customer PII** (`client_events.customer_name/email/phone`): may be *rendered* to
+  authorized surfaces (day report, admin Clients view, kiosk "Clients attended" list) but
+  NEVER logged. When passing to client components, pass only what's shown — the kiosk
+  attendance list passes `customer_name` only, never email/phone.
+
+## Report recipients & receiving (0039–0040)
+- `store_report_recipients` writes: admin path is RLS-enforced via `createServerClient`
+  (`src/server/report-recipients.ts`, `requireAdmin` + `accessibleLocationIds` check); the
+  kiosk path (`src/server/store-floor.ts` `storeAdd/Remove/ListReportRecipient`,
+  `storeSendTestReport`) uses the **service client** but is location-scoped by the store JWT
+  claim via `storeCtx()` — the location is never a client input. Same single-writer posture
+  as the rest of the kiosk.
+- **AI receiving extraction** (`src/lib/receiving-extract.ts`): uploaded arrival documents
+  (PDF/photo) are sent to Anthropic (direct `ANTHROPIC_API_KEY`, or the Vercel AI Gateway) for
+  line-item extraction — i.e. document contents leave our infra to a third-party model
+  provider. That's inherent to the feature; keep it to arrival docs only. `ANTHROPIC_API_KEY`
+  is server-only (`import "server-only"`), never exposed to the client. The `receiving-docs`
+  storage bucket is private, read/written only via the service client in the receiving actions.
 
 ## Store screen accounts (0019)
 - A third role, `app_metadata.role = "store"`: one **shared per-location kiosk

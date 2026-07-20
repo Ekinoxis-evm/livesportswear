@@ -390,8 +390,36 @@ export async function closeDayFor(closer: {
     return { ok: false, error: upErr.message };
   }
 
-  await sendDayReport(d, closer.name);
+  const send = await sendDayReport(d, closer.name);
+  // The day is already closed; report delivery is best-effort with no resend
+  // path, so a silent failure (e.g. an unverified Resend sender) must at least
+  // be logged. Recipients are already masked by sendSafe; firstError carries no PII.
+  if (send.failed > 0) {
+    console.error(
+      `[close-day] report delivery: ${send.sent} sent, ${send.failed} failed` +
+        (send.firstError ? ` — ${send.firstError}` : ""),
+    );
+  }
   return { ok: true };
+}
+
+/**
+ * Build + send today's report as a [TEST] (no store_day_closes row). Shared by
+ * the admin and kiosk "Send test report" actions — each wraps this with its own
+ * auth/location gate. Surfaces a real delivery failure instead of a false "sent".
+ */
+export async function sendTestReportFor(
+  locationId: string,
+): Promise<ActionResult<{ sentTo: number }>> {
+  const d = await buildDayReportData(locationId);
+  if (d.recipients.length === 0)
+    return { ok: false, error: "No recipients configured — add an email first." };
+
+  const { sent, failed, firstError } = await sendDayReport(d, "Test", { test: true });
+  if (sent === 0) return { ok: false, error: firstError ?? "The report could not be sent." };
+  if (failed > 0)
+    return { ok: false, error: `Sent to ${sent}, but ${failed} failed: ${firstError ?? "unknown error"}` };
+  return { ok: true, data: { sentTo: sent } };
 }
 
 /**

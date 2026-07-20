@@ -56,8 +56,11 @@ export function buildOrdersView(
     bucket.orders += 1;
     bucket.net += o.net;
 
+    // Per-person attribution is POS-only — only in-store orders carry a real
+    // seller. (An online order should never have a staffId, but guard the
+    // channel so the split and the per-person table can never disagree.)
     let sellerName: string | null = null;
-    if (o.staffId) {
+    if (channel === "pos" && o.staffId) {
       sellerName = staffToName.get(o.staffId) ?? `Staff #${o.staffId}`;
       const acc = byStaff.get(o.staffId) ?? { net: 0, orders: 0 };
       acc.net += o.net;

@@ -9,7 +9,7 @@ import { requireAdmin } from "@/lib/auth";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import {
   lookupVariantByBarcode,
-  lookupVariantBySku,
+  fetchAllTrackedVariants,
   fetchAppAccessScopes,
   fetchShopifyLocations,
   fetchVariantsForPush,
@@ -91,7 +91,10 @@ export async function uploadReceivingDoc(formData: FormData): Promise<ActionResu
   if (count.status !== "open") return { ok: false, error: "This session is already received." };
 
   const service = createServiceClient();
-  const path = `${count.location_id}/${countId}/${file.name}`;
+  // Sanitize the client-supplied filename to a bare basename — never let a
+  // crafted name with path separators escape the count's storage prefix.
+  const safeName = (file.name.split(/[\\/]/).pop() || "document").replace(/[^\w.\-]+/g, "_");
+  const path = `${count.location_id}/${countId}/${safeName}`;
   const upload = await service.storage
     .from(BUCKET)
     .upload(path, await file.arrayBuffer(), {
@@ -180,15 +183,6 @@ const commitSchema = z.object({
     .max(2000),
 });
 
-async function resolveLine(line: ExtractedLine): Promise<VariantHit | null> {
-  if (!isShopifyConfigured()) return null;
-  const tryBarcode = () => lookupVariantByBarcode(line.code).catch(() => null);
-  const trySku = () => lookupVariantBySku(line.code).catch(() => null);
-  const first = line.codeType === "sku" ? trySku : tryBarcode;
-  const second = line.codeType === "sku" ? tryBarcode : trySku;
-  return (await first()) ?? (await second());
-}
-
 export async function commitExtraction(input: unknown): Promise<ActionResult<{ matched: number; unmatched: number }>> {
   await requireAdmin();
   const parsed = commitSchema.safeParse(input);
@@ -198,6 +192,21 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
   const { supabase, count } = await loadOpenRestock(countId);
   if (!count || count.kind !== "restock") return { ok: false, error: "Session not found." };
   if (count.status !== "open") return { ok: false, error: "This session is already received." };
+
+  // Match against the catalog fetched ONCE (a packing slip can have hundreds of
+  // lines — a Shopify lookup per line would blow the serverless timeout). Only
+  // barcode-bearing variants are tracked, so a doc SKU resolves via its variant's
+  // barcode entry. Barcode first, SKU fallback, honoring the line's codeType hint.
+  const catalog = isShopifyConfigured() ? await fetchAllTrackedVariants().catch(() => []) : [];
+  const byBc = new Map(catalog.map((v) => [v.barcode, v] as const));
+  const bySku = new Map(
+    catalog.filter((v) => v.sku).map((v) => [v.sku as string, v] as const),
+  );
+  const resolve = (line: ExtractedLine): VariantHit | null => {
+    const bc = byBc.get(line.code) ?? null;
+    const sku = bySku.get(line.code) ?? null;
+    return line.codeType === "sku" ? sku ?? bc : bc ?? sku;
+  };
 
   // Resolve every line, then collapse duplicates onto one row per barcode
   // (a document may list the same variant twice) summing the document qty.
@@ -212,7 +221,7 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
   };
   const byBarcode = new Map<string, Row>();
   for (const line of lines) {
-    const hit = await resolveLine(line);
+    const hit = resolve(line);
     const barcode = hit?.barcode || line.code;
     const existing = byBarcode.get(barcode);
     if (existing) {
@@ -360,23 +369,61 @@ export async function receiveStock(countId: string): Promise<ActionResult<{ rece
     return { ok: false, error: "Nothing to receive — scan the arrivals first (matched items only)." };
   }
 
+  // Claim the session BEFORE writing: flip open→final atomically so a
+  // double-submit or retry can't add the same arrivals twice (the additive
+  // write isn't naturally idempotent). If the first write fails with nothing
+  // sent, we reopen it so the admin can retry cleanly.
+  const now = new Date().toISOString();
+  const qtyByBarcode = new Map(items.map((i) => [i.barcode, i.qty]));
+  const receivedUnits = writes.reduce((sum, w) => sum + (qtyByBarcode.get(w.barcode) ?? 0), 0);
+  const { data: claimed } = await supabase
+    .from("inventory_counts")
+    .update({ status: "final", finalized_at: now, counted_units: receivedUnits })
+    .eq("id", countId)
+    .eq("status", "open")
+    .select("id");
+  if (!claimed?.length) return { ok: false, error: "This session is already received." };
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://livesportswear.vercel.app";
   const refUri = `${appUrl}/admin/inventory/${countId}`;
-  let result;
-  try {
-    result = await setOnHandQuantities(
-      shopifyLocation.id,
-      writes.map((w) => ({ inventoryItemId: w.inventoryItemId, quantity: w.quantity })),
-      refUri,
-    );
-  } catch (err) {
-    result = { ok: false as const, message: err instanceof Error ? err.message : UNREACHABLE, failedIndexes: [] };
+
+  // Shopify caps the mutation input — chunk to <=250 like the push flow.
+  let written = 0;
+  for (let i = 0; i < writes.length; i += 250) {
+    const chunk = writes.slice(i, i + 250);
+    let result;
+    try {
+      result = await setOnHandQuantities(
+        shopifyLocation.id,
+        chunk.map((w) => ({ inventoryItemId: w.inventoryItemId, quantity: w.quantity })),
+        refUri,
+      );
+    } catch (err) {
+      result = { ok: false as const, message: err instanceof Error ? err.message : UNREACHABLE, failedIndexes: [] };
+    }
+    if (!result.ok) {
+      if (i === 0) {
+        // Nothing landed — reopen so the receive can be retried cleanly.
+        await supabase
+          .from("inventory_counts")
+          .update({ status: "open", finalized_at: null })
+          .eq("id", countId);
+        return { ok: false, error: result.message };
+      }
+      // Earlier chunks already wrote; staying closed avoids re-adding them on a
+      // retry. The remainder must be reconciled manually.
+      return {
+        ok: false,
+        error: `Received ${written} of ${writes.length} items, then Shopify failed (${result.message}). The session was closed to avoid double-counting — reconcile the rest manually.`,
+      };
+    }
+    written += chunk.length;
   }
-  if (!result.ok) return { ok: false, error: result.message };
 
   // Keep our book in step: the received barcodes now hold the merged total.
+  // Best-effort — Shopify is already correct, so a book miss only leaves drift
+  // visible on /admin/inventory/book; log it rather than fail the receive.
   const writtenQty = new Map(writes.map((w) => [w.barcode, w.quantity]));
-  const now = new Date().toISOString();
   const bookRows = items
     .filter((i) => writtenQty.has(i.barcode))
     .map((i) => ({
@@ -393,19 +440,11 @@ export async function receiveStock(countId: string): Promise<ActionResult<{ rece
       count_id: countId,
     }));
   for (let i = 0; i < bookRows.length; i += 500) {
-    await supabase
+    const { error: bookErr } = await supabase
       .from("store_inventory")
       .upsert(bookRows.slice(i, i + 500), { onConflict: "location_id,barcode" });
+    if (bookErr) console.error(`[receive] book upsert failed for ${countId}: ${bookErr.message}`);
   }
-
-  const receivedUnits = items.reduce((sum, i) => (writtenQty.has(i.barcode) ? sum + i.qty : sum), 0);
-  const { data: closed } = await supabase
-    .from("inventory_counts")
-    .update({ status: "final", finalized_at: now, counted_units: receivedUnits })
-    .eq("id", countId)
-    .eq("status", "open")
-    .select("id");
-  if (!closed?.length) return { ok: false, error: "This session is already received." };
 
   revalidatePath("/admin/inventory", "layout");
   return { ok: true, data: { received: writes.length, skipped: Math.max(0, skipped) } };

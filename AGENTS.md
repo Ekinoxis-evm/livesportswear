@@ -10,10 +10,14 @@ This project uses Next.js 16 (App Router). APIs, conventions, and file structure
 
 ## Project at a glance
 
-- **What**: Weekly staff scheduling app for Live Active Wear (multi-location retail)
-- **Who**: One admin builds schedules; employees consume them via email + ICS feed + a magic-link page
-- **Stack**: Next.js 16, Supabase, Resend, Vercel, Tailwind v4, shadcn/ui
-- **Plan & decisions**: [`PLAN.md`](./PLAN.md)
+- **What**: Store-ops app for Live Active Wear — staff scheduling **plus** a store kiosk
+  (check-in, floor rotation, sales/orders, close-day report), inventory (barcode counts +
+  receiving), Shopify net-sales sync, commission & contests. See `CLAUDE.md` for the full
+  surface map; it's the source of truth, not just scheduling.
+- **Who**: Admins run scheduling + performance; a shared per-store kiosk account runs the floor;
+  employees get a portal + magic-link schedule/ICS.
+- **Stack**: Next.js 16, Supabase, Resend, Shopify Admin API, Vercel AI SDK (receiving), Vercel, Tailwind v4, shadcn/ui
+- **Plan & decisions**: [`PLAN.md`](./PLAN.md); deeper rules in `.claude/rules/*` and `CLAUDE.md`
 
 ## Where to put code
 

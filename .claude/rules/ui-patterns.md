@@ -31,6 +31,22 @@
   Performance→Sales, and the public week page (Week · Today only). Don't
   hand-roll new period pills or sales tables.
 - **Inline `<Alert>`**: persistent state messages on a page (e.g. "This schedule has 3 warnings").
+- **Daily-report recipients**: the recipient chips + add-field + "Send test report"
+  editor is the shared `RecipientsManager` (`src/components/shared/recipients-manager.tsx`),
+  which takes `add`/`remove`/`sendTest` action callbacks so each surface binds its own
+  server action. Admin wraps it (`components/admin/report-recipients-card.tsx`,
+  location-scoped by `requireAdmin`); the kiosk wraps it
+  (`components/store/report-recipients-card.tsx`, store JWT's location). Reuse it — don't
+  re-implement recipient editing. It keeps optimistic local state (chips update instantly).
+
+## Responsive tables
+- Two idioms, no card-stack: **(a)** wrap the table in `overflow-x-auto` (it scrolls
+  horizontally on narrow screens — shadcn `<Table>` already self-wraps); **(b)** drop
+  low-priority columns on mobile with `hidden sm:table-cell` on both the `<th>` and `<td>`.
+  Keep the identifying column + the 1–2 key numbers always visible. The kiosk
+  (`max-w-3xl`, iPad portrait) uses (b): e.g. per-seller table keeps `Salesperson · Orders ·
+  Avg ticket`, hides `Net`; the orders/attendance lists hide time/seller/customer. Examples:
+  `src/components/store/{orders-today,attendance-today}.tsx`, `admin/inventory/book/page.tsx`.
 
 ## Layout
 - Single fixed-width container `max-w-7xl mx-auto` for admin pages.

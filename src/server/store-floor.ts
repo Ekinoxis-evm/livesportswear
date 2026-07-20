@@ -22,8 +22,7 @@ import {
   closeDayFor,
   closeDayDraftFor,
   managedReportEmails,
-  buildDayReportData,
-  sendDayReport,
+  sendTestReportFor,
   type CloseDayDraft,
 } from "@/server/conversion-core";
 import { isShopifyConfigured } from "@/lib/shopify-config";
@@ -580,13 +579,5 @@ export async function storeRemoveReportRecipient(email: unknown): Promise<Action
 
 export async function storeSendTestReport(): Promise<ActionResult<{ sentTo: number }>> {
   const { locationId } = await storeCtx();
-  const d = await buildDayReportData(locationId);
-  if (d.recipients.length === 0)
-    return { ok: false, error: "No recipients configured — add an email first." };
-
-  const { sent, failed, firstError: sendErr } = await sendDayReport(d, "Test", { test: true });
-  if (sent === 0) return { ok: false, error: sendErr ?? "The report could not be sent." };
-  if (failed > 0)
-    return { ok: false, error: `Sent to ${sent}, but ${failed} failed: ${sendErr ?? "unknown error"}` };
-  return { ok: true, data: { sentTo: sent } };
+  return sendTestReportFor(locationId);
 }

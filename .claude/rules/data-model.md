@@ -49,6 +49,12 @@ A worker. Always belongs to one location in v1 (no multi-location reps yet).
 - `kiosk_pin_hash text` (added 0019)                — sha256(employee_id:pin); confirms
   identity for entry/exit taps on the shared store screen (see security.md "Store
   screen accounts"). Set via `setOwnKioskPin` (portal) / `setEmployeeKioskPin` (admin).
+- `shopify_staff_id text`                            — maps this employee to their Shopify
+  POS staff account (REST `order.user_id` / GraphQL StaffMember tail; compared via
+  `normalizeStaffId`, `src/lib/shopify-range.ts`). Set in the admin Shopify settings panel.
+  Drives all per-staff sales attribution: monthly sync, the sales-period ranking, and the
+  kiosk "today's orders" per-seller avg ticket (`src/lib/orders-today.ts`). Unmapped reps
+  don't appear in attributed sales (surfaced as an `unmappedCount`).
 - `created_at, updated_at`
 
 ### `employee_compensation` (added 0003)

@@ -5,11 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, accessibleLocationIds } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { type ActionResult, dbError } from "@/server/shared";
-import {
-  managedReportEmails,
-  buildDayReportData,
-  sendDayReport,
-} from "@/server/conversion-core";
+import { managedReportEmails, sendTestReportFor } from "@/server/conversion-core";
 
 /** The current admin must be able to manage this location. */
 async function canAccess(locationId: string): Promise<boolean> {
@@ -93,18 +89,5 @@ export async function sendTestReport(
   if (!(await canAccess(parsed.data.location_id)))
     return { ok: false, error: "You can't manage that location." };
 
-  const d = await buildDayReportData(parsed.data.location_id);
-  if (d.recipients.length === 0)
-    return { ok: false, error: "No recipients configured — add an email first." };
-
-  const { sent, failed, firstError } = await sendDayReport(d, "Test", { test: true });
-  // Surface a real delivery failure instead of a misleading "sent" — most
-  // often an unverified sender domain in Resend (SENDER_EMAIL_ADDRESS).
-  if (sent === 0) {
-    return { ok: false, error: firstError ?? "The report could not be sent." };
-  }
-  if (failed > 0) {
-    return { ok: false, error: `Sent to ${sent}, but ${failed} failed: ${firstError ?? "unknown error"}` };
-  }
-  return { ok: true, data: { sentTo: sent } };
+  return sendTestReportFor(parsed.data.location_id);
 }
