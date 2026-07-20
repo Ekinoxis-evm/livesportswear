@@ -21,6 +21,9 @@ import {
 import {
   closeDayFor,
   closeDayDraftFor,
+  managedReportEmails,
+  buildDayReportData,
+  sendDayReport,
   type CloseDayDraft,
 } from "@/server/conversion-core";
 import { isShopifyConfigured } from "@/lib/shopify-config";
@@ -31,7 +34,7 @@ import {
   type RecentOrder,
 } from "@/lib/shopify";
 import { finishSchema, type FinishInput } from "@/lib/finish-schema";
-import { firstError, type ActionResult } from "@/server/shared";
+import { firstError, dbError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
 
@@ -528,4 +531,62 @@ export async function storeCloseDay(closedById: string): Promise<ActionResult> {
     revalidatePath("/store", "layout");
   }
   return res;
+}
+
+// ---------------------------------------------------------------------------
+// Daily-report recipients — the same managed list as admin, editable from the
+// kiosk. Store-scoped: the location is the store JWT's claim, never an input.
+// ---------------------------------------------------------------------------
+const storeEmailSchema = z.string().trim().toLowerCase().email();
+
+export async function storeListReportRecipients(): Promise<
+  ActionResult<{ recipients: string[] }>
+> {
+  const { locationId } = await storeCtx();
+  return { ok: true, data: { recipients: await managedReportEmails(locationId) } };
+}
+
+export async function storeAddReportRecipient(email: unknown): Promise<ActionResult> {
+  const { locationId, service } = await storeCtx();
+  const parsed = storeEmailSchema.safeParse(email);
+  if (!parsed.success) return { ok: false, error: "Enter a valid email address." };
+
+  const { error } = await service
+    .from("store_report_recipients")
+    .insert({ location_id: locationId, email: parsed.data });
+  if (error)
+    return {
+      ok: false,
+      error: dbError(error, { "23505": "That email is already a recipient." }),
+    };
+  revalidatePath("/store/performance");
+  return { ok: true };
+}
+
+export async function storeRemoveReportRecipient(email: unknown): Promise<ActionResult> {
+  const { locationId, service } = await storeCtx();
+  const parsed = storeEmailSchema.safeParse(email);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+
+  const { error } = await service
+    .from("store_report_recipients")
+    .delete()
+    .eq("location_id", locationId)
+    .ilike("email", parsed.data);
+  if (error) return { ok: false, error: dbError(error) };
+  revalidatePath("/store/performance");
+  return { ok: true };
+}
+
+export async function storeSendTestReport(): Promise<ActionResult<{ sentTo: number }>> {
+  const { locationId } = await storeCtx();
+  const d = await buildDayReportData(locationId);
+  if (d.recipients.length === 0)
+    return { ok: false, error: "No recipients configured — add an email first." };
+
+  const { sent, failed, firstError: sendErr } = await sendDayReport(d, "Test", { test: true });
+  if (sent === 0) return { ok: false, error: sendErr ?? "The report could not be sent." };
+  if (failed > 0)
+    return { ok: false, error: `Sent to ${sent}, but ${failed} failed: ${sendErr ?? "unknown error"}` };
+  return { ok: true, data: { sentTo: sent } };
 }

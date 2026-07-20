@@ -1,6 +1,11 @@
 import "server-only";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { fetchDaySales, type DaySales } from "@/lib/shopify";
+import {
+  fetchDaySales,
+  fetchDayOrders,
+  type DaySales,
+  type DayOrder,
+} from "@/lib/shopify";
 import { dayRangeInTz } from "@/lib/shopify-range";
 
 // The kiosk auto-refreshes every 45s all day; a short TTL keeps the
@@ -23,6 +28,28 @@ export async function getDaySalesCached(
     const range = dayRangeInTz(businessDate, tz);
     const data = await fetchDaySales(range.start, range.endExclusive);
     cache = { key, at: Date.now(), data };
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+let ordersCache: { key: string; at: number; data: DayOrder[] } | null = null;
+
+/** The day's individual orders for the store's business date; null when unconfigured/down. */
+export async function getDayOrdersCached(
+  businessDate: string,
+  tz: string,
+): Promise<DayOrder[] | null> {
+  if (!isShopifyConfigured()) return null;
+  const key = `${businessDate}:${tz}`;
+  if (ordersCache && ordersCache.key === key && Date.now() - ordersCache.at < TTL_MS) {
+    return ordersCache.data;
+  }
+  try {
+    const range = dayRangeInTz(businessDate, tz);
+    const data = await fetchDayOrders(range.start, range.endExclusive);
+    ordersCache = { key, at: Date.now(), data };
     return data;
   } catch {
     return null;

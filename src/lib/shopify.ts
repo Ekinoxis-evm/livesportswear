@@ -181,6 +181,64 @@ export async function fetchDaySales(
   return { ...b, total: b.net, currency, orders };
 }
 
+export type DayOrder = {
+  id: string;
+  name: string; // Shopify order name, e.g. "#1234"
+  createdAt: string;
+  net: number; // current_subtotal_price (the metric)
+  currency: string | null;
+  sourceName: string | null; // "pos" = in-store POS; "web"/checkout = online
+  staffId: string | null; // REST user_id; present on POS orders, null online
+};
+
+type RestDayOrder = RestOrder & {
+  name: string | null;
+  created_at: string;
+  currency: string | null;
+  source_name: string | null;
+};
+
+const ORDER_LIST_FIELDS =
+  "id,name,created_at,user_id,source_name,cancelled_at,test,current_subtotal_price,currency";
+
+/**
+ * Every non-cancelled/non-test order for [start, endExclusive) as individual
+ * rows (newest-first not guaranteed — caller sorts) — the per-order data the
+ * aggregate fetchers discard. Carries `source_name` (POS vs online) and
+ * `user_id` (POS staff) so callers can split by channel and attribute to staff.
+ * Paginates fully.
+ */
+export async function fetchDayOrders(
+  start: string,
+  endExclusive: string,
+): Promise<DayOrder[]> {
+  const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
+  const out: DayOrder[] = [];
+  let path: string | null =
+    `/orders.json?status=any&limit=250&fields=${ORDER_LIST_FIELDS}` +
+    `&created_at_min=${encodeURIComponent(start)}&created_at_max=${encodeURIComponent(max)}`;
+  while (path) {
+    const page: { body: { orders: RestDayOrder[] }; nextPageInfo: string | null } =
+      await shopifyRest<{ orders: RestDayOrder[] }>(path);
+    for (const o of page.body.orders) {
+      if (o.cancelled_at || o.test) continue;
+      out.push({
+        id: String(o.id),
+        name: o.name ?? `#${o.id}`,
+        createdAt: o.created_at,
+        net: Number(o.current_subtotal_price ?? 0),
+        currency: o.currency ?? null,
+        sourceName: o.source_name ?? null,
+        staffId: o.user_id != null ? String(o.user_id) : null,
+      });
+    }
+    path = page.nextPageInfo
+      ? `/orders.json?limit=250&fields=${ORDER_LIST_FIELDS}&page_info=${page.nextPageInfo}`
+      : null;
+  }
+  return out;
+}
+
 export type RecentOrder = {
   id: string;
   name: string; // Shopify order name, e.g. "#1234"

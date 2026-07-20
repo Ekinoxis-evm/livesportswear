@@ -404,7 +404,7 @@ export async function sendDayReport(
   d: DayReportData,
   closedByName: string,
   opts: { test?: boolean } = {},
-): Promise<void> {
+): Promise<{ sent: number; failed: number; firstError?: string }> {
   const money = (v: number | null) =>
     v === null ? "—" : formatMoney(v, d.currency);
   const pdf = await renderToBuffer(
@@ -426,8 +426,11 @@ export async function sendDayReport(
   ];
   const subject = opts.test ? `[TEST] ${d.subject}` : d.subject;
 
+  let sent = 0;
+  let failed = 0;
+  let firstError: string | undefined;
   for (const to of d.recipients) {
-    await sendSafe({
+    const res = await sendSafe({
       to,
       subject,
       react: DayReportEmail({
@@ -464,5 +467,12 @@ export async function sendDayReport(
       }),
       attachments,
     });
+    if (res.ok) {
+      sent += 1;
+    } else {
+      failed += 1;
+      firstError ??= res.error;
+    }
   }
+  return { sent, failed, firstError };
 }

@@ -1,9 +1,14 @@
+import { formatInTimeZone } from "date-fns-tz";
 import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
 import { workedHours } from "@/lib/attendance";
-import { getDaySalesCached } from "@/lib/shopify-day-cache";
+import { normalizeStaffId } from "@/lib/shopify-range";
+import { buildOrdersView } from "@/lib/orders-today";
+import { OrdersToday, type OrderListRow } from "@/components/store/orders-today";
+import { AttendanceToday, type AttendanceRow } from "@/components/store/attendance-today";
+import { getDaySalesCached, getDayOrdersCached } from "@/lib/shopify-day-cache";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { spanDays } from "@/lib/date-range";
 import { customRangeInTz } from "@/lib/shopify-range";
@@ -35,6 +40,7 @@ import {
   CloseDayDialog,
   type CloserEntry,
 } from "@/components/store/close-day-dialog";
+import { KioskReportRecipientsCard } from "@/components/store/report-recipients-card";
 
 export default async function StorePerformancePage({
   searchParams,
@@ -70,7 +76,9 @@ export default async function StorePerformancePage({
   ] = await Promise.all([
     service
       .from("client_events")
-      .select("employee_id, kind, sold, got_contact")
+      .select(
+        "id, employee_id, attended_at, kind, sold, got_contact, order_total, shopify_order_name, customer_name",
+      )
       .eq("location_id", locationId)
       .eq("business_date", bd),
     service
@@ -153,6 +161,44 @@ export default async function StorePerformancePage({
 
   const daySales = await getDaySalesCached(bd, tz);
   const currency = goalRow?.currency ?? daySales?.currency ?? "USD";
+
+  const { data: recipientRows } = await service
+    .from("store_report_recipients")
+    .select("email")
+    .eq("location_id", locationId)
+    .order("created_at");
+  const reportRecipients = (recipientRows ?? []).map((r) => r.email);
+
+  // Today's orders split by channel (POS vs online) + per-seller avg ticket.
+  const dayOrders = await getDayOrdersCached(bd, tz);
+  const staffToName = new Map<string, string>();
+  for (const e of roster) {
+    if (e.shopify_staff_id) staffToName.set(normalizeStaffId(e.shopify_staff_id), e.name);
+  }
+  const ordersView = dayOrders ? buildOrdersView(dayOrders, staffToName) : null;
+  const orderListRows: OrderListRow[] = (ordersView?.rows ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    time: formatInTimeZone(new Date(r.createdAt), tz, "HH:mm"),
+    channel: r.channel,
+    seller: r.sellerName,
+    net: r.net,
+  }));
+
+  // The attendance list: every client logged on the floor today, newest first.
+  const attendanceRows: AttendanceRow[] = [...events]
+    .sort((a, b) => (b.attended_at ?? "").localeCompare(a.attended_at ?? ""))
+    .map((e) => ({
+      id: e.id,
+      time: formatInTimeZone(new Date(e.attended_at), tz, "HH:mm"),
+      rep: nameOf.get(e.employee_id) ?? "—",
+      isReturn: e.kind === "return",
+      sold: e.sold,
+      gotContact: e.got_contact,
+      orderName: e.shopify_order_name,
+      orderTotal: e.order_total,
+      customer: e.customer_name,
+    }));
 
   // Month numbers from the synced monthly_sales table (DB-only).
   const monthTotal = (monthSalesRows ?? []).reduce((a, r) => a + Number(r.amount), 0);
@@ -303,6 +349,15 @@ export default async function StorePerformancePage({
         </CardContent>
       </Card>
 
+      {ordersView && (
+        <OrdersToday
+          channelTotals={ordersView.channelTotals}
+          perPerson={ordersView.perPerson}
+          rows={orderListRows}
+          currency={currency}
+        />
+      )}
+
       {/* Clients attended — below the sales */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
@@ -346,6 +401,8 @@ export default async function StorePerformancePage({
           </CardContent>
         </Card>
       )}
+
+      <AttendanceToday rows={attendanceRows} currency={currency} />
 
       <Card>
         <CardHeader>
@@ -392,6 +449,8 @@ export default async function StorePerformancePage({
           )}
         </CardContent>
       </Card>
+
+      <KioskReportRecipientsCard recipients={reportRecipients} />
 
       <Card>
         <CardContent className="flex items-center justify-between gap-3 py-4">

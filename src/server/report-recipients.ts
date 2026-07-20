@@ -84,7 +84,9 @@ export async function removeReportRecipient(input: unknown): Promise<ActionResul
  * Send today's report to the current recipients WITHOUT closing the day — the
  * subject is prefixed [TEST] and no store_day_closes row is written.
  */
-export async function sendTestReport(input: unknown): Promise<ActionResult> {
+export async function sendTestReport(
+  input: unknown,
+): Promise<ActionResult<{ sentTo: number }>> {
   await requireAdmin();
   const parsed = locationSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
@@ -95,6 +97,14 @@ export async function sendTestReport(input: unknown): Promise<ActionResult> {
   if (d.recipients.length === 0)
     return { ok: false, error: "No recipients configured — add an email first." };
 
-  await sendDayReport(d, "Test", { test: true });
-  return { ok: true };
+  const { sent, failed, firstError } = await sendDayReport(d, "Test", { test: true });
+  // Surface a real delivery failure instead of a misleading "sent" — most
+  // often an unverified sender domain in Resend (SENDER_EMAIL_ADDRESS).
+  if (sent === 0) {
+    return { ok: false, error: firstError ?? "The report could not be sent." };
+  }
+  if (failed > 0) {
+    return { ok: false, error: `Sent to ${sent}, but ${failed} failed: ${firstError ?? "unknown error"}` };
+  }
+  return { ok: true, data: { sentTo: sent } };
 }
