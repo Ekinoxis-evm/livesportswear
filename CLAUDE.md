@@ -18,7 +18,7 @@ Next.js 16 (App Router) · TypeScript · Tailwind v4 + shadcn/ui (Base UI) · Su
 - `src/lib/` — other pure domain libs (same no-DB rule): `rewards.ts` (contest standings), `floor-queue.ts` + `floor-state.ts` (kiosk queue), `breaks.ts`, `commission.ts`, `conversion.ts`, `attendance.ts`, `shopify-range*.ts`, `monthly-series.ts`.
 - `src/server/` — server actions and server-only assembly (the only place DB mutations happen). `*-core.ts` files hold shared bodies (floor, conversion).
 - `src/lib/supabase/` — Supabase clients (server, browser, service-role).
-- `src/app/admin/` — admin UI (role=admin). Performance is a route-tab hub (`performance/{daily,sales,rewards}`); `/admin/commission` is the "Sales & Rewards setup" page; old `/admin/{sales,rewards}` are redirect stubs.
+- `src/app/admin/` — admin UI (role=admin). Sidebar groups the team routes under an **Employees** section (Profiles=`/employees` · Schedule=`/schedules` · Performance=`/performance` · Rewards & Commission=`/commission#…`) — a nav grouping only, routes are unchanged. Performance is a route-tab hub (`performance/{daily,sales,rewards}`); `/admin/commission` is the "Sales & Rewards setup" page; `/admin/clients` is the contact-attribution view; old `/admin/{sales,rewards}` are redirect stubs.
 - `src/app/portal/` — employee portal (role=employee): Performance / Schedule / Rewards / Settings.
 - `src/app/store/` — the kiosk (role=store): Check-in / Schedule / Sales (center) / Performance / Rewards, 45s auto-refresh.
 - `src/app/s/[token]/` + `src/app/w/[token]/` — public magic-token pages (employee schedule + ICS; store week + sales ranking).
