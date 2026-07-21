@@ -41,6 +41,7 @@ import {
   type CloserEntry,
 } from "@/components/store/close-day-dialog";
 import { KioskReportRecipientsCard } from "@/components/store/report-recipients-card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default async function StorePerformancePage({
   searchParams,
@@ -242,8 +243,21 @@ export default async function StorePerformancePage({
   );
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3">
+    <Tabs defaultValue="sales" className="gap-4">
+      <TabsList className="w-full">
+        <TabsTrigger value="sales" className="h-11 flex-1">
+          Sales
+        </TabsTrigger>
+        <TabsTrigger value="clients" className="h-11 flex-1">
+          Clients
+        </TabsTrigger>
+        <TabsTrigger value="close" className="h-11 flex-1">
+          Close day
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="sales" className="flex flex-col gap-5">
+        <div className="grid grid-cols-2 gap-3">
         <Card>
           <CardHeader>
             <CardDescription>Net sales today</CardDescription>
@@ -366,8 +380,10 @@ export default async function StorePerformancePage({
           currency={currency}
         />
       )}
+      </TabsContent>
 
-      {/* Clients attended — below the sales */}
+      <TabsContent value="clients" className="flex flex-col gap-5">
+      {/* Clients attended */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
           <CardHeader>
@@ -458,7 +474,9 @@ export default async function StorePerformancePage({
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
+      <TabsContent value="close" className="flex flex-col gap-4">
       <KioskReportRecipientsCard recipients={reportRecipients} />
 
       <Card>
@@ -467,6 +485,7 @@ export default async function StorePerformancePage({
           <CloseDayDialog closers={closers} alreadyClosed={Boolean(closeRow)} />
         </CardContent>
       </Card>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }
