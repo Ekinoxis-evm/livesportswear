@@ -22,12 +22,13 @@ export type SchedulePublishedEmailProps = {
   scheduleUrl: string;
 };
 
-const accent = "#ffffff";
-const bg = "#0a0a0a";
-const card = "#141414";
-const border = "#2a2a2a";
-const text = "#ededed";
-const muted = "#a1a1a1";
+const accent = "#4a3a32";
+const bg = "#c8b8a9";
+const card = "#ffffff";
+const border = "#b9a996";
+const text = "#1d1d1d";
+const muted = "#6b5e52";
+const strip = "#ded2c4";
 
 export function SchedulePublishedEmail({
   employeeName,
@@ -96,7 +97,7 @@ export function SchedulePublishedEmail({
                 margin: "0 0 24px",
               }}
             >
-              <Row style={{ backgroundColor: bg }}>
+              <Row style={{ backgroundColor: strip }}>
                 <Column style={{ padding: "10px 16px", width: "40%" }}>
                   <Text
                     style={{
@@ -176,7 +177,7 @@ export function SchedulePublishedEmail({
               display: "block",
               width: "100%",
               backgroundColor: accent,
-              color: "#0a0a0a",
+              color: "#f4f0f0",
               fontSize: "14px",
               fontWeight: 600,
               textAlign: "center",

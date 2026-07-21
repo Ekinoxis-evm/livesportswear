@@ -21,14 +21,15 @@ export type TimeOffDecisionEmailProps = {
   scheduleUrl: string; // public /s/{token} link
 };
 
-const accent = "#ffffff";
-const bg = "#0a0a0a";
-const card = "#141414";
-const border = "#2a2a2a";
-const text = "#ededed";
-const muted = "#a1a1a1";
-const positive = "#4ade80";
-const negative = "#f87171";
+const accent = "#4a3a32";
+const bg = "#c8b8a9";
+const card = "#ffffff";
+const border = "#b9a996";
+const text = "#1d1d1d";
+const muted = "#6b5e52";
+const strip = "#ded2c4";
+const positive = "#15803d";
+const negative = "#b91c1c";
 
 export function TimeOffDecisionEmail({
   employeeName,
@@ -99,7 +100,7 @@ export function TimeOffDecisionEmail({
               border: `1px solid ${border}`,
               borderLeft: `4px solid ${statusColor}`,
               borderRadius: "8px",
-              backgroundColor: bg,
+              backgroundColor: strip,
               padding: "16px",
               margin: "0 0 24px",
             }}
@@ -152,7 +153,7 @@ export function TimeOffDecisionEmail({
               display: "block",
               width: "100%",
               backgroundColor: accent,
-              color: "#0a0a0a",
+              color: "#f4f0f0",
               fontSize: "14px",
               fontWeight: 600,
               textAlign: "center",

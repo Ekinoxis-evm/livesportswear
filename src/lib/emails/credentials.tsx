@@ -19,11 +19,11 @@ export type CredentialsEmailProps = {
   isAdmin: boolean;
 };
 
-const bg = "#0a0a0a";
-const card = "#141414";
-const border = "#2a2a2a";
-const text = "#ededed";
-const muted = "#a1a1a1";
+const bg = "#c8b8a9";
+const card = "#ffffff";
+const border = "#b9a996";
+const text = "#1d1d1d";
+const muted = "#6b5e52";
 
 export function CredentialsEmail({
   name,
