@@ -3,37 +3,18 @@ import type { DayOrder } from "@/lib/shopify";
 /**
  * Pure shaping for the kiosk "today's orders" view. No DB, no network, no time.
  *
- * Two independent lenses on the same day of orders:
- *  - channelTotals: the store-level split — how many/what value were in-store POS
- *    vs online (Shopify delivery). Online counts toward the totals.
- *  - perPerson: each salesperson's OWN total (orders · net · avg ticket), NOT
- *    split by channel. Only POS orders carry a staff id, so online orders never
- *    enter this — they live only in channelTotals.
+ * This Shopify store is the in-store/POS shop (online sales live on a separate
+ * store), so we count only real POS orders — `source_name === "pos"` — and drop
+ * everything else (notably `shopify_draft_order`, which are manual/zero-value and
+ * would otherwise inflate order counts and skew a rep's average ticket). Each POS
+ * order carries the seller's `user_id` (staffId), so per-person attribution is
+ * exact.
  */
 
-export type Channel = "pos" | "online";
+/** A real in-store POS sale (excludes drafts and anything non-pos). */
+export const isPosOrder = (o: DayOrder) => o.sourceName === "pos";
 
-/**
- * In-store POS vs online. With individual Shopify POS logins every in-store
- * order carries a staff `user_id` and online web orders don't — the same signal
- * `fetchStaffSales` attributes on — so `staffId` is the reliable split. We also
- * treat any `source_name` containing "pos" as in-store to cover a POS sale rung
- * without a login. (`source_name === "pos"` alone was too brittle — a store
- * whose POS reports a different source string read every order as "online".)
- */
-export function channelOf(order: { staffId: string | null; sourceName: string | null }): Channel {
-  if (order.staffId) return "pos";
-  if (order.sourceName && order.sourceName.toLowerCase().includes("pos")) return "pos";
-  return "online";
-}
-
-export type OrderRow = DayOrder & {
-  channel: Channel;
-  sellerName: string | null; // POS staff name; null for online (or unmapped handled in perPerson)
-};
-
-export type ChannelCount = { orders: number; net: number };
-export type ChannelTotals = { pos: ChannelCount; online: ChannelCount; all: ChannelCount };
+export type OrderRow = DayOrder & { sellerName: string | null };
 
 export type PersonRow = {
   staffId: string;
@@ -44,9 +25,9 @@ export type PersonRow = {
 };
 
 export type OrdersView = {
-  rows: OrderRow[]; // newest first
-  channelTotals: ChannelTotals;
-  perPerson: PersonRow[]; // POS-attributed, net desc
+  rows: OrderRow[]; // POS orders, newest first
+  total: { orders: number; net: number };
+  perPerson: PersonRow[]; // net desc
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -55,19 +36,12 @@ export function buildOrdersView(
   orders: DayOrder[],
   staffToName: Map<string, string>,
 ): OrdersView {
-  const pos: ChannelCount = { orders: 0, net: 0 };
-  const online: ChannelCount = { orders: 0, net: 0 };
+  const pos = orders.filter(isPosOrder);
   const byStaff = new Map<string, { net: number; orders: number }>();
+  let net = 0;
 
-  const rows: OrderRow[] = orders.map((o) => {
-    const channel = channelOf(o);
-    const bucket = channel === "pos" ? pos : online;
-    bucket.orders += 1;
-    bucket.net += o.net;
-
-    // Per-person attribution gates on staffId ALONE — the same rule the Sales
-    // ranking (fetchStaffSales) uses — so the two "who sold what" views on the
-    // page can never disagree. Any staff-attributed order counts here.
+  const rows: OrderRow[] = pos.map((o) => {
+    net += o.net;
     let sellerName: string | null = null;
     if (o.staffId) {
       sellerName = staffToName.get(o.staffId) ?? `Staff #${o.staffId}`;
@@ -76,7 +50,7 @@ export function buildOrdersView(
       acc.orders += 1;
       byStaff.set(o.staffId, acc);
     }
-    return { ...o, channel, sellerName };
+    return { ...o, sellerName };
   });
 
   rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -91,11 +65,5 @@ export function buildOrdersView(
     }))
     .sort((a, b) => b.net - a.net || a.name.localeCompare(b.name));
 
-  const channelTotals: ChannelTotals = {
-    pos: { orders: pos.orders, net: round2(pos.net) },
-    online: { orders: online.orders, net: round2(online.net) },
-    all: { orders: pos.orders + online.orders, net: round2(pos.net + online.net) },
-  };
-
-  return { rows, channelTotals, perPerson };
+  return { rows, total: { orders: pos.length, net: round2(net) }, perPerson };
 }

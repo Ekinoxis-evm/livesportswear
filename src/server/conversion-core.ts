@@ -184,6 +184,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
   }
   const salesByEmp = new Map<string, { net: number; orders: number }>();
   for (const o of dayOrders ?? []) {
+    if (o.sourceName !== "pos") continue; // real POS sales only (skip drafts)
     if (!o.staffId) continue;
     const empId = staffIdToEmpId.get(o.staffId);
     if (!empId) continue;

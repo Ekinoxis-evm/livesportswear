@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { channelOf, buildOrdersView } from "@/lib/orders-today";
+import { isPosOrder, buildOrdersView } from "@/lib/orders-today";
 import type { DayOrder } from "@/lib/shopify";
 
 const order = (o: Partial<DayOrder> = {}): DayOrder => ({
@@ -13,43 +13,35 @@ const order = (o: Partial<DayOrder> = {}): DayOrder => ({
   ...o,
 });
 
-describe("channelOf", () => {
-  it("a staff-attributed order is in-store regardless of source_name", () => {
-    expect(channelOf({ staffId: "77", sourceName: "web" })).toBe("pos");
-    expect(channelOf({ staffId: "77", sourceName: null })).toBe("pos");
-  });
-  it("no staff → online, unless source_name says pos (login-less POS sale)", () => {
-    expect(channelOf({ staffId: null, sourceName: "web" })).toBe("online");
-    expect(channelOf({ staffId: null, sourceName: "checkout_one_page" })).toBe("online");
-    expect(channelOf({ staffId: null, sourceName: null })).toBe("online");
-    expect(channelOf({ staffId: null, sourceName: "pos" })).toBe("pos");
-    expect(channelOf({ staffId: null, sourceName: "Shopify POS" })).toBe("pos");
+describe("isPosOrder", () => {
+  it("keeps only real POS orders", () => {
+    expect(isPosOrder(order({ sourceName: "pos" }))).toBe(true);
+    expect(isPosOrder(order({ sourceName: "shopify_draft_order" }))).toBe(false);
+    expect(isPosOrder(order({ sourceName: "web" }))).toBe(false);
+    expect(isPosOrder(order({ sourceName: null }))).toBe(false);
   });
 });
 
-describe("buildOrdersView — channel totals", () => {
-  it("splits orders and net by channel and sums the combined total", () => {
-    const { channelTotals } = buildOrdersView(
+describe("buildOrdersView", () => {
+  it("totals only POS orders — drafts are excluded from count and net", () => {
+    const { total } = buildOrdersView(
       [
         order({ id: "1", sourceName: "pos", net: 100 }),
         order({ id: "2", sourceName: "pos", net: 50 }),
-        order({ id: "3", sourceName: "web", net: 30, staffId: null }),
+        order({ id: "3", sourceName: "shopify_draft_order", net: 0, staffId: "88" }),
       ],
       new Map(),
     );
-    expect(channelTotals.pos).toEqual({ orders: 2, net: 150 });
-    expect(channelTotals.online).toEqual({ orders: 1, net: 30 });
-    expect(channelTotals.all).toEqual({ orders: 3, net: 180 });
+    expect(total).toEqual({ orders: 2, net: 150 });
   });
-});
 
-describe("buildOrdersView — per person", () => {
-  it("gives each staff their combined total, orders, and average ticket", () => {
+  it("gives each seller net · orders · avg ticket (POS only)", () => {
     const { perPerson } = buildOrdersView(
       [
         order({ id: "1", staffId: "77", net: 100 }),
         order({ id: "2", staffId: "77", net: 40 }),
         order({ id: "3", staffId: "88", net: 90 }),
+        order({ id: "4", staffId: "88", sourceName: "shopify_draft_order", net: 0 }), // ignored
       ],
       new Map([
         ["77", "Ana"],
@@ -62,31 +54,15 @@ describe("buildOrdersView — per person", () => {
     ]);
   });
 
-  it("excludes online orders (no staff) from the per-person table", () => {
-    const { perPerson } = buildOrdersView(
-      [order({ id: "1", sourceName: "web", staffId: null, net: 200 })],
-      new Map(),
-    );
-    expect(perPerson).toEqual([]);
-  });
-
-  it("falls back to 'Staff #id' for unmapped POS staff", () => {
-    const { perPerson } = buildOrdersView([order({ staffId: "999", net: 25 })], new Map());
-    expect(perPerson[0]).toMatchObject({ name: "Staff #999", orders: 1, avgTicket: 25 });
-  });
-});
-
-describe("buildOrdersView — rows", () => {
-  it("tags each row's channel + seller and sorts newest first", () => {
+  it("falls back to 'Staff #id' for unmapped sellers and sorts newest first", () => {
     const { rows } = buildOrdersView(
       [
-        order({ id: "old", createdAt: "2026-07-20T09:00:00Z", staffId: "77" }),
-        order({ id: "new", createdAt: "2026-07-20T18:00:00Z", sourceName: "web", staffId: null }),
+        order({ id: "old", createdAt: "2026-07-20T09:00:00Z", staffId: "999" }),
+        order({ id: "new", createdAt: "2026-07-20T18:00:00Z", staffId: "77" }),
       ],
       new Map([["77", "Ana"]]),
     );
     expect(rows.map((r) => r.id)).toEqual(["new", "old"]);
-    expect(rows[0]).toMatchObject({ channel: "online", sellerName: null });
-    expect(rows[1]).toMatchObject({ channel: "pos", sellerName: "Ana" });
+    expect(rows[1].sellerName).toBe("Staff #999");
   });
 });

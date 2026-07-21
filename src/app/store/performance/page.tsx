@@ -192,7 +192,6 @@ export default async function StorePerformancePage({
     id: r.id,
     name: r.name,
     time: formatInTimeZone(new Date(r.createdAt), tz, "HH:mm"),
-    channel: r.channel,
     seller: r.sellerName,
     net: r.net,
   }));
@@ -262,7 +261,7 @@ export default async function StorePerformancePage({
           <CardHeader>
             <CardDescription>Orders today</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {daySales ? daySales.orders : "—"}
+              {ordersView ? ordersView.total.orders : daySales ? daySales.orders : "—"}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -361,7 +360,7 @@ export default async function StorePerformancePage({
 
       {ordersView && (
         <OrdersToday
-          channelTotals={ordersView.channelTotals}
+          total={ordersView.total}
           perPerson={ordersView.perPerson}
           rows={orderListRows}
           currency={currency}
