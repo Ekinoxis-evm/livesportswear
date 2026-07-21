@@ -268,6 +268,47 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_origin: {
+        Row: {
+          created_at: string
+          first_order_at: string
+          first_order_id: string
+          first_order_name: string | null
+          location_id: string
+          shopify_customer_id: string
+          staff_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          first_order_at: string
+          first_order_id: string
+          first_order_name?: string | null
+          location_id: string
+          shopify_customer_id: string
+          staff_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          first_order_at?: string
+          first_order_id?: string
+          first_order_name?: string | null
+          location_id?: string
+          shopify_customer_id?: string
+          staff_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_origin_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_compensation: {
         Row: {
           created_at: string
@@ -1404,6 +1445,7 @@ export type Database = {
       current_employee_id: { Args: never; Returns: string }
       current_location_id: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      upsert_customer_origin: { Args: { rows: Json }; Returns: undefined }
     }
     Enums: {
       employee_role: "sales_rep" | "shift_lead" | "store_manager"

@@ -143,9 +143,45 @@ layer (counts), not money.
   `fetchCustomersByIds`). PII: stays in the DB under the existing RLS;
   NEVER log customer contact. Partial index
   `(location_id, shopify_customer_id)` powers the grouping.
-  **Next phase (not built):** historical attribution for customers created
-  before linking, via each customer's first order's staff `user_id`.
+  Historical attribution for customers created before linking now lives in
+  `customer_origin` (0042) — this table stays the *event* log.
 - index `(location_id, business_date)`, `(employee_id, business_date)`
+
+> **`client_events` is an interaction log, not a client list.** One row = one
+> person attended on the floor at one moment; the same person visiting three
+> times is three rows. There is no clients table — Shopify is the client book
+> (6,396 customers vs the 11 our linked events knew). Anything that needs "the
+> clients" reads Shopify + `customer_origin`, never this table.
+
+### `customer_origin` (added 0042)
+Which rep brought each client in — the one thing Shopify can't tell us.
+Attribution ONLY: no name, email or phone, because Shopify owns client identity,
+contact and search, and duplicating it would both fight the source of truth and
+create a new PII surface.
+- `shopify_customer_id text pk`
+- `location_id uuid fk -> locations (on delete cascade)`
+- `first_order_id text`, `first_order_name text`, `first_order_at timestamptz`
+- `staff_id text` — the Shopify POS `user_id` on that first order. Stored
+  **unresolved on purpose**: the employee is resolved at read time by joining
+  `employees.shopify_staff_id`, so mapping a departed or newly-hired rep later
+  re-attributes all history automatically, with no re-backfill.
+- index `(location_id, first_order_at desc)`, `(staff_id)`
+- RLS: admin-only via `admin_can_access_location(location_id)`. No employee or
+  kiosk policy — the portal computes its client numbers live from Shopify.
+
+**The rule**: a customer belongs to the staff on their EARLIEST non-cancelled,
+non-test, `source_name='pos'` order (drafts would hand a client to whoever opened
+one). Pure in `src/lib/customer-origin.ts` (`accumulateOrigins`); the sweep lives
+in `src/lib/customer-origin-sync.ts` (`runAttributionSync`), shared by the admin
+"Rebuild attribution" button (`src/server/customer-origin.ts`, full history,
+~39 REST pages) and the 10-minute cron (2-day window). Writes go through the
+`upsert_customer_origin(jsonb)` RPC, whose `where excluded.first_order_at <
+co.first_order_at` guard stops the incremental pass overwriting a real 2024
+first order with today's.
+
+**Ceiling worth knowing**: ~68% of orders carry a customer at all; the rest are
+anonymous walk-ins that belong to nobody. No amount of kiosk discipline changes
+that.
 
 ### `store_day_closes` (added 0009)
 End-of-day snapshot per `(location, business_date)` produced by the "Close day"

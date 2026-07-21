@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Receipt, Repeat, Search, ShoppingBag, Undo2, X } from "lucide-react";
+import {
+  Check,
+  Receipt,
+  Repeat,
+  Search,
+  ShoppingBag,
+  Undo2,
+  UserX,
+  X,
+} from "lucide-react";
 import { storeSearchProducts, storeRecentOrders } from "@/server/store-floor";
 import type { FinishInput, FinishOrder } from "@/lib/finish-schema";
 import type { ProductHit, RecentOrder } from "@/lib/shopify";
@@ -254,16 +263,27 @@ function FinishSteps({
             ))}
           </div>
         )}
+        {/* Equal weight to the order buttons on purpose: an anonymous cash
+            walk-in is legitimate and must stay one tap, but skipping should be
+            a decision rather than the quiet path — 59% of sales used to take
+            the old ghost "Skip" and lost their client. */}
         <Button
-          variant="ghost"
-          className="text-muted-foreground"
+          variant="outline"
+          size="lg"
+          className="h-14 justify-start gap-2.5"
           disabled={pending}
           onClick={() => {
             setOrder(null);
             setStep("contact");
           }}
         >
-          Skip — no order to link
+          <UserX className="size-4 shrink-0" />
+          <span className="flex min-w-0 flex-col items-start leading-tight">
+            <span className="font-semibold">No customer on this sale</span>
+            <span className="truncate text-xs font-normal opacity-80">
+              cash walk-in, or the order isn&apos;t listed
+            </span>
+          </span>
         </Button>
       </>
     );

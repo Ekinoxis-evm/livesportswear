@@ -494,7 +494,9 @@ export async function storeRecentOrders(): Promise<ActionResult<RecentOrder[]>> 
   await requireStore();
   if (!isShopifyConfigured()) return { ok: true, data: [] };
   try {
-    return { ok: true, data: await fetchRecentOrders() };
+    // 12, not the default 6: "my order isn't in the list" was the main reason
+    // reps skipped linking, and an unlinked sale loses its client.
+    return { ok: true, data: await fetchRecentOrders(12) };
   } catch {
     return { ok: true, data: [] };
   }
