@@ -46,6 +46,16 @@
   (`components/store/report-recipients-card.tsx`, store JWT's location). Reuse it — don't
   re-implement recipient editing. It keeps optimistic local state (chips update instantly).
 
+## Scrollable tables
+- **`ScrollTable`** (`src/components/shared/scroll-table.tsx`) is the wrapper for
+  any table long or wide enough to need a viewport: scrolls **both** axes,
+  `maxHeight` caps the vertical run, and the `<thead>` sticks so the column
+  you're reading stays labelled. Wrap a plain `<table>`; the sticky/padding rules
+  are applied by descendant selectors, so call sites don't change.
+- Use it in place of a bare `overflow-x-auto` wherever rows can pile up
+  (clients, inventory book, order lists). For short fixed-size tables the plain
+  idioms below are still fine.
+
 ## Responsive tables
 - Two idioms, no card-stack: **(a)** wrap the table in `overflow-x-auto` (it scrolls
   horizontally on narrow screens — shadcn `<Table>` already self-wraps); **(b)** drop

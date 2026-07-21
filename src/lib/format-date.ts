@@ -42,6 +42,13 @@ export function shortDate(date: string): string {
   return y === currentYear() ? base : `${base}, ${y}`;
 }
 
+/** "2024-02-17" -> "Feb 17, 2024" — always with the year. For history that
+ * spans years, where dropping it makes two rows look like the same day. */
+export function fullDate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
 /** "2026-06-22".."2026-07-05" -> "Jun 22 – Jul 5" (year only if not current). */
 export function shortDateRange(start: string, end: string): string {
   if (start === end) return shortDate(start);
