@@ -24,7 +24,7 @@ Next.js 16 (App Router) · TypeScript · Tailwind v4 + shadcn/ui (Base UI) · Su
 - `src/app/s/[token]/` + `src/app/w/[token]/` — public magic-token pages (employee schedule + ICS; store week + sales ranking).
 - `src/app/api/cron/` — `shopify-sync` (also finalizes ended contests), `stale-checkins`, `photo-retention`, `meta-sync`. All check `CRON_SECRET`.
 - `src/lib/emails/` — React Email templates (schedule-published, day-report, credentials, time-off-decision).
-- `supabase/migrations/` — append-only, currently through `0040`.
+- `supabase/migrations/` — append-only, currently through `0041`.
 - `.claude/` — agents, commands, hooks, rules, project skills.
 
 ## Coding standards (short version)

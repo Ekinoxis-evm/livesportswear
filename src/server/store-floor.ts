@@ -456,6 +456,7 @@ export async function storeFinish(
   const res = await doFinishCustomer(service, locationId, bd, emp.id, {
     kind: d.kind,
     sold: d.sold,
+    return_type: d.kind === "return" ? d.return_type : undefined,
     got_contact: d.kind === "walkin" ? d.got_contact : false,
     reasons: d.kind === "walkin" && !d.sold ? d.reasons : undefined,
     products: d.kind === "walkin" && !d.sold ? d.products : undefined,

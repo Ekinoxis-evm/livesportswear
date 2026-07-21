@@ -44,10 +44,10 @@ describe("buildDayReportCsv", () => {
     const lines = csv.split("\r\n");
     expect(lines[0]).toBe("Daily Report 2026-07-09");
     expect(lines).toContain(
-      "11:30,Maryna,walkin,sold,#1042 ($118.40),Anastasia B,,,,yes",
+      "11:30,Maryna,walkin,,sold,#1042 ($118.40),Anastasia B,,,,yes",
     );
     expect(lines).toContain(
-      "12:00,Veriana,walkin,no sale,,,No size; No color,,wanted the blue one,no",
+      "12:00,Veriana,walkin,,no sale,,,No size; No color,,wanted the blue one,no",
     );
     expect(lines).toContain("Maryna,09:30,17:30,8,25,validated,validated");
   });

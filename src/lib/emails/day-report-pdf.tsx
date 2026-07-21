@@ -11,7 +11,7 @@ import {
   type ReportCheckin,
   type ReportEvent,
 } from "@/lib/day-report-csv";
-import type { DayReportTotals } from "@/lib/day-report-xml";
+import type { DayReportTotals } from "@/lib/day-report-csv";
 import { workedHours, stampStatus } from "@/lib/attendance";
 import { formatInTimeZone } from "date-fns-tz";
 

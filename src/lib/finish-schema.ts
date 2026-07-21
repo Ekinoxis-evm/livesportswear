@@ -40,10 +40,12 @@ const walkinSchema = z
     message: "Pick at least one reason.",
   });
 
-// For a return, `sold` means "the customer bought something else".
+// For a return, `sold` means "the customer bought something else". `return_type`
+// is a report-only label (no metric change — conversion still keys on kind).
 const returnSchema = z.object({
   kind: z.literal("return"),
   sold: z.boolean(),
+  return_type: z.enum(["return", "exchange", "both"]).optional(),
 });
 
 export const finishSchema = z.union([walkinSchema, returnSchema]);

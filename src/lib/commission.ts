@@ -51,6 +51,20 @@ export function formatMoney(amount: number, currency = "USD"): string {
   }
 }
 
+/** Currency with cents — used where precise amounts matter (the daily report). */
+export function formatMoneyExact(amount: number, currency = "USD"): string {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return amount.toFixed(2);
+  }
+}
+
 /** Coerce a jsonb value into a tier array (invalid entries dropped). */
 export function asTiers(value: unknown): CommissionTier[] {
   if (!Array.isArray(value)) return [];

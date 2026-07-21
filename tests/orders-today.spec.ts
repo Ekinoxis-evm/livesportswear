@@ -14,11 +14,16 @@ const order = (o: Partial<DayOrder> = {}): DayOrder => ({
 });
 
 describe("channelOf", () => {
-  it("treats source_name 'pos' as in-store, everything else as online", () => {
-    expect(channelOf("pos")).toBe("pos");
-    expect(channelOf("web")).toBe("online");
-    expect(channelOf("checkout_one_page")).toBe("online");
-    expect(channelOf(null)).toBe("online");
+  it("a staff-attributed order is in-store regardless of source_name", () => {
+    expect(channelOf({ staffId: "77", sourceName: "web" })).toBe("pos");
+    expect(channelOf({ staffId: "77", sourceName: null })).toBe("pos");
+  });
+  it("no staff → online, unless source_name says pos (login-less POS sale)", () => {
+    expect(channelOf({ staffId: null, sourceName: "web" })).toBe("online");
+    expect(channelOf({ staffId: null, sourceName: "checkout_one_page" })).toBe("online");
+    expect(channelOf({ staffId: null, sourceName: null })).toBe("online");
+    expect(channelOf({ staffId: null, sourceName: "pos" })).toBe("pos");
+    expect(channelOf({ staffId: null, sourceName: "Shopify POS" })).toBe("pos");
   });
 });
 

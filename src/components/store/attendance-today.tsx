@@ -17,6 +17,7 @@ export type AttendanceRow = {
   time: string; // HH:mm in store tz
   rep: string;
   isReturn: boolean;
+  returnType: string | null; // 'return' | 'exchange' | 'both'
   sold: boolean;
   gotContact: boolean;
   orderName: string | null;
@@ -97,8 +98,8 @@ export function AttendanceToday({
                     <td className="py-2 font-medium">
                       {r.rep}
                       {r.isReturn && (
-                        <Badge variant="outline" className="ml-1.5 align-middle">
-                          return
+                        <Badge variant="outline" className="ml-1.5 align-middle capitalize">
+                          {r.returnType ?? "return"}
                         </Badge>
                       )}
                     </td>

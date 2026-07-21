@@ -4,16 +4,22 @@ import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct, type ConversionTotals } from "@/lib/conversion";
 import { breakMinutes, type BreakRow } from "@/lib/breaks";
-import { getDaySalesCached } from "@/lib/shopify-day-cache";
+import { workedHours } from "@/lib/attendance";
+import { getDaySalesCached, getDayOrdersCached } from "@/lib/shopify-day-cache";
 import { fetchDayTenders, type DaySales } from "@/lib/shopify";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { dayRangeInTz } from "@/lib/shopify-range";
+import { dayRangeInTz, normalizeStaffId } from "@/lib/shopify-range";
 import { summarizeTenders, type TenderSummary } from "@/lib/tenders";
-import { buildDayReportCsv, type ReportCheckin, type ReportEvent } from "@/lib/day-report-csv";
-import { buildDayReportXml, type DayReportTotals } from "@/lib/day-report-xml";
+import {
+  buildDayReportCsv,
+  type ReportCheckin,
+  type ReportEvent,
+  type DayReportTotals,
+} from "@/lib/day-report-csv";
+import { buildDayReportXlsx, type ReportEmployee } from "@/lib/day-report-xlsx";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { DayReportPdf } from "@/lib/emails/day-report-pdf";
-import { formatMoney } from "@/lib/commission";
+import { formatMoney, formatMoneyExact } from "@/lib/commission";
 import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
 import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
@@ -78,7 +84,7 @@ type DayReportData = {
   recipients: string[];
   subject: string;
   csv: string;
-  xml: string;
+  perEmployee: ReportEmployee[];
   reportEvents: ReportEvent[];
   reportCheckins: ReportCheckin[];
   totals: DayReportTotals;
@@ -106,33 +112,47 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
         .catch(() => null)
     : Promise.resolve(null);
 
-  const [{ data: eventRows }, { data: checkinRows }, { data: breakRows }, shopify, tenders, recipients] =
-    await Promise.all([
-      service
-        .from("client_events")
-        .select(
-          "employee_id, attended_at, kind, sold, got_contact, reasons, note, products, shopify_order_name, order_total, customer_name, employees(name)",
-        )
-        .eq("location_id", locationId)
-        .eq("business_date", bd)
-        .order("attended_at"),
-      service
-        .from("floor_checkins")
-        .select(
-          "employee_id, arrived_at, left_at, entry_validated_at, entry_self, exit_validated_at, exit_self, exit_missed, employees(name)",
-        )
-        .eq("location_id", locationId)
-        .eq("business_date", bd)
-        .order("arrived_at"),
-      service
-        .from("floor_breaks")
-        .select("employee_id, started_at, ended_at")
-        .eq("location_id", locationId)
-        .eq("business_date", bd),
-      getDaySalesCached(bd, tz),
-      tendersPromise,
-      reportRecipients(locationId),
-    ]);
+  const [
+    { data: eventRows },
+    { data: checkinRows },
+    { data: breakRows },
+    { data: empRows },
+    shopify,
+    dayOrders,
+    tenders,
+    recipients,
+  ] = await Promise.all([
+    service
+      .from("client_events")
+      .select(
+        "employee_id, attended_at, kind, return_type, sold, got_contact, reasons, note, products, shopify_order_name, order_total, customer_name, employees(name)",
+      )
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .order("attended_at"),
+    service
+      .from("floor_checkins")
+      .select(
+        "employee_id, arrived_at, left_at, entry_validated_at, entry_self, exit_validated_at, exit_self, exit_missed, employees(name)",
+      )
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .order("arrived_at"),
+    service
+      .from("floor_breaks")
+      .select("employee_id, started_at, ended_at")
+      .eq("location_id", locationId)
+      .eq("business_date", bd),
+    service
+      .from("employees")
+      .select("id, name, shopify_staff_id")
+      .eq("location_id", locationId)
+      .eq("active", true),
+    getDaySalesCached(bd, tz),
+    getDayOrdersCached(bd, tz),
+    tendersPromise,
+    reportRecipients(locationId),
+  ]);
 
   const events = eventRows ?? [];
   const checkins = checkinRows ?? [];
@@ -149,19 +169,79 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     row.employees?.name ?? "Unknown";
 
   const t = totals(events);
+  const currency = shopify?.currency ?? "USD";
   const personName = new Map<string, string>();
   for (const e of events) personName.set(e.employee_id, nameOf(e));
-  const perPerson: DayReportRow[] = byPerson(events).map((p) => ({
-    name: personName.get(p.employeeId) ?? "Unknown",
+
+  // Per-employee, merged across three sources keyed on employee id: conversion
+  // counts (byPerson), the day's Shopify net + orders attributed to that rep's
+  // POS login (via shopify_staff_id), and worked hours from check-ins.
+  const roster = empRows ?? [];
+  const rosterName = new Map(roster.map((e) => [e.id, e.name]));
+  const staffIdToEmpId = new Map<string, string>();
+  for (const e of roster) {
+    if (e.shopify_staff_id) staffIdToEmpId.set(normalizeStaffId(e.shopify_staff_id), e.id);
+  }
+  const salesByEmp = new Map<string, { net: number; orders: number }>();
+  for (const o of dayOrders ?? []) {
+    if (!o.staffId) continue;
+    const empId = staffIdToEmpId.get(o.staffId);
+    if (!empId) continue;
+    const acc = salesByEmp.get(empId) ?? { net: 0, orders: 0 };
+    acc.net += o.net;
+    acc.orders += 1;
+    salesByEmp.set(empId, acc);
+  }
+  const hoursByEmp = new Map<string, number>();
+  for (const c of checkins) {
+    const h = workedHours(c.arrived_at, c.left_at);
+    if (h != null) hoursByEmp.set(c.employee_id, (hoursByEmp.get(c.employee_id) ?? 0) + h);
+  }
+  const convByEmp = new Map(byPerson(events).map((p) => [p.employeeId, p]));
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const nameFor = (id: string) => personName.get(id) ?? rosterName.get(id) ?? "Unknown";
+  const empIds = new Set<string>([
+    ...convByEmp.keys(),
+    ...salesByEmp.keys(),
+    ...hoursByEmp.keys(),
+  ]);
+  const perEmployee: ReportEmployee[] = [...empIds]
+    .map((id) => {
+      const conv = convByEmp.get(id);
+      const sales = salesByEmp.get(id);
+      const orders = sales?.orders ?? 0;
+      const net = round2(sales?.net ?? 0);
+      return {
+        name: nameFor(id),
+        net,
+        orders,
+        avgTicket: orders ? round2(net / orders) : 0,
+        attended: conv?.attended ?? 0,
+        sold: conv?.sold ?? 0,
+        conversion: conv?.conversion ?? 0,
+        contacts: conv?.contacts ?? 0,
+        hours: round2(hoursByEmp.get(id) ?? 0),
+      };
+    })
+    .sort((a, b) => b.net - a.net || b.sold - a.sold || a.name.localeCompare(b.name));
+
+  const perPerson: DayReportRow[] = perEmployee.map((p) => ({
+    name: p.name,
     attended: p.attended,
     sold: p.sold,
-    conversionPct: formatPct(p.conversion),
+    conversionPct: p.attended > 0 ? formatPct(p.conversion) : "—",
+    contacts: p.contacts,
+    orders: p.orders,
+    net: formatMoneyExact(p.net, currency),
+    avgTicket: formatMoneyExact(p.avgTicket, currency),
+    hours: p.hours,
   }));
 
   const reportEvents: ReportEvent[] = events.map((e) => ({
     employeeName: nameOf(e),
     attended_at: e.attended_at,
     kind: e.kind,
+    returnType: e.return_type,
     sold: e.sold,
     got_contact: e.got_contact,
     reasons: e.reasons,
@@ -183,7 +263,6 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     breakMinutes: breakMinutes(breaksBy.get(c.employee_id) ?? [], now),
   }));
 
-  const currency = shopify?.currency ?? "USD";
   const reportTotals: DayReportTotals = {
     netSales: shopify?.net ?? null,
     grossSales: shopify?.gross ?? null,
@@ -207,15 +286,6 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     events: reportEvents,
     checkins: reportCheckins,
   });
-  const xml = buildDayReportXml({
-    businessDate: bd,
-    storeName: locName,
-    currency,
-    tz,
-    totals: reportTotals,
-    events: reportEvents,
-    checkins: reportCheckins,
-  });
 
   return {
     locName,
@@ -228,7 +298,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     recipients,
     subject: `Daily Report — ${locName} · ${weekdayName(bd)} ${shortDate(bd)}`,
     csv,
-    xml,
+    perEmployee,
     reportEvents,
     reportCheckins,
     totals: reportTotals,
@@ -447,9 +517,19 @@ export async function sendDayReport(
       checkins: d.reportCheckins,
     }),
   );
+  const xlsx = await buildDayReportXlsx({
+    storeName: d.locName,
+    businessDate: d.bd,
+    tz: d.tz,
+    currency: d.currency,
+    totals: d.totals,
+    employees: d.perEmployee,
+    events: d.reportEvents,
+    checkins: d.reportCheckins,
+  });
   const attachments = [
     { filename: `daily-report-${d.bd}.csv`, content: d.csv },
-    { filename: `daily-report-${d.bd}.xml`, content: d.xml },
+    { filename: `daily-report-${d.bd}.xlsx`, content: xlsx.toString("base64") },
     { filename: `daily-report-${d.bd}.pdf`, content: pdf.toString("base64") },
   ];
   const subject = opts.test ? `[TEST] ${d.subject}` : d.subject;

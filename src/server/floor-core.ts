@@ -278,6 +278,7 @@ export async function doClearAttending(
 export type FinishResult = {
   kind: "walkin" | "return";
   sold: boolean; // for a return: the customer bought something else
+  return_type?: "return" | "exchange" | "both"; // report-only label on a return
   got_contact: boolean;
   reasons?: string[]; // mandatory (app layer) when a walk-in didn't buy
   products?: { id: string; title: string; sku?: string | null }[];
@@ -349,6 +350,7 @@ export async function doFinishCustomer(
     employee_id: employeeId,
     business_date: bd,
     kind: result.kind,
+    return_type: result.return_type ?? null,
     sold: result.sold,
     got_contact: result.got_contact,
     reasons: result.reasons ?? null,

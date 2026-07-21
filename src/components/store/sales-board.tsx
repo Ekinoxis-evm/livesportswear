@@ -419,17 +419,23 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         </Card>
       )}
 
-      {/* Return / exchange entry point */}
+      {/* Returns & exchanges — deliberately set apart from the up-next queue so
+          it never gets tapped by mistake, and easy to find when needed. */}
       {line.length > 0 && (
-        <Button
-          variant="outline"
-          size="lg"
-          className="h-14"
-          disabled={pending}
-          onClick={() => setReturnPicker(true)}
-        >
-          <Undo2 className="mr-2 size-5" /> Return / Exchange
-        </Button>
+        <div className="mt-2 border-t pt-4">
+          <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
+            Returns &amp; exchanges
+          </p>
+          <Button
+            size="lg"
+            variant="outline"
+            className="h-14 w-full border-2 border-amber-500/70 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30"
+            disabled={pending}
+            onClick={() => setReturnPicker(true)}
+          >
+            <Undo2 className="mr-2 size-5" /> Return / Exchange
+          </Button>
+        </div>
       )}
 
       <FinishDialog

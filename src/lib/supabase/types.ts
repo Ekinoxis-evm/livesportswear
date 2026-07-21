@@ -174,6 +174,7 @@ export type Database = {
           order_total: number | null
           products: Json | null
           reasons: string[] | null
+          return_type: string | null
           shopify_customer_id: string | null
           shopify_order_id: string | null
           shopify_order_name: string | null
@@ -195,6 +196,7 @@ export type Database = {
           order_total?: number | null
           products?: Json | null
           reasons?: string[] | null
+          return_type?: string | null
           shopify_customer_id?: string | null
           shopify_order_id?: string | null
           shopify_order_name?: string | null
@@ -216,6 +218,7 @@ export type Database = {
           order_total?: number | null
           products?: Json | null
           reasons?: string[] | null
+          return_type?: string | null
           shopify_customer_id?: string | null
           shopify_order_id?: string | null
           shopify_order_name?: string | null

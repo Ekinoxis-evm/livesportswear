@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Hand, UserCheck, CalendarDays, ChartColumn, Trophy } from "lucide-react";
+import { Hand, UserCheck, CalendarDays, ChartColumn, Trophy, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Sales sits in the middle as the raised primary button — it's the screen the
@@ -16,10 +16,23 @@ const RIGHT = [
   { href: "/store/rewards", label: "Rewards", icon: Trophy },
 ];
 
+// Rendered inside <Link>, so useLinkStatus reflects THIS tab's navigation —
+// swap the icon for a spinner the instant it's tapped (kiosk feels responsive
+// even while the server renders the next page).
+function TabInner({ icon: Icon, label }: { icon: typeof Hand; label: string }) {
+  const { pending } = useLinkStatus();
+  return (
+    <>
+      {pending ? <Loader2 className="size-6 animate-spin" /> : <Icon className="size-6" />}
+      {label}
+    </>
+  );
+}
+
 function Tab({
   href,
   label,
-  icon: Icon,
+  icon,
   active,
 }: {
   href: string;
@@ -35,10 +48,14 @@ function Tab({
         active ? "text-primary" : "text-muted-foreground",
       )}
     >
-      <Icon className="size-6" />
-      {label}
+      <TabInner icon={icon} label={label} />
     </Link>
   );
+}
+
+function SalesInner() {
+  const { pending } = useLinkStatus();
+  return pending ? <Loader2 className="size-7 animate-spin" /> : <Hand className="size-7" />;
 }
 
 export function StoreNav() {
@@ -60,7 +77,7 @@ export function StoreNav() {
               pathname === "/store" && "ring-primary/40 scale-105",
             )}
           >
-            <Hand className="size-7" />
+            <SalesInner />
           </span>
           <span
             className={cn(

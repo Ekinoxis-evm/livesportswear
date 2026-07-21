@@ -18,6 +18,11 @@ export type DayReportRow = {
   attended: number;
   sold: number;
   conversionPct: string;
+  contacts: number;
+  orders: number;
+  net: string; // formatted currency (net sales attributed to this rep)
+  avgTicket: string; // formatted currency (net / orders)
+  hours: number;
 };
 
 export type DayReportEmailProps = {
@@ -229,29 +234,66 @@ export function DayReportEmail({
           </Text>
           {perPerson.length === 0 ? (
             <Text style={{ fontSize: "14px", color: muted, margin: 0 }}>
-              No clients were logged today.
+              No activity was logged today.
             </Text>
           ) : (
-            perPerson.map((p) => (
-              <Row key={p.name} style={{ margin: "0 0 6px" }}>
-                <Column style={{ fontSize: "14px", color: text }}>{p.name}</Column>
-                <Column
-                  style={{
-                    fontSize: "14px",
-                    color: muted,
-                    textAlign: "right",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {p.sold}/{p.attended} · {p.conversionPct}
+            <>
+              <Row style={{ margin: "0 0 6px" }}>
+                <Column style={{ fontSize: "12px", color: muted, width: "34%" }}>
+                  Team member
+                </Column>
+                <Column style={{ fontSize: "12px", color: muted, textAlign: "right" }}>
+                  Net
+                </Column>
+                <Column style={{ fontSize: "12px", color: muted, textAlign: "right" }}>
+                  Avg ticket
+                </Column>
+                <Column style={{ fontSize: "12px", color: muted, textAlign: "right" }}>
+                  Sold/Att
                 </Column>
               </Row>
-            ))
+              {perPerson.map((p) => (
+                <Row key={p.name} style={{ margin: "0 0 6px" }}>
+                  <Column style={{ fontSize: "14px", color: text, width: "34%" }}>{p.name}</Column>
+                  <Column
+                    style={{
+                      fontSize: "14px",
+                      color: text,
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {p.net}
+                  </Column>
+                  <Column
+                    style={{
+                      fontSize: "14px",
+                      color: text,
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {p.avgTicket}
+                  </Column>
+                  <Column
+                    style={{
+                      fontSize: "14px",
+                      color: muted,
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {p.sold}/{p.attended} · {p.conversionPct}
+                  </Column>
+                </Row>
+              ))}
+            </>
           )}
 
           <Hr style={{ borderColor: border, margin: "24px 0 12px" }} />
           <Text style={{ fontSize: "12px", color: muted, margin: 0 }}>
-            Full detail (every client and check-in) is attached as CSV.
+            Full detail — per-employee sales, every client and check-in — is attached as an
+            Excel workbook (.xlsx). A CSV and PDF are attached too.
           </Text>
         </Container>
       </Body>

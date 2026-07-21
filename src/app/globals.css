@@ -140,6 +140,12 @@
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  /* Snappier taps on the kiosk iPad: drop the 300ms double-tap delay and the
+     grey tap-flash so buttons/links feel instant. */
+  button, a, [role="button"], label {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
   html {
     @apply bg-background font-sans;
   }

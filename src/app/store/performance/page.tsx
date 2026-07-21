@@ -77,7 +77,7 @@ export default async function StorePerformancePage({
     service
       .from("client_events")
       .select(
-        "id, employee_id, attended_at, kind, sold, got_contact, order_total, shopify_order_name, customer_name",
+        "id, employee_id, attended_at, kind, return_type, sold, got_contact, order_total, shopify_order_name, customer_name",
       )
       .eq("location_id", locationId)
       .eq("business_date", bd),
@@ -159,7 +159,20 @@ export default async function StorePerformancePage({
     .filter((e) => onShift.has(e.id) && onFloor.has(e.id))
     .map((e) => ({ id: e.id, name: e.name }));
 
-  const daySales = await getDaySalesCached(bd, tz);
+  // Kick off the independent Shopify reads together — first paint waits on the
+  // slowest, not the sum (all 60s-cached, so the 45s auto-refresh stays cheap).
+  const staffBounds = mode !== "month" ? periodBounds(mode, { today: bd, from, to }) : null;
+  const staffRange =
+    staffBounds && isShopifyConfigured()
+      ? customRangeInTz(staffBounds.from, staffBounds.to, tz)
+      : null;
+  const [daySales, dayOrders, staffEntries] = await Promise.all([
+    getDaySalesCached(bd, tz),
+    getDayOrdersCached(bd, tz),
+    staffRange
+      ? getStaffSalesCached(staffRange.start, staffRange.endExclusive)
+      : Promise.resolve(null),
+  ]);
   const currency = goalRow?.currency ?? daySales?.currency ?? "USD";
 
   const { data: recipientRows } = await service
@@ -170,7 +183,6 @@ export default async function StorePerformancePage({
   const reportRecipients = (recipientRows ?? []).map((r) => r.email);
 
   // Today's orders split by channel (POS vs online) + per-seller avg ticket.
-  const dayOrders = await getDayOrdersCached(bd, tz);
   const staffToName = new Map<string, string>();
   for (const e of roster) {
     if (e.shopify_staff_id) staffToName.set(normalizeStaffId(e.shopify_staff_id), e.name);
@@ -193,6 +205,7 @@ export default async function StorePerformancePage({
       time: formatInTimeZone(new Date(e.attended_at), tz, "HH:mm"),
       rep: nameOf.get(e.employee_id) ?? "—",
       isReturn: e.kind === "return",
+      returnType: e.return_type,
       sold: e.sold,
       gotContact: e.got_contact,
       orderName: e.shopify_order_name,
@@ -216,12 +229,9 @@ export default async function StorePerformancePage({
   if (mode === "month") {
     rows = monthRows(monthSalesRows ?? [], roster, { goals: personalGoalOf });
   } else if (isShopifyConfigured()) {
-    const bounds = periodBounds(mode, { today: bd, from, to });
-    const range = customRangeInTz(bounds.from, bounds.to, tz);
-    const entries = await getStaffSalesCached(range.start, range.endExclusive);
     unmappedCount = roster.filter((e) => !e.shopify_staff_id).length;
-    if (entries) {
-      rows = staffRowsFromEntries(entries, roster);
+    if (staffEntries) {
+      rows = staffRowsFromEntries(staffEntries, roster);
     } else {
       salesUnavailable = true;
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Receipt, Search, X } from "lucide-react";
+import { Check, Receipt, Repeat, Search, ShoppingBag, Undo2, X } from "lucide-react";
 import { storeSearchProducts, storeRecentOrders } from "@/server/store-floor";
 import type { FinishInput, FinishOrder } from "@/lib/finish-schema";
 import type { ProductHit, RecentOrder } from "@/lib/shopify";
@@ -119,29 +119,54 @@ function FinishSteps({
   };
 
   if (target.kind === "return") {
+    // One step, three choices. `sold` (which drives the metrics) is derived from
+    // the type: only "both" (returned AND bought more) counts as an extra sale.
+    const finishReturn = (return_type: "return" | "exchange" | "both", sold: boolean) =>
+      onSubmit(target.employeeId, { kind: "return", sold, return_type });
     return (
       <>
         <DialogHeader>
           <DialogTitle>{target.name} — return / exchange</DialogTitle>
-          <DialogDescription>Did the customer buy something else?</DialogDescription>
+          <DialogDescription>What kind of transaction?</DialogDescription>
         </DialogHeader>
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-2">
           <Button
             size="lg"
             variant="outline"
-            className="h-14 flex-1"
+            className="h-14 justify-start gap-3"
             disabled={pending}
-            onClick={() => onSubmit(target.employeeId, { kind: "return", sold: false })}
+            onClick={() => finishReturn("return", false)}
           >
-            No — return only
+            <Undo2 className="size-5" />
+            <span className="flex flex-col items-start leading-tight">
+              Return
+              <span className="text-muted-foreground text-xs font-normal">Refund only</span>
+            </span>
           </Button>
           <Button
             size="lg"
-            className="h-14 flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
+            variant="outline"
+            className="h-14 justify-start gap-3"
             disabled={pending}
-            onClick={() => onSubmit(target.employeeId, { kind: "return", sold: true })}
+            onClick={() => finishReturn("exchange", false)}
           >
-            Yes — bought more
+            <Repeat className="size-5" />
+            <span className="flex flex-col items-start leading-tight">
+              Exchange
+              <span className="text-muted-foreground text-xs font-normal">Swapped for another item</span>
+            </span>
+          </Button>
+          <Button
+            size="lg"
+            className="h-14 justify-start gap-3 bg-emerald-600 text-white hover:bg-emerald-700"
+            disabled={pending}
+            onClick={() => finishReturn("both", true)}
+          >
+            <ShoppingBag className="size-5" />
+            <span className="flex flex-col items-start leading-tight">
+              Both
+              <span className="text-xs font-normal text-white/80">Returned &amp; bought more</span>
+            </span>
           </Button>
         </div>
       </>

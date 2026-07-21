@@ -13,6 +13,7 @@ export type ReportEvent = {
   employeeName: string;
   attended_at: string; // ISO
   kind?: string | null; // walkin | return (defaults to walkin)
+  returnType?: string | null; // return | exchange | both (returns only)
   sold: boolean;
   got_contact: boolean;
   reasons?: string[] | null;
@@ -45,6 +46,24 @@ export type ReportCheckin = {
   breakMinutes?: number;
 };
 
+/** Store-level totals shared by the report attachments (csv/xlsx/pdf). */
+export type DayReportTotals = {
+  netSales: number | null;
+  grossSales: number | null;
+  discounts: number | null;
+  returnsValue: number | null; // merchandise value refunded off orders
+  orders: number | null;
+  cashNet: number | null;
+  cardNet: number | null;
+  refundsTotal: number | null; // negative
+  refundsCount: number | null;
+  attended: number;
+  sold: number;
+  conversionPct: string;
+  contacts: number;
+  returns: number;
+};
+
 export function buildDayReportCsv({
   businessDate,
   events,
@@ -62,6 +81,7 @@ export function buildDayReportCsv({
     time(e.attended_at),
     e.employeeName,
     e.kind ?? "walkin",
+    e.returnType ?? "",
     e.sold ? "sold" : "no sale",
     orderLabel(e),
     e.customerName ?? "",
@@ -90,7 +110,7 @@ export function buildDayReportCsv({
     [`Daily Report ${businessDate}`],
     [],
     ["Client events"],
-    ["Time", "Employee", "Kind", "Result", "Order", "Customer", "Reasons", "Products", "Note", "Got contact"],
+    ["Time", "Employee", "Kind", "Return type", "Result", "Order", "Customer", "Reasons", "Products", "Note", "Got contact"],
     ...eventRows,
     [],
     ["Check-ins"],

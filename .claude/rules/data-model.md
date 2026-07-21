@@ -128,6 +128,11 @@ layer (counts), not money.
 - `business_date date not null` — location-local day (for daily grouping/close)
 - `attended_at timestamptz not null default now()` — when the rep marked it
 - `sold boolean not null default false`
+- `return_type text` (added 0041; check `return`|`exchange`|`both`) — a
+  **report-only label** on a return event, set from the kiosk finish wizard.
+  Does NOT change metrics: conversion/returns still key on `kind`
+  (`src/lib/conversion.ts`), which stays `walkin`|`return`. `both` implies
+  `sold=true` (returned + bought more); `return`/`exchange` imply `sold=false`.
 - `got_contact boolean not null default false`
 - `shopify_order_id/_name`, `order_total`, `shopify_customer_id`,
   `customer_name/_email/_phone` (added 0037) — a sold walk-in optionally

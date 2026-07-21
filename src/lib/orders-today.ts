@@ -13,9 +13,18 @@ import type { DayOrder } from "@/lib/shopify";
 
 export type Channel = "pos" | "online";
 
-/** Shopify `source_name` is "pos" for in-store POS; everything else is online. */
-export function channelOf(sourceName: string | null): Channel {
-  return sourceName === "pos" ? "pos" : "online";
+/**
+ * In-store POS vs online. With individual Shopify POS logins every in-store
+ * order carries a staff `user_id` and online web orders don't — the same signal
+ * `fetchStaffSales` attributes on — so `staffId` is the reliable split. We also
+ * treat any `source_name` containing "pos" as in-store to cover a POS sale rung
+ * without a login. (`source_name === "pos"` alone was too brittle — a store
+ * whose POS reports a different source string read every order as "online".)
+ */
+export function channelOf(order: { staffId: string | null; sourceName: string | null }): Channel {
+  if (order.staffId) return "pos";
+  if (order.sourceName && order.sourceName.toLowerCase().includes("pos")) return "pos";
+  return "online";
 }
 
 export type OrderRow = DayOrder & {
@@ -51,16 +60,16 @@ export function buildOrdersView(
   const byStaff = new Map<string, { net: number; orders: number }>();
 
   const rows: OrderRow[] = orders.map((o) => {
-    const channel = channelOf(o.sourceName);
+    const channel = channelOf(o);
     const bucket = channel === "pos" ? pos : online;
     bucket.orders += 1;
     bucket.net += o.net;
 
-    // Per-person attribution is POS-only — only in-store orders carry a real
-    // seller. (An online order should never have a staffId, but guard the
-    // channel so the split and the per-person table can never disagree.)
+    // Per-person attribution gates on staffId ALONE — the same rule the Sales
+    // ranking (fetchStaffSales) uses — so the two "who sold what" views on the
+    // page can never disagree. Any staff-attributed order counts here.
     let sellerName: string | null = null;
-    if (channel === "pos" && o.staffId) {
+    if (o.staffId) {
       sellerName = staffToName.get(o.staffId) ?? `Staff #${o.staffId}`;
       const acc = byStaff.get(o.staffId) ?? { net: 0, orders: 0 };
       acc.net += o.net;
