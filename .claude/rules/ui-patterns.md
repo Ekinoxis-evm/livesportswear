@@ -76,5 +76,5 @@
 
 ## Email templates
 - Plain, semantic table layout (`@react-email/components`).
-- Live logo top, single accent color matching the app, dark mode supported via inline styles.
+- Live logo top; all templates share the app's **sepia light palette** (beige `#c8b8a9` page · white card · ink `#1d1d1d` text · deep-sepia `#4a3a32` accent/CTA with cream label · `#ded2c4` inner strips). Single light theme (no dark-mode variant). The daily report also emits a 4-sheet `.xlsx` attachment (`day-report-xlsx.ts`).
 - Subject lines: action-first ("Your schedule for May 26 – Jun 1 is published"). No emojis.
