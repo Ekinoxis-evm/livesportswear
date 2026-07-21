@@ -46,12 +46,12 @@ export type DayReportEmailProps = {
   perPerson: DayReportRow[];
 };
 
-const accent = "#ffffff";
-const bg = "#0a0a0a";
-const card = "#141414";
-const border = "#2a2a2a";
-const text = "#ededed";
-const muted = "#a1a1a1";
+const accent = "#4a3a32";
+const bg = "#c8b8a9";
+const card = "#ffffff";
+const border = "#b9a996";
+const text = "#1d1d1d";
+const muted = "#6b5e52";
 
 function KPI({ label, value }: { label: string; value: string }) {
   return (
@@ -79,6 +79,41 @@ function KPI({ label, value }: { label: string; value: string }) {
         {value}
       </Text>
     </Column>
+  );
+}
+
+function MetricRow({
+  label,
+  value,
+  emphasized = false,
+}: {
+  label: string;
+  value: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <Row style={{ margin: "0 0 6px" }}>
+      <Column
+        style={{
+          fontSize: emphasized ? "14px" : "13px",
+          color: emphasized ? text : muted,
+          fontWeight: emphasized ? 700 : 400,
+        }}
+      >
+        {label}
+      </Column>
+      <Column
+        style={{
+          fontSize: emphasized ? "16px" : "14px",
+          color: text,
+          fontWeight: emphasized ? 700 : 400,
+          textAlign: "right",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {value}
+      </Column>
+    </Row>
   );
 }
 
@@ -167,52 +202,32 @@ export function DayReportEmail({
           )}
 
           {shopifySales != null ? (
-            <Text style={{ fontSize: "13px", color: muted, margin: "8px 0 0" }}>
+            <Section style={{ margin: "16px 0 0" }}>
               {grossSales != null && (
-                <>
-                  Sales value: <span style={{ color: text }}>{grossSales}</span>
-                  {discounts != null && (
-                    <>
-                      {" "}
-                      · Discounts: <span style={{ color: text }}>{discounts}</span>
-                    </>
-                  )}
-                  {returnsValue != null && (
-                    <>
-                      {" "}
-                      · Returns: <span style={{ color: text }}>{returnsValue}</span>
-                    </>
-                  )}
-                  <br />
-                </>
+                <MetricRow label="Sales value" value={grossSales} />
               )}
-              Net sales:{" "}
-              <span style={{ color: text, fontWeight: 700 }}>{shopifySales}</span>
+              {discounts != null && (
+                <MetricRow label="Discounts" value={discounts} />
+              )}
+              {returnsValue != null && (
+                <MetricRow label="Returns" value={returnsValue} />
+              )}
+              <Hr style={{ borderColor: border, margin: "8px 0" }} />
+              <MetricRow label="Net sales" value={shopifySales} emphasized />
               {shopifyOrders != null && (
-                <>
-                  {" "}
-                  · <span style={{ color: text }}>{shopifyOrders}</span> orders
-                </>
+                <MetricRow label="Orders" value={String(shopifyOrders)} />
+              )}
+              {(cashReceived != null || cardReceived != null || refunds != null) && (
+                <Hr style={{ borderColor: border, margin: "8px 0" }} />
               )}
               {cashReceived != null && (
-                <>
-                  <br />
-                  Cash received: <span style={{ color: text }}>{cashReceived}</span>
-                  {cardReceived != null && (
-                    <>
-                      {" "}
-                      · Card: <span style={{ color: text }}>{cardReceived}</span>
-                    </>
-                  )}
-                </>
+                <MetricRow label="Cash received" value={cashReceived} />
               )}
-              {refunds != null && (
-                <>
-                  <br />
-                  Refunds: <span style={{ color: text }}>{refunds}</span>
-                </>
+              {cardReceived != null && (
+                <MetricRow label="Card received" value={cardReceived} />
               )}
-            </Text>
+              {refunds != null && <MetricRow label="Refunds" value={refunds} />}
+            </Section>
           ) : (
             <Text style={{ fontSize: "12px", color: muted, margin: "8px 0 0" }}>
               Shopify POS sales will appear here once the store keys are connected.
