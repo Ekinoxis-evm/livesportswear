@@ -313,6 +313,110 @@ export async function fetchRecentOrders(limit = 6): Promise<RecentOrder[]> {
     });
 }
 
+/**
+ * Every order in the shop, oldest-relevant included, streamed page by page.
+ * Used to work out which rep brought each client in: a customer's earliest POS
+ * order names them. `since` limits the sweep to recent days for the incremental
+ * cron pass; omit it for the full history backfill (~39 pages at 250/page).
+ *
+ * Streamed rather than returned whole so the caller folds each page into a
+ * one-row-per-customer accumulator and memory stays flat over 2 years of orders.
+ */
+export async function* streamOrdersForAttribution(
+  since?: string,
+): AsyncGenerator<DayOrder[]> {
+  let path: string | null =
+    `/orders.json?status=any&limit=250&fields=${ORDER_LIST_FIELDS}` +
+    (since ? `&created_at_min=${encodeURIComponent(since)}` : "");
+  while (path) {
+    const page: { body: { orders: RestDayOrder[] }; nextPageInfo: string | null } =
+      await shopifyRest<{ orders: RestDayOrder[] }>(path);
+    yield page.body.orders
+      .filter((o) => !o.cancelled_at && !o.test)
+      .map((o) => ({
+        id: String(o.id),
+        name: o.name ?? `#${o.id}`,
+        createdAt: o.created_at,
+        net: Number(o.current_subtotal_price ?? 0),
+        currency: o.currency ?? null,
+        sourceName: o.source_name ?? null,
+        staffId: o.user_id != null ? String(o.user_id) : null,
+        customer: o.customer
+          ? { id: String(o.customer.id), createdAt: o.customer.created_at ?? null }
+          : null,
+      }));
+    path = page.nextPageInfo
+      ? `/orders.json?limit=250&fields=${ORDER_LIST_FIELDS}&page_info=${page.nextPageInfo}`
+      : null;
+  }
+}
+
+export type ShopifyCustomer = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  createdAt: string | null;
+  ordersCount: number;
+  totalSpent: number;
+};
+
+const CUSTOMER_FIELDS =
+  "id,first_name,last_name,email,phone,created_at,orders_count,total_spent";
+
+type RestCustomer = {
+  id: number;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at: string | null;
+  orders_count: number;
+  total_spent: string;
+};
+
+const toCustomer = (c: RestCustomer): ShopifyCustomer => ({
+  id: String(c.id),
+  name: [c.first_name, c.last_name].filter(Boolean).join(" ").trim() || "Customer",
+  email: c.email ?? null,
+  phone: c.phone ?? null,
+  createdAt: c.created_at ?? null,
+  ordersCount: c.orders_count,
+  totalSpent: Number(c.total_spent),
+});
+
+/**
+ * Full customer records for a set of ids — the clients view hydrates only the
+ * page it's showing. Shopify caps `ids` at 250 per call.
+ */
+export async function fetchCustomersDetails(
+  ids: string[],
+): Promise<Map<string, ShopifyCustomer>> {
+  const out = new Map<string, ShopifyCustomer>();
+  for (let i = 0; i < ids.length; i += 250) {
+    const chunk = ids.slice(i, i + 250);
+    const { body } = await shopifyRest<{ customers: RestCustomer[] }>(
+      `/customers.json?ids=${chunk.join(",")}&limit=250&fields=${CUSTOMER_FIELDS}`,
+    );
+    for (const c of body.customers) out.set(String(c.id), toCustomer(c));
+  }
+  return out;
+}
+
+/**
+ * Shopify's own customer search — name, email or phone. Shopify owns client
+ * identity and search; we only annotate the results with our attribution.
+ */
+export async function searchCustomers(
+  query: string,
+  limit = 50,
+): Promise<ShopifyCustomer[]> {
+  const { body } = await shopifyRest<{ customers: RestCustomer[] }>(
+    `/customers/search.json?query=${encodeURIComponent(query)}&limit=${limit}&fields=${CUSTOMER_FIELDS}`,
+  );
+  return body.customers.map(toCustomer);
+}
+
 export type CustomerStats = { ordersCount: number; totalSpent: number };
 
 /**
