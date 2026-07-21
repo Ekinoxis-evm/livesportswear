@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Info, Search } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { isShopifyConfigured } from "@/lib/shopify-config";
@@ -9,12 +9,29 @@ import {
   type ShopifyCustomer,
 } from "@/lib/shopify";
 import { normalizeStaffId } from "@/lib/shopify-range";
+import {
+  countryFromPhone,
+  tallyCountries,
+  type Country,
+} from "@/lib/phone-country";
 import { formatMoney } from "@/lib/commission";
-import { shortDate } from "@/lib/format-date";
+import { fullDate } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
-import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ScrollTable } from "@/components/shared/scroll-table";
 import { RebuildAttributionButton } from "@/components/admin/rebuild-attribution-button";
+import {
+  ClientRepFilter,
+  type RepOption,
+} from "@/components/admin/client-rep-filter";
 
 const PAGE_SIZE = 50;
 
@@ -28,6 +45,7 @@ type OriginRow = {
 type ClientRow = {
   customerId: string;
   customer: ShopifyCustomer | null;
+  country: Country | null; // read from the phone's country indicator
   broughtInBy: string; // rep name, "former staff", or "—"
   firstOrderName: string | null;
   firstOrderAt: string | null;
@@ -46,11 +64,14 @@ export default async function ClientsPage({
   const q = (sp.q ?? "").trim();
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const { data: employeeRows } = await supabase
-    .from("employees")
-    .select("id, name, shopify_staff_id")
-    .eq("active", true)
-    .order("name");
+  // Every employee, NOT just active ones: attribution reaches back to 2024, and
+  // the biggest client-bringers are often people who have since left. Filtering
+  // to active would hide their clients behind "former staff" with no way to see
+  // them.
+  const [{ data: employeeRows }, { data: tallyRows }] = await Promise.all([
+    supabase.from("employees").select("id, name, shopify_staff_id, active").order("name"),
+    supabase.from("customer_origin").select("staff_id"),
+  ]);
   const employees = employeeRows ?? [];
   // staff_id is the stored truth; the employee is resolved here, so mapping a
   // rep to their Shopify account later re-attributes all history for free.
@@ -60,6 +81,27 @@ export default async function ClientsPage({
       .map((e) => [normalizeStaffId(e.shopify_staff_id as string), e.name]),
   );
   const rep = employees.find((e) => e.id === sp.rep) ?? null;
+
+  // How the attribution actually landed — shown on the page so the numbers
+  // aren't a black box, and so unmapped staff are visible rather than silent.
+  const countByStaff = new Map<string, number>();
+  for (const t of (tallyRows ?? []) as { staff_id: string | null }[]) {
+    const key = t.staff_id ? normalizeStaffId(t.staff_id) : "";
+    countByStaff.set(key, (countByStaff.get(key) ?? 0) + 1);
+  }
+  const attributedTotal = (tallyRows ?? []).length;
+  const repOptions: RepOption[] = employees
+    .filter((e) => e.shopify_staff_id)
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      active: e.active ?? true,
+      clients: countByStaff.get(normalizeStaffId(e.shopify_staff_id as string)) ?? 0,
+    }))
+    .filter((r) => r.clients > 0)
+    .sort((a, b) => b.clients - a.clients);
+  const namedTotal = repOptions.reduce((a, r) => a + r.clients, 0);
+  const unnamedTotal = attributedTotal - namedTotal;
 
   /**
    * Shopify owns identity and search; we own attribution. A search goes to
@@ -166,9 +208,11 @@ export default async function ClientsPage({
 
   const clients: ClientRow[] = origins.map((o) => {
     const seen = visits.get(o.shopify_customer_id);
+    const customer = customers.get(o.shopify_customer_id) ?? null;
     return {
       customerId: o.shopify_customer_id,
-      customer: customers.get(o.shopify_customer_id) ?? null,
+      customer,
+      country: countryFromPhone(customer?.phone),
       broughtInBy: o.staff_id
         ? (nameByStaff.get(normalizeStaffId(o.staff_id)) ?? "former staff")
         : "—",
@@ -178,6 +222,8 @@ export default async function ClientsPage({
       linkedTotal: seen?.total ?? 0,
     };
   });
+
+  const countryRows = tallyCountries(clients.map((c) => c.customer?.phone));
 
   const pages = q ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
   const href = (next: Partial<{ rep: string | null; q: string; page: number }>) => {
@@ -206,47 +252,95 @@ export default async function ClientsPage({
         <RebuildAttributionButton />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={href({ rep: null, page: 1 })}
-          className={cn(
-            "rounded-full border px-3 py-1 text-sm",
-            !rep ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
+      <Alert>
+        <Info className="size-4" />
+        <AlertTitle>How this attribution works</AlertTitle>
+        <AlertDescription>
+          <p>
+            Every in-store order records the staff member who rang it. A client
+            belongs to whoever sold them their{" "}
+            <strong className="text-foreground">first</strong> in-store order —
+            so the credit follows the person who actually brought them through
+            the door, not whoever served them most recently. Returns, draft and
+            test orders are ignored.
+          </p>
+          {attributedTotal > 0 && (
+            <p className="tabular-nums">
+              <strong className="text-foreground">
+                {attributedTotal.toLocaleString()}
+              </strong>{" "}
+              clients attributed
+              {unnamedTotal > 0 && (
+                <>
+                  {" · "}
+                  <strong className="text-foreground">
+                    {unnamedTotal.toLocaleString()}
+                  </strong>{" "}
+                  sit on Shopify staff accounts not linked to an employee (shown
+                  as “former staff”) — link them on the employee pages and their
+                  clients move across automatically, no rebuild needed
+                </>
+              )}
+              . Cash sales with no customer on the order belong to nobody and
+              never appear here.
+            </p>
           )}
-        >
-          All reps
-        </Link>
-        {employees.map((e) => (
-          <Link
-            key={e.id}
-            href={href({ rep: e.id, page: 1 })}
-            className={cn(
-              "rounded-full border px-3 py-1 text-sm",
-              rep?.id === e.id
-                ? "border-primary bg-primary text-primary-foreground"
-                : "hover:bg-muted",
-              !e.shopify_staff_id && "opacity-50",
-            )}
-          >
-            {e.name}
-          </Link>
-        ))}
-      </div>
+        </AlertDescription>
+      </Alert>
 
-      <form method="GET" action="/admin/clients" className="relative max-w-sm">
-        <Search className="text-muted-foreground absolute left-2.5 top-2.5 size-4" />
-        <Input
-          name="q"
-          defaultValue={q}
-          className="pl-8"
-          placeholder="Search Shopify by name, email, or phone…"
-        />
-      </form>
+      <div className="flex flex-wrap items-end gap-4">
+        <ClientRepFilter reps={repOptions} selected={rep?.id ?? null} total={attributedTotal} />
+        <form method="GET" action="/admin/clients" className="relative max-w-sm flex-1">
+          <Search className="text-muted-foreground absolute left-2.5 top-2.5 size-4" />
+          <Input
+            name="q"
+            defaultValue={q}
+            className="pl-8"
+            placeholder="Search Shopify by name, email, or phone…"
+          />
+        </form>
+      </div>
 
       {shopifyDown && (
         <p className="text-muted-foreground text-sm">
           Shopify is unavailable right now — names and totals are missing below.
         </p>
+      )}
+
+      {countryRows.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Where these clients are from</CardTitle>
+            <CardDescription>
+              Read from each phone number&apos;s country indicator — Shopify
+              addresses are empty for almost every client, so the dial code is
+              the only origin signal. Clients on this page only.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {countryRows.map((row) => (
+                <span
+                  key={row.country?.iso ?? "unknown"}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm",
+                    !row.country && "border-amber-500/40 text-amber-600 dark:text-amber-500",
+                  )}
+                >
+                  {row.country ? (
+                    <>
+                      <span aria-hidden>{row.country.flag}</span>
+                      {row.country.name}
+                    </>
+                  ) : (
+                    "No country indicator"
+                  )}
+                  <span className="font-semibold tabular-nums">{row.clients}</span>
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <Card>
@@ -260,16 +354,18 @@ export default async function ClientsPage({
                   : "Nothing on this page."}
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollTable maxHeight="34rem">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-muted-foreground border-b text-left">
+                  <tr className="text-muted-foreground text-left">
                     <th className="py-2 font-medium">Client</th>
+                    <th className="py-2 font-medium">Country</th>
+                    <th className="py-2 font-medium">Phone</th>
+                    <th className="py-2 font-medium">Email</th>
                     <th className="py-2 font-medium">Brought in by</th>
-                    <th className="hidden py-2 font-medium sm:table-cell">First order</th>
-                    <th className="hidden py-2 text-right font-medium sm:table-cell">
-                      Visits
-                    </th>
+                    <th className="py-2 font-medium">First order</th>
+                    <th className="py-2 font-medium">Date</th>
+                    <th className="py-2 text-right font-medium">Visits</th>
                     <th className="py-2 text-right font-medium">Orders</th>
                     <th className="py-2 text-right font-medium">Total spent</th>
                   </tr>
@@ -277,19 +373,30 @@ export default async function ClientsPage({
                 <tbody>
                   {clients.map((c) => (
                     <tr key={c.customerId} className="border-b last:border-0">
+                      <td className="py-2 font-medium">
+                        {c.customer?.name ?? `Customer ${c.customerId}`}
+                      </td>
                       <td className="py-2">
-                        <span className="flex flex-col">
-                          <span className="font-medium">
-                            {c.customer?.name ?? `Customer ${c.customerId}`}
+                        {c.country ? (
+                          <span className="whitespace-nowrap">
+                            <span aria-hidden>{c.country.flag}</span>{" "}
+                            {c.country.name}
                           </span>
-                          {(c.customer?.email || c.customer?.phone) && (
-                            <span className="text-muted-foreground text-xs">
-                              {[c.customer.email, c.customer.phone]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
-                          )}
-                        </span>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-500">
+                            unknown
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 tabular-nums">
+                        {c.customer?.phone ?? (
+                          <span className="text-muted-foreground">no phone</span>
+                        )}
+                      </td>
+                      <td className="py-2">
+                        {c.customer?.email ?? (
+                          <span className="text-muted-foreground">no email</span>
+                        )}
                       </td>
                       <td
                         className={cn(
@@ -299,12 +406,11 @@ export default async function ClientsPage({
                       >
                         {c.broughtInBy}
                       </td>
-                      <td className="text-muted-foreground hidden py-2 tabular-nums sm:table-cell">
-                        {c.firstOrderAt
-                          ? `${c.firstOrderName ?? ""} ${shortDate(c.firstOrderAt.slice(0, 10))}`.trim()
-                          : "—"}
+                      <td className="py-2 tabular-nums">{c.firstOrderName ?? "—"}</td>
+                      <td className="text-muted-foreground py-2 tabular-nums">
+                        {c.firstOrderAt ? fullDate(c.firstOrderAt.slice(0, 10)) : "—"}
                       </td>
-                      <td className="hidden py-2 text-right tabular-nums sm:table-cell">
+                      <td className="py-2 text-right tabular-nums">
                         {c.visits > 0 ? c.visits : "—"}
                       </td>
                       <td className="text-muted-foreground py-2 text-right tabular-nums">
@@ -317,7 +423,7 @@ export default async function ClientsPage({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollTable>
           )}
         </CardContent>
       </Card>
