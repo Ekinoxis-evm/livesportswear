@@ -24,6 +24,7 @@ import {
 } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
+import { ScrollTable } from "@/components/shared/scroll-table";
 import {
   SalesBreakdownBlock,
   SalesBreakdownSubline,
@@ -359,7 +360,12 @@ export default async function StorePerformancePage({
             ))}
 
           {rows.length > 0 && (
-            <SalesRankTable rows={rows} currency={currency} showGoal={mode === "month"} />
+            <SalesRankTable
+              rows={rows}
+              currency={currency}
+              showGoal={mode === "month"}
+              density="comfortable"
+            />
           )}
 
           {mode !== "month" && unmappedCount > 0 && (
@@ -437,10 +443,10 @@ export default async function StorePerformancePage({
           {tableRows.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nobody has checked in yet.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollTable density="comfortable">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-muted-foreground border-b text-left">
+                  <tr className="text-muted-foreground text-left">
                     <th className="py-2 font-medium">Employee</th>
                     <th className="py-2 text-right font-medium">Attended</th>
                     <th className="py-2 text-right font-medium">Sold</th>
@@ -470,7 +476,7 @@ export default async function StorePerformancePage({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollTable>
           )}
         </CardContent>
       </Card>

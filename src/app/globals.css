@@ -150,3 +150,34 @@
     @apply bg-background font-sans;
   }
 }
+
+@layer components {
+  /* Scrolling shadow for ScrollTable: a soft shade on the right edge that is
+     present only while there is more table to scroll to, and gone once you
+     reach the end — the cue that a wide table is scrollable, not truncated.
+
+     How it works: the "cover" gradient is `local`, so it travels with the
+     content and parks over the shadow at the far right; the shadow itself is
+     `scroll`, so it stays pinned to the container's edge. Only the right side
+     is done — ScrollTable pins the first column, so the left edge never reads
+     as cut off.
+
+     Both colours derive from theme tokens, so light and dark come free. */
+  .scroll-table {
+    background-image:
+      linear-gradient(to left, var(--card) 40%, transparent 100%),
+      radial-gradient(
+        farthest-side at 100% 50%,
+        color-mix(in oklab, var(--foreground) 22%, transparent),
+        transparent
+      );
+    background-position:
+      right center,
+      right center;
+    background-size:
+      2.5rem 100%,
+      0.875rem 100%;
+    background-repeat: no-repeat, no-repeat;
+    background-attachment: local, scroll;
+  }
+}

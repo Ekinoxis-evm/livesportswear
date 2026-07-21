@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PeriodPills } from "@/components/shared/period-pills";
+import { ScrollTable } from "@/components/shared/scroll-table";
 import { Stat, StatGrid } from "@/components/portal/stats";
 
 const PERIODS: SalesPeriod[] = ["today", "week", "month", "custom"];
@@ -229,10 +230,10 @@ export default async function PortalClientsPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            <ScrollTable>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-muted-foreground border-b text-left">
+                  <tr className="text-muted-foreground text-left">
                     <th className="py-2 font-medium">Client</th>
                     <th className="py-2 text-right font-medium">Visits</th>
                     <th className="hidden py-2 text-right font-medium sm:table-cell">
@@ -256,7 +257,7 @@ export default async function PortalClientsPage({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollTable>
           </CardContent>
         </Card>
       )}
