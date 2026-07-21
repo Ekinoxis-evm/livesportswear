@@ -5,8 +5,15 @@ import { usePathname } from "next/navigation";
 import { ChartColumn, CalendarDays, Trophy, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Performance is a tab hub — /portal/sales and /portal/clients belong to it, so
+// it claims those paths too and stays lit while the rep moves between tabs.
 const ITEMS = [
-  { href: "/portal", label: "Performance", icon: ChartColumn },
+  {
+    href: "/portal",
+    label: "Performance",
+    icon: ChartColumn,
+    also: ["/portal/sales", "/portal/clients"],
+  },
   { href: "/portal/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/portal/rewards", label: "Rewards", icon: Trophy },
   { href: "/portal/settings", label: "Settings", icon: Settings },
@@ -19,7 +26,9 @@ export function PortalNav() {
       <div className="mx-auto flex max-w-3xl">
         {ITEMS.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href;
+          const active =
+            pathname === item.href ||
+            (item.also?.some((p) => pathname.startsWith(p)) ?? false);
           return (
             <Link
               key={item.href}

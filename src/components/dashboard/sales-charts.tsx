@@ -78,11 +78,13 @@ export function RepSalesChart({
   currency,
   series,
   data,
+  title,
 }: {
   year: number;
   currency: string;
   series: RepSeriesMeta[];
   data: Record<string, number | string | null>[];
+  title?: string;
 }) {
   if (series.length === 0) return <EmptyYear year={year} />;
   const colorOf = (s: RepSeriesMeta, i: number) =>
@@ -94,7 +96,9 @@ export function RepSalesChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Sales by rep · {year}</CardTitle>
+        <CardTitle className="text-base">
+          {title ?? `Sales by rep · ${year}`}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={config} className="h-64 w-full">
@@ -113,7 +117,9 @@ export function RepSalesChart({
             <ChartTooltip
               content={<ChartTooltipContent formatter={moneyRow(currency)} />}
             />
-            <ChartLegend content={<ChartLegendContent className="flex-wrap" />} />
+            {series.length > 1 && (
+              <ChartLegend content={<ChartLegendContent className="flex-wrap" />} />
+            )}
             {series.map((s, i) => (
               <Line
                 key={s.key}

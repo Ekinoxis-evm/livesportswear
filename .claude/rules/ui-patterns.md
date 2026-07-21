@@ -30,6 +30,13 @@
   admin Dashboard (commission columns in Month view only), admin
   Performance→Sales, and the public week page (Week · Today only). Don't
   hand-roll new period pills or sales tables.
+- **Personal (single-rep) metrics**: the portal Performance hub
+  (`src/app/portal/(performance)/`) uses `PeriodPills` with the same
+  `resolveSalesPeriod`/`periodBounds` pair, but renders a `Stat`/`StatGrid` grid
+  (`src/components/portal/stats.tsx`) instead of `SalesRankTable` — one person
+  has no ranking to show. `GoalBar` is the shared goal-progress bar; `DayBars`
+  (`components/portal/day-bars.tsx`) is a CSS-only per-day chart, no recharts,
+  used for periods up to ~62 days.
 - **Inline `<Alert>`**: persistent state messages on a page (e.g. "This schedule has 3 warnings").
 - **Daily-report recipients**: the recipient chips + add-field + "Send test report"
   editor is the shared `RecipientsManager` (`src/components/shared/recipients-manager.tsx`),
