@@ -55,3 +55,32 @@ export async function getDayOrdersCached(
     return null;
   }
 }
+
+let rangeOrdersCache: { key: string; at: number; data: DayOrder[] } | null = null;
+
+/**
+ * Individual orders across an arbitrary instant range — the portal's per-period
+ * order metrics (count, average ticket, best day). A wide Custom range costs
+ * several REST pages, so the same short TTL absorbs re-renders.
+ */
+export async function getRangeOrdersCached(
+  start: string,
+  endExclusive: string,
+): Promise<DayOrder[] | null> {
+  if (!isShopifyConfigured()) return null;
+  const key = `${start}:${endExclusive}`;
+  if (
+    rangeOrdersCache &&
+    rangeOrdersCache.key === key &&
+    Date.now() - rangeOrdersCache.at < TTL_MS
+  ) {
+    return rangeOrdersCache.data;
+  }
+  try {
+    const data = await fetchDayOrders(start, endExclusive);
+    rangeOrdersCache = { key, at: Date.now(), data };
+    return data;
+  } catch {
+    return null;
+  }
+}

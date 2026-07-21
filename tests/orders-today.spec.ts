@@ -10,6 +10,7 @@ const order = (o: Partial<DayOrder> = {}): DayOrder => ({
   currency: "USD",
   sourceName: "pos",
   staffId: "77",
+  customer: null,
   ...o,
 });
 

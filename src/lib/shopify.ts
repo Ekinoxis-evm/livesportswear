@@ -189,6 +189,11 @@ export type DayOrder = {
   currency: string | null;
   sourceName: string | null; // "pos" = in-store POS; "web"/checkout = online
   staffId: string | null; // REST user_id; present on POS orders, null online
+  // Id + creation instant only — enough to tell a brand-new client from a
+  // returning one without pulling any customer contact into this path.
+  // `createdAt` is null when Shopify omits it: the client still counts as
+  // served, just never as new.
+  customer: { id: string; createdAt: string | null } | null;
 };
 
 type RestDayOrder = RestOrder & {
@@ -196,10 +201,11 @@ type RestDayOrder = RestOrder & {
   created_at: string;
   currency: string | null;
   source_name: string | null;
+  customer: { id: number; created_at: string | null } | null;
 };
 
 const ORDER_LIST_FIELDS =
-  "id,name,created_at,user_id,source_name,cancelled_at,test,current_subtotal_price,currency";
+  "id,name,created_at,user_id,source_name,cancelled_at,test,current_subtotal_price,currency,customer";
 
 /**
  * Every non-cancelled/non-test order for [start, endExclusive) as individual
@@ -230,6 +236,9 @@ export async function fetchDayOrders(
         currency: o.currency ?? null,
         sourceName: o.source_name ?? null,
         staffId: o.user_id != null ? String(o.user_id) : null,
+        customer: o.customer
+          ? { id: String(o.customer.id), createdAt: o.customer.created_at ?? null }
+          : null,
       });
     }
     path = page.nextPageInfo
