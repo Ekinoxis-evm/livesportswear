@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ScrollTable } from "@/components/shared/scroll-table";
 import { Check, X } from "lucide-react";
 import { formatMoney } from "@/lib/commission";
 import {
@@ -78,10 +79,10 @@ export function AttendanceToday({
             {rows.length === 0 ? "No clients logged yet today." : "None in this filter."}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <ScrollTable density="comfortable">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-muted-foreground border-b text-left">
+                <tr className="text-muted-foreground text-left">
                   <th className="hidden py-2 font-medium sm:table-cell">Time</th>
                   <th className="py-2 font-medium">Salesperson</th>
                   <th className="py-2 font-medium">Result</th>
@@ -136,7 +137,7 @@ export function AttendanceToday({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollTable>
         )}
       </CardContent>
     </Card>

@@ -2,6 +2,7 @@
 
 import { formatMoney } from "@/lib/commission";
 import type { PersonRow } from "@/lib/orders-today";
+import { ScrollTable } from "@/components/shared/scroll-table";
 import {
   Card,
   CardContent,
@@ -45,10 +46,10 @@ export function OrdersToday({
           {perPerson.length === 0 ? (
             <p className="text-muted-foreground text-sm">No sales attributed yet.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollTable density="comfortable">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-muted-foreground border-b text-left">
+                  <tr className="text-muted-foreground text-left">
                     <th className="py-2 font-medium">Salesperson</th>
                     <th className="py-2 text-right font-medium">Orders</th>
                     <th className="hidden py-2 text-right font-medium sm:table-cell">Net</th>
@@ -70,7 +71,7 @@ export function OrdersToday({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollTable>
           )}
         </div>
 
@@ -78,10 +79,10 @@ export function OrdersToday({
         {rows.length > 0 && (
           <div>
             <h3 className="mb-2 text-sm font-medium">All orders</h3>
-            <div className="overflow-x-auto">
+            <ScrollTable density="comfortable">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-muted-foreground border-b text-left">
+                  <tr className="text-muted-foreground text-left">
                     <th className="py-2 font-medium">Order</th>
                     <th className="hidden py-2 font-medium sm:table-cell">Time</th>
                     <th className="hidden py-2 font-medium sm:table-cell">Seller</th>
@@ -103,7 +104,7 @@ export function OrdersToday({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollTable>
           </div>
         )}
       </CardContent>

@@ -46,15 +46,30 @@
   (`components/store/report-recipients-card.tsx`, store JWT's location). Reuse it — don't
   re-implement recipient editing. It keeps optimistic local state (chips update instantly).
 
-## Scrollable tables
-- **`ScrollTable`** (`src/components/shared/scroll-table.tsx`) is the wrapper for
-  any table long or wide enough to need a viewport: scrolls **both** axes,
-  `maxHeight` caps the vertical run, and the `<thead>` sticks so the column
-  you're reading stays labelled. Wrap a plain `<table>`; the sticky/padding rules
-  are applied by descendant selectors, so call sites don't change.
-- Use it in place of a bare `overflow-x-auto` wherever rows can pile up
-  (clients, inventory book, order lists). For short fixed-size tables the plain
-  idioms below are still fine.
+## Data tables — the shell
+Every data table is a live viewport, not a printout. Two shells, same behaviour:
+- **`ScrollTable`** (`src/components/shared/scroll-table.tsx`) wraps hand-rolled
+  `<table>` markup.
+- **`Table`** (`src/components/ui/table.tsx`) already renders its own container,
+  so the 10 shadcn call sites get the same treatment for free.
+
+Both give: **both-axis scroll** capped by `maxHeight` (long lists scroll in place
+instead of pushing the page), a **sticky `<thead>`**, a **pinned first column**
+with a hairline right edge (so columns sliding under it read as scrolled, not
+clipped), **hover gated behind `@media (hover: hover)`** plus `active:` for touch
+— without the gate, a tapped row keeps its hover state stuck on iPad — and the
+`.scroll-table` **right-edge scrolling shadow** in `globals.css`, which appears
+only while there's more to scroll to. That last one is what stops a wide table
+reading as truncated.
+
+- `density="comfortable"` (py-3, bigger touch targets) on the **kiosk**; admin
+  and portal keep the compact default.
+- All rules are descendant selectors, so call sites keep their own markup and
+  their `hidden sm:table-cell` column rules.
+- **Exception — the calendar grids.** `schedule-grid.tsx`, `schedule-board.tsx`,
+  `store/schedule/page.tsx` and `w/[token]/[week]` use `<table>` for week layout,
+  not data. They keep their own sticky column; pinning would fight the
+  drag-and-drop. Don't convert them.
 
 ## Responsive tables
 - Two idioms, no card-stack: **(a)** wrap the table in `overflow-x-auto` (it scrolls

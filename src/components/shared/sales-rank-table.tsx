@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { ScrollTable } from "@/components/shared/scroll-table";
 import { formatMoney } from "@/lib/commission";
 import { Badge } from "@/components/ui/badge";
 import type { SalesRankRow } from "@/lib/sales-period";
@@ -15,6 +16,7 @@ export function SalesRankTable({
   showGoal = false,
   showShare = false,
   showCommission = false,
+  density,
 }: {
   rows: SalesRankRow[];
   currency: string;
@@ -22,6 +24,8 @@ export function SalesRankTable({
   showGoal?: boolean;
   showShare?: boolean;
   showCommission?: boolean;
+  /** The kiosk passes `comfortable`; admin keeps the compact default. */
+  density?: "compact" | "comfortable";
 }) {
   if (rows.length === 0) {
     return <p className="text-muted-foreground text-sm">No sales to rank yet.</p>;
@@ -29,10 +33,10 @@ export function SalesRankTable({
   const th = "py-2 text-right font-medium";
   const money = (v: number) => formatMoney(v, currency);
   return (
-    <div className="overflow-x-auto">
+    <ScrollTable density={density} maxHeight="28rem">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-muted-foreground border-b text-left">
+          <tr className="text-muted-foreground text-left">
             <th className="py-2 font-medium">#</th>
             <th className="py-2 font-medium">Employee</th>
             {showStore && <th className="py-2 font-medium">Store</th>}
@@ -113,6 +117,6 @@ export function SalesRankTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollTable>
   );
 }

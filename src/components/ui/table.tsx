@@ -4,11 +4,35 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  maxHeight,
+  density = "compact",
+  stickyHeader = true,
+  ...props
+}: React.ComponentProps<"table"> & {
+  /** Caps the vertical run so long lists scroll in place. Omit for no cap. */
+  maxHeight?: string
+  /** `comfortable` = roomier rows + bigger touch targets, for the kiosk iPad. */
+  density?: "compact" | "comfortable"
+  stickyHeader?: boolean
+}) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      // Mirrors ScrollTable (components/shared/scroll-table.tsx) so shadcn and
+      // hand-rolled tables feel identical: sticky header, both-axis scroll, the
+      // right-edge scrolling shadow, and hover only on real pointer devices.
+      className={cn(
+        "scroll-table relative w-full overflow-auto overscroll-contain",
+        stickyHeader && [
+          "[&_thead_th]:bg-card [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10",
+          "[&_thead_th]:after:bg-border [&_thead_th]:after:absolute [&_thead_th]:after:inset-x-0",
+          "[&_thead_th]:after:bottom-0 [&_thead_th]:after:h-px [&_thead_th]:after:content-['']",
+        ],
+        density === "comfortable" && "[&_thead_th]:h-12 [&_tbody_td]:py-3",
+      )}
+      style={maxHeight ? { maxHeight } : undefined}
     >
       <table
         data-slot="table"
@@ -57,7 +81,10 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        // Hover only where a real pointer exists — on touch the hover state
+        // sticks to the last row tapped. `active:` gives touch its feedback.
+        "border-b transition-colors active:bg-muted [@media(hover:hover)]:hover:bg-muted/50",
+        "has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
         className
       )}
       {...props}
