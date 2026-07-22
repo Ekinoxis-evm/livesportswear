@@ -1,8 +1,13 @@
 import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isShopifyConfigured } from "@/lib/shopify-config";
-import { streamOrdersForAttribution } from "@/lib/shopify";
+import {
+  streamOrdersForAttribution,
+  fetchCustomersDetails,
+  type ShopifyCustomer,
+} from "@/lib/shopify";
 import { normalizeStaffId } from "@/lib/shopify-range";
+import { countryFromPhone } from "@/lib/phone-country";
 import {
   accumulateOrigins,
   unmappedStaffIds,
@@ -78,4 +83,74 @@ export async function runAttributionSync(since?: string): Promise<AttributionRes
     written,
     unmappedStaff: unmappedStaffIds(origins, mapped),
   };
+}
+
+export type CountrySyncResult =
+  | { ok: true; checked: number; placed: number }
+  | { ok: false; error: string };
+
+/**
+ * Fills `customer_origin.country_iso` from each client's phone country
+ * indicator. Stored rather than derived per request because the admin rollup
+ * has to count the whole book — deriving it from the phones of whichever page
+ * was on screen is what made the country card disagree with its own total.
+ *
+ * `onlyMissing` is the cron's mode: it touches just the rows a previous pass
+ * never reached, which is a handful per run. The full rebuild passes false.
+ *
+ * A null result is a real answer (no phone on file, or a number libphonenumber
+ * can't place) and is written as null, so a later pass doesn't retry it forever.
+ */
+export async function runCountrySync(onlyMissing = false): Promise<CountrySyncResult> {
+  if (!isShopifyConfigured()) {
+    return { ok: false, error: "Shopify isn't connected yet." };
+  }
+  const supabase = createServiceClient();
+
+  const query = supabase.from("customer_origin").select("shopify_customer_id");
+  const { data: rows, error } = onlyMissing
+    ? await query.is("country_iso", null)
+    : await query;
+  if (error) return { ok: false, error: error.message };
+
+  const ids = (rows ?? []).map((r) => r.shopify_customer_id);
+
+  // Group by outcome instead of updating per client: ~30 countries plus the
+  // unknown bucket means ~30 statements rather than one per row.
+  const byCountry = new Map<string, string[]>();
+  const UNKNOWN = "";
+
+  // fetchCustomersDetails caps at 250 ids per call — ~24 calls for the full book.
+  for (let i = 0; i < ids.length; i += 250) {
+    const chunk = ids.slice(i, i + 250);
+    let details: Map<string, ShopifyCustomer>;
+    try {
+      details = await fetchCustomersDetails(chunk);
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Shopify error." };
+    }
+    for (const id of chunk) {
+      const iso = countryFromPhone(details.get(id)?.phone)?.iso ?? UNKNOWN;
+      const list = byCountry.get(iso) ?? [];
+      list.push(id);
+      byCountry.set(iso, list);
+    }
+  }
+
+  let checked = 0;
+  let placed = 0;
+  for (const [iso, list] of byCountry) {
+    for (let i = 0; i < list.length; i += 500) {
+      const slice = list.slice(i, i + 500);
+      const { error: updateError } = await supabase
+        .from("customer_origin")
+        .update({ country_iso: iso === UNKNOWN ? null : iso })
+        .in("shopify_customer_id", slice);
+      if (updateError) return { ok: false, error: updateError.message };
+      checked += slice.length;
+      if (iso !== UNKNOWN) placed += slice.length;
+    }
+  }
+
+  return { ok: true, checked, placed };
 }

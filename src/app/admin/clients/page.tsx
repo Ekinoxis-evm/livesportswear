@@ -9,11 +9,7 @@ import {
   type ShopifyCustomer,
 } from "@/lib/shopify";
 import { normalizeStaffId } from "@/lib/shopify-range";
-import {
-  countryFromPhone,
-  tallyCountries,
-  type Country,
-} from "@/lib/phone-country";
+import { countryFromPhone, countryTally, type Country } from "@/lib/phone-country";
 import { formatMoney } from "@/lib/commission";
 import { fullDate } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
@@ -68,9 +64,13 @@ export default async function ClientsPage({
   // the biggest client-bringers are often people who have since left. Filtering
   // to active would hide their clients behind "former staff" with no way to see
   // them.
+  // One short column across every row: the rollups below must describe the WHOLE
+  // book, not the 50 clients on screen. ~6k two-letter strings is nothing, and
+  // deriving country per page is exactly what made the old card disagree with
+  // its own total.
   const [{ data: employeeRows }, { data: tallyRows }] = await Promise.all([
     supabase.from("employees").select("id, name, shopify_staff_id, active").order("name"),
-    supabase.from("customer_origin").select("staff_id"),
+    supabase.from("customer_origin").select("staff_id, country_iso"),
   ]);
   const employees = employeeRows ?? [];
   // staff_id is the stored truth; the employee is resolved here, so mapping a
@@ -84,12 +84,16 @@ export default async function ClientsPage({
 
   // How the attribution actually landed — shown on the page so the numbers
   // aren't a black box, and so unmapped staff are visible rather than silent.
+  const allRows = (tallyRows ?? []) as {
+    staff_id: string | null;
+    country_iso: string | null;
+  }[];
   const countByStaff = new Map<string, number>();
-  for (const t of (tallyRows ?? []) as { staff_id: string | null }[]) {
+  for (const t of allRows) {
     const key = t.staff_id ? normalizeStaffId(t.staff_id) : "";
     countByStaff.set(key, (countByStaff.get(key) ?? 0) + 1);
   }
-  const attributedTotal = (tallyRows ?? []).length;
+  const attributedTotal = allRows.length;
   const repOptions: RepOption[] = employees
     .filter((e) => e.shopify_staff_id)
     .map((e) => ({
@@ -223,7 +227,14 @@ export default async function ClientsPage({
     };
   });
 
-  const countryRows = tallyCountries(clients.map((c) => c.customer?.phone));
+  // The WHOLE book (scoped to the selected rep), from the stored country — not
+  // the phones of whichever 50 rows are rendered. These counts must sum to the
+  // client total shown beside them; that they didn't was the bug.
+  const myStaff = rep?.shopify_staff_id ? normalizeStaffId(rep.shopify_staff_id) : null;
+  const countryRows = countryTally(
+    allRows.filter((r) => !myStaff || (r.staff_id && normalizeStaffId(r.staff_id) === myStaff)),
+  );
+  const countryScopeTotal = countryRows.reduce((a, r) => a + r.clients, 0);
 
   const pages = q ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
   const href = (next: Partial<{ rep: string | null; q: string; page: number }>) => {
@@ -312,9 +323,12 @@ export default async function ClientsPage({
           <CardHeader>
             <CardTitle className="text-base">Where these clients are from</CardTitle>
             <CardDescription>
+              All {countryScopeTotal.toLocaleString()}{" "}
+              {rep ? `of ${rep.name}'s clients` : "clients"}, not just this page.
               Read from each phone number&apos;s country indicator — Shopify
               addresses are empty for almost every client, so the dial code is
-              the only origin signal. Clients on this page only.
+              the only origin signal, and a client with no phone counts as
+              unknown.
             </CardDescription>
           </CardHeader>
           <CardContent>
