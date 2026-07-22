@@ -1,5 +1,5 @@
 import { runShopifySync } from "@/lib/shopify-sync";
-import { runAttributionSync } from "@/lib/customer-origin-sync";
+import { runAttributionSync, runCountrySync } from "@/lib/customer-origin-sync";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
 import { previousMonth } from "@/lib/shopify-range";
@@ -26,9 +26,11 @@ export async function GET(req: Request) {
   const attribution = await runAttributionSync(
     new Date(Date.now() - ATTRIBUTION_LOOKBACK_MS).toISOString(),
   );
+  // Only rows a previous pass never reached — a handful per run.
+  const countries = await runCountrySync(true);
   const contests = await finalizeEndedContests();
   return Response.json(
-    { current, previous, attribution, contests },
+    { current, previous, attribution, countries, contests },
     { status: current.ok && previous.ok ? 200 : 500 },
   );
 }

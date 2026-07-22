@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countryFromPhone, tallyCountries } from "@/lib/phone-country";
+import { countryFromPhone, tallyCountries, countryTally } from "@/lib/phone-country";
 
 describe("countryFromPhone", () => {
   it("reads the country from an E.164 number", () => {
@@ -70,5 +70,41 @@ describe("tallyCountries", () => {
 
   it("returns nothing for no input", () => {
     expect(tallyCountries([])).toEqual([]);
+  });
+});
+
+describe("countryTally", () => {
+  const rows = (...isos: (string | null)[]) => isos.map((country_iso) => ({ country_iso }));
+
+  it("counts stored iso codes, biggest first", () => {
+    const out = countryTally(rows("US", "US", "CO"));
+    expect(out[0]).toMatchObject({ clients: 2 });
+    expect(out[0].country?.iso).toBe("US");
+    expect(out[1].country?.iso).toBe("CO");
+  });
+
+  it("rebuilds name and flag from the stored code", () => {
+    expect(countryTally(rows("CO"))[0].country).toMatchObject({
+      iso: "CO",
+      name: "Colombia",
+      flag: "🇨🇴",
+    });
+  });
+
+  it("puts unknown last and counts nulls into it", () => {
+    const out = countryTally(rows(null, null, "CO"));
+    expect(out[out.length - 1]).toMatchObject({ country: null, clients: 2 });
+  });
+
+  it("treats a malformed code as unknown rather than inventing a country", () => {
+    const out = countryTally(rows("XX1", "", "zz"));
+    // "zz" is a well-formed pair, so it survives; the other two do not.
+    expect(out.find((r) => r.country === null)?.clients).toBe(2);
+  });
+
+  it("always sums to the number of rows — the bug this replaced did not", () => {
+    const input = rows("US", "CO", null, "AR", "US", null, "BR");
+    const total = countryTally(input).reduce((a, r) => a + r.clients, 0);
+    expect(total).toBe(input.length);
   });
 });

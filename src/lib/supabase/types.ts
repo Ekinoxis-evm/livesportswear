@@ -270,6 +270,7 @@ export type Database = {
       }
       customer_origin: {
         Row: {
+          country_iso: string | null
           created_at: string
           first_order_at: string
           first_order_id: string
@@ -280,6 +281,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          country_iso?: string | null
           created_at?: string
           first_order_at: string
           first_order_id: string
@@ -290,6 +292,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          country_iso?: string | null
           created_at?: string
           first_order_at?: string
           first_order_id?: string

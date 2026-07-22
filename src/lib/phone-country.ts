@@ -54,7 +54,47 @@ export function countryFromPhone(phone: string | null | undefined): Country | nu
   return iso ? { iso, name: countryName(iso), flag: flagOf(iso) } : null;
 }
 
+/** Rebuilds the display shape from a stored ISO code. */
+export function countryFromIso(iso: string | null | undefined): Country | null {
+  const code = (iso ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return null;
+  return { iso: code, name: countryName(code), flag: flagOf(code) };
+}
+
 export type CountryTally = { country: Country | null; clients: number };
+
+/**
+ * Clients per country from STORED iso codes — the whole-book rollup. Same
+ * ordering contract as `tallyCountries`: biggest first, unknown last.
+ *
+ * Separate from the phone-based version on purpose: deriving country from the
+ * phones we happened to fetch for one page is what made the admin rollup
+ * disagree with its own total.
+ */
+export function countryTally(
+  rows: { country_iso: string | null }[],
+): CountryTally[] {
+  const byIso = new Map<string, CountryTally>();
+  let unknown = 0;
+
+  for (const row of rows) {
+    const country = countryFromIso(row.country_iso);
+    if (!country) {
+      unknown += 1;
+      continue;
+    }
+    const tally = byIso.get(country.iso) ?? { country, clients: 0 };
+    tally.clients += 1;
+    byIso.set(country.iso, tally);
+  }
+
+  const known = [...byIso.values()].sort(
+    (a, b) =>
+      b.clients - a.clients ||
+      (a.country?.name ?? "").localeCompare(b.country?.name ?? ""),
+  );
+  return unknown > 0 ? [...known, { country: null, clients: unknown }] : known;
+}
 
 /**
  * Clients per country, biggest first, with the unknown bucket last so it never
