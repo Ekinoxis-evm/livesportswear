@@ -4,6 +4,7 @@ import {
   storeAddReportRecipient,
   storeRemoveReportRecipient,
   storeSendTestReport,
+  storeReportDraft,
 } from "@/server/store-floor";
 import { RecipientsManager } from "@/components/shared/recipients-manager";
 
@@ -14,7 +15,8 @@ export function KioskReportRecipientsCard({ recipients }: { recipients: string[]
       recipients={recipients}
       add={(email) => storeAddReportRecipient(email)}
       remove={(email) => storeRemoveReportRecipient(email)}
-      sendTest={() => storeSendTestReport()}
+      sendTest={(recipients) => storeSendTestReport(recipients)}
+      loadDraft={() => storeReportDraft()}
     />
   );
 }

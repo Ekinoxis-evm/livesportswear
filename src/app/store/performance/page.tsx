@@ -37,7 +37,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ReportActions, type CloserEntry } from "@/components/store/report-wizard";
+import { ReportActions, type CloserEntry } from "@/components/store/report-actions";
 import { KioskReportRecipientsCard } from "@/components/store/report-recipients-card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 

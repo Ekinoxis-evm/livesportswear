@@ -25,6 +25,7 @@ import {
   closeDayDraftFor,
   managedReportEmails,
   sendTestReportFor,
+  reportDraftFor,
   type CloseDayDraft,
 } from "@/server/conversion-core";
 import { isShopifyConfigured } from "@/lib/shopify-config";
@@ -698,6 +699,12 @@ export async function storeRemoveReportRecipient(email: unknown): Promise<Action
   if (error) return { ok: false, error: dbError(error) };
   revalidatePath("/store/performance");
   return { ok: true };
+}
+
+/** The report a test send would produce — for the wizard's review step. */
+export async function storeReportDraft(): Promise<ActionResult<CloseDayDraft>> {
+  const { locationId } = await storeCtx();
+  return reportDraftFor(locationId);
 }
 
 export async function storeSendTestReport(

@@ -5,7 +5,12 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, accessibleLocationIds } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { type ActionResult, dbError } from "@/server/shared";
-import { managedReportEmails, sendTestReportFor } from "@/server/conversion-core";
+import {
+  managedReportEmails,
+  sendTestReportFor,
+  reportDraftFor,
+  type CloseDayDraft,
+} from "@/server/conversion-core";
 
 /** The current admin must be able to manage this location. */
 async function canAccess(locationId: string): Promise<boolean> {
@@ -80,14 +85,34 @@ export async function removeReportRecipient(input: unknown): Promise<ActionResul
  * Send today's report to the current recipients WITHOUT closing the day — the
  * subject is prefixed [TEST] and no store_day_closes row is written.
  */
+const testSendSchema = locationSchema.extend({
+  recipients: z.array(z.string()).optional(),
+});
+
 export async function sendTestReport(
   input: unknown,
 ): Promise<ActionResult<{ sentTo: number }>> {
+  await requireAdmin();
+  const parsed = testSendSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!(await canAccess(parsed.data.location_id)))
+    return { ok: false, error: "You can't manage that location." };
+
+  // `recipients` is a per-send narrowing, intersected server-side against the
+  // stored list by sendTestReportFor — never a free-text destination.
+  return sendTestReportFor(parsed.data.location_id, parsed.data.recipients);
+}
+
+/**
+ * The report a test send would produce — metrics, subject, recipients — so the
+ * wizard can show it before sending. Read-only; writes nothing.
+ */
+export async function reportDraft(input: unknown): Promise<ActionResult<CloseDayDraft>> {
   await requireAdmin();
   const parsed = locationSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   if (!(await canAccess(parsed.data.location_id)))
     return { ok: false, error: "You can't manage that location." };
 
-  return sendTestReportFor(parsed.data.location_id);
+  return reportDraftFor(parsed.data.location_id);
 }
