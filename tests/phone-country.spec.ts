@@ -108,3 +108,28 @@ describe("countryTally", () => {
     expect(total).toBe(input.length);
   });
 });
+
+describe("countryTally — pre-grouped rows", () => {
+  it("uses each row's own count instead of counting objects", () => {
+    // What a database GROUP BY hands back: one row per country, with its count.
+    const out = countryTally([
+      { country_iso: "US", clients: 3200 },
+      { country_iso: "CO", clients: 400 },
+      { country_iso: null, clients: 1660 },
+    ]);
+    expect(out[0]).toMatchObject({ clients: 3200 });
+    expect(out[out.length - 1]).toMatchObject({ country: null, clients: 1660 });
+    expect(out.reduce((a, r) => a + r.clients, 0)).toBe(5260);
+  });
+
+  it("merges duplicate rows for the same country", () => {
+    // The cross-tab emits one row per (rep, country), so a country appears once
+    // per rep and the counts must add up rather than overwrite.
+    const out = countryTally([
+      { country_iso: "US", clients: 10 },
+      { country_iso: "US", clients: 5 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].clients).toBe(15);
+  });
+});
