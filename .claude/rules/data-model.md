@@ -134,6 +134,14 @@ layer (counts), not money.
   (`src/lib/conversion.ts`), which stays `walkin`|`return`. `both` implies
   `sold=true` (returned + bought more); `return`/`exchange` imply `sold=false`.
 - `got_contact boolean not null default false`
+- **Re-take** (`storeRetake`, `src/lib/retake.ts`): a client already attended
+  today comes back and buys, and the sale is added to the row she ALREADY
+  logged — one attended, one sold, so conversion stays honest. `order_total`
+  **adds** rather than replaces (a second purchase must not erase the first);
+  customer fields only fill gaps, so a re-take can't blank contact captured on
+  the first visit. Scoped to the employee + store JWT's location + **today's
+  business date** — without the date check a kiosk left open overnight could
+  rewrite a closed day.
 - `shopify_order_id/_name`, `order_total`, `shopify_customer_id`,
   `customer_name/_email/_phone` (added 0037) — a sold walk-in optionally
   links the real Shopify order + its customer (picked from the last orders
@@ -165,9 +173,22 @@ create a new PII surface.
   **unresolved on purpose**: the employee is resolved at read time by joining
   `employees.shopify_staff_id`, so mapping a departed or newly-hired rep later
   re-attributes all history automatically, with no re-backfill.
-- index `(location_id, first_order_at desc)`, `(staff_id)`
-- RLS: admin-only via `admin_can_access_location(location_id)`. No employee or
-  kiosk policy — the portal computes its client numbers live from Shopify.
+- `country_iso text` (0044) — ISO 3166-1 alpha-2 from the client's phone
+  country indicator (`src/lib/phone-country.ts`). NULL = no phone on file, or a
+  number libphonenumber can't place. **~72% resolve; the ~28% NULL is a
+  capture ceiling, not a detection failure.** A 2-letter code is not contact
+  data, so this stays inside the no-client-identity rule above.
+- index `(location_id, first_order_at desc)`, `(staff_id)`, `(location_id, country_iso)`
+- RLS: admin-only via `admin_can_access_location(location_id)`, **plus (0043) an
+  employee SELECT policy scoped to their own `staff_id`** — that scope is the
+  whole boundary for the portal Clients tab, and it's declarative RLS rather
+  than a service-client action so it survives the query being reused. SELECT
+  only: attribution is derived from order history, never hand-edited.
+- **Never count these rows in the page.** `client_origin_tallies()` (0047,
+  `security invoker`, so RLS supplies the scope) groups by
+  `(staff_id, country_iso)` and returns a couple of hundred rows; every rollup
+  `/admin/clients` needs derives from it. Pulling every row to count in JS is
+  what made that page stop responding at ~6,000 clients.
 
 **The rule**: a customer belongs to the staff on their EARLIEST non-cancelled,
 non-test, `source_name='pos'` order (drafts would hand a client to whoever opened
@@ -216,6 +237,12 @@ emails the current list with a `[TEST]` subject and writes no close row).
 - `email text not null`, `created_by uuid` (admin user), `created_at`
 - unique index `(location_id, lower(email))` (case-insensitive), index `(location_id)`
 - RLS: admin-only, location-scoped via `admin_can_access_location(location_id)`.
+- **Per-send narrowing**: the kiosk report wizard lets the closer drop a
+  recipient for ONE send. `narrowRecipients` (`src/lib/report-recipients.ts`)
+  intersects the selection with this stored list **server-side** — a kiosk must
+  never be able to email the day's numbers to an address it invents. An empty
+  selection means everyone, and a selection matching nothing falls back to
+  everyone: a report reaching no one is worse than one reaching the full list.
 
 ### `store_goals` (added 0009)
 Monthly store sales target — 12 months/year per location. Surfaced as progress on
@@ -244,6 +271,13 @@ location(s) they may manage. A **master** admin (no `admin_scope` claim, or
 Marks a store day open for the rotation queue ("up system").
 - `location_id uuid`, `business_date date` — `primary key`
 - `opened_by uuid fk -> employees (on delete set null)`, `opened_at timestamptz`
+- `closed_at timestamptz`, `closed_by uuid fk -> employees` (added 0048) — set
+  when the day's report is sent from the kiosk. Ends the queue for that business
+  date so the board stops offering "take a client". **It does NOT check anyone
+  out**: closing is a task the closer does during their shift when the store
+  shuts, and everyone still taps their own PIN checkout — forcing it would cut
+  short the hours of whoever is still working. No "reopen" path is needed; the
+  next business date starts fresh.
 
 ### `floor_checkins` (added 0011)
 One row per employee present on the floor today. Drives who is "up next":

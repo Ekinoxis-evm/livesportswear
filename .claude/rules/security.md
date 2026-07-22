@@ -96,6 +96,23 @@
   is server-only (`import "server-only"`), never exposed to the client. The `receiving-docs`
   storage bucket is private, read/written only via the service client in the receiving actions.
 
+## Client data (0042–0048)
+- `customer_origin` is **attribution only** — no name, email or phone. Shopify
+  owns client identity; `country_iso` (a 2-letter code) is the one derived
+  attribute stored, for aggregate reporting.
+- **A rep reads only their own clients.** 0043 adds an employee SELECT policy
+  scoped to their `staff_id`. The portal client profile takes a customer id in
+  the URL, so it **re-checks `staff_id` server-side and 404s on a miss** —
+  never "not allowed", which would confirm the client exists.
+- Reps see full contact details (WhatsApp/email) **for clients in their own
+  book only**. This deliberately reverses the earlier stance of keeping contact
+  out of the portal; the scope is what makes it safe. Still never logged.
+- **Kiosk report sends** narrow recipients against the stored list server-side
+  (`narrowRecipients`) — a kiosk cannot email the day's numbers to an address
+  it invents.
+- **Re-take** is scoped to the employee, the store JWT's location, and **today's
+  business date**, so a kiosk left open overnight cannot rewrite a closed day.
+
 ## Store screen accounts (0019)
 - A third role, `app_metadata.role = "store"`: one **shared per-location kiosk
   login** (`app_metadata.location_id` claim, no `employees` row, no
