@@ -21,6 +21,14 @@
 - **Sheet (right side)**: simple side-panel edits — editing a shift on the grid.
 - **Drawer (bottom on mobile)**: avoid; sheet/wizard is enough.
 - **Sonner toast**: success / error confirmations after server actions.
+- **Kiosk multi-step actions** use the same `Wizard` shell as admin: the report
+  send (`components/store/report-wizard.tsx` — one wizard for both the test and
+  close-of-day, so a rep learns one flow) and Re-take client
+  (`retake-dialog.tsx`). Steps stay large enough to tap at arm's length.
+- **Floor buttons that mean opposite things get different colours.** Return /
+  Exchange is amber, Re-take client is violet: one starts a new interaction, the
+  other folds into an existing one, and at floor speed the words are easy to
+  confuse.
 - **Ranked employee sales**: ALWAYS the sales-period module — `PeriodPills`
   (Today · Week · Month · Custom; Custom is a pill that reveals
   `DateRangeForm`) + `SalesRankTable` (`# · Employee (· Store) · Value ·
@@ -105,6 +113,13 @@ reading as truncated.
 - Every form input has a visible `<Label>`. No placeholders-as-labels.
 - Color is never the only signal. Violations have both a color and an icon.
 - Keyboard: every dialog and sheet traps focus; ESC closes.
+
+## Money
+- `formatMoney` (`lib/commission.ts`) is **exact to the cent everywhere**. It
+  used to round to whole dollars, which put every figure up to 50c out against
+  Shopify and made totals look like they disagreed with the register. Chart axis
+  ticks are the deliberate exception — they format compactly ("$12K") through
+  their own formatter in `dashboard/sales-charts.tsx`.
 
 ## Email templates
 - Plain, semantic table layout (`@react-email/components`).
