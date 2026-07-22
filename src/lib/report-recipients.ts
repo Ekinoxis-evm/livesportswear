@@ -1,21 +1,38 @@
 /**
- * Narrow a report's recipients to a per-send selection.
+ * The final recipient list for one send.
  *
- * The kiosk lets the closer drop someone from ONE send without editing the
- * stored list. The intersection is the security boundary: a kiosk caller must
- * never be able to send the day's numbers to an address it invents, so anything
- * not already on the stored list is discarded rather than trusted.
+ * The wizard's first step starts from the stored default list and lets the
+ * closer drop or add addresses for THIS send only (the stored list is never
+ * edited here). This resolves that selection safely.
  *
- * An empty or absent selection means "send to everyone", not "send to nobody" —
- * and a selection that matches nothing (a stale screen submitting addresses
- * since removed) falls back to everyone too. A report reaching no one is worse
- * than one reaching the full list.
+ * Removals apply against the stored list. Additions are allowed but must be
+ * valid email addresses — the kiosk can already add permanent recipients from
+ * the same screen, so a one-off add is no new capability, and a garbage string
+ * must never reach the mail API. An empty selection means "everyone on the
+ * stored list", and a selection that resolves to nothing falls back to the
+ * stored list: a report reaching no one is worse than one reaching everyone.
  *
  * Pure: no DB, no network, no clock.
  */
-export function narrowRecipients(stored: string[], only?: string[]): string[] {
-  if (!only || only.length === 0) return stored;
-  const wanted = new Set(only.map((e) => e.trim().toLowerCase()));
-  const kept = stored.filter((e) => wanted.has(e.trim().toLowerCase()));
-  return kept.length > 0 ? kept : stored;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const norm = (e: string) => e.trim().toLowerCase();
+
+export function resolveRecipients(stored: string[], selection?: string[]): string[] {
+  if (!selection || selection.length === 0) return stored;
+
+  const storedSet = new Set(stored.map(norm));
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of selection) {
+    const email = norm(raw);
+    if (!EMAIL_RE.test(email) || seen.has(email)) continue;
+    // Keep an address if it's already stored (a survivor of the default list)
+    // or a well-formed new one the closer typed in for this send.
+    out.push(email);
+    seen.add(email);
+    void storedSet; // membership isn't required — validity is the guard
+  }
+
+  return out.length > 0 ? out : stored;
 }
