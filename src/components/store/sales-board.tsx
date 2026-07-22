@@ -3,7 +3,16 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { LogIn, Hand, Undo2, Plus, RotateCcw, Coffee, MoveRight } from "lucide-react";
+import {
+  LogIn,
+  Hand,
+  Undo2,
+  Plus,
+  RotateCcw,
+  RefreshCw,
+  Coffee,
+  MoveRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   storeOpenDay,
@@ -21,6 +30,7 @@ import {
   type FinishTarget,
 } from "@/components/store/finish-dialog";
 import { QueueLine } from "@/components/store/queue-line";
+import { RetakeDialog } from "@/components/store/retake-dialog";
 import { EmployeeAvatar } from "@/components/shared/employee-avatar";
 import { BreakTimer } from "@/components/store/break-timer";
 import { Button } from "@/components/ui/button";
@@ -115,6 +125,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
   const [pending, start] = useTransition();
   const [finishTarget, setFinishTarget] = useState<FinishTarget | null>(null);
   const [returnPicker, setReturnPicker] = useState(false);
+  const [retakeOpen, setRetakeOpen] = useState(false);
   // Which employee's action is in flight. One page-wide `pending` used to
   // disable EVERY button, silently swallowing other reps' taps on a busy
   // floor — per-row busy keeps the rest of the board alive.
@@ -419,12 +430,14 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         </Card>
       )}
 
-      {/* Returns & exchanges — deliberately set apart from the up-next queue so
-          it never gets tapped by mistake, and easy to find when needed. */}
+      {/* Set apart from the up-next queue so neither gets tapped by mistake.
+          The two carry different colours on purpose: at floor speed "return"
+          and "re-take" are easy to confuse, and they mean opposite things —
+          one starts a new interaction, the other folds into an existing one. */}
       {line.length > 0 && (
-        <div className="mt-2 border-t pt-4">
-          <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
-            Returns &amp; exchanges
+        <div className="mt-2 flex flex-col gap-2 border-t pt-4">
+          <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
+            Returns &amp; re-takes
           </p>
           <Button
             size="lg"
@@ -435,8 +448,23 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           >
             <Undo2 className="mr-2 size-5" /> Return / Exchange
           </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            className="h-14 w-full border-2 border-violet-500/70 text-violet-700 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/30"
+            disabled={pending}
+            onClick={() => setRetakeOpen(true)}
+          >
+            <RefreshCw className="mr-2 size-5" /> Re-take client
+          </Button>
         </div>
       )}
+
+      <RetakeDialog
+        open={retakeOpen}
+        members={rows.map((r) => ({ employeeId: r.employeeId, name: r.name }))}
+        onClose={() => setRetakeOpen(false)}
+      />
 
       <FinishDialog
         target={finishTarget}
