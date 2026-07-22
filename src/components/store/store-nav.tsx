@@ -43,6 +43,14 @@ function Tab({
   return (
     <Link
       href={href}
+      // NO PREFETCH. This is one always-on iPad, and AutoRefresh re-renders the
+      // tree every 45s — with prefetch on, each cycle re-prefetched all five
+      // tabs, and every prefetch of these dynamic authenticated routes invokes
+      // the function and calls Shopify. Production logs showed ~6-8 server
+      // renders per 45s cycle whether or not anyone touched the screen.
+      // Taps stay responsive without it: useLinkStatus swaps in a spinner
+      // immediately and the route's loading.tsx paints a skeleton.
+      prefetch={false}
       className={cn(
         "flex min-h-16 flex-1 flex-col items-center justify-center gap-1 text-sm font-medium transition-colors",
         active ? "text-primary" : "text-muted-foreground",
@@ -69,6 +77,7 @@ export function StoreNav() {
         <Link
           href="/store"
           aria-label="Sales"
+          prefetch={false}
           className="flex flex-1 flex-col items-center justify-end gap-0.5 pb-1.5"
         >
           <span
