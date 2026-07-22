@@ -58,6 +58,6 @@ describe("formatMoney", () => {
     expect(formatMoney(1_500_000)).toMatch(/1.?500.?000/);
   });
   it("falls back when the currency code is invalid", () => {
-    expect(formatMoney(1000, "not-a-currency")).toBe((1000).toLocaleString());
+    expect(formatMoney(1000, "not-a-currency")).toBe("1000.00");
   });
 });

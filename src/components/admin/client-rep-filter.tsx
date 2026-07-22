@@ -42,10 +42,22 @@ export function ClientRepFilter({
     router.push(qs ? `/admin/clients?${qs}` : "/admin/clients");
   };
 
+  const label = (r: RepOption) =>
+    `${r.name}${r.active ? "" : " (former)"} · ${r.clients.toLocaleString()}`;
+
+  // Base UI's Select needs this value→label map to render the CLOSED trigger.
+  // Without it SelectValue falls back to the raw value, which here is the
+  // employee's UUID — the selected rep showed up as a long code.
+  const items: Record<string, string> = {
+    [ALL]: `Everyone · ${total.toLocaleString()} clients`,
+    ...Object.fromEntries(reps.map((r) => [r.id, label(r)])),
+  };
+
   return (
     <div className="flex flex-col gap-1.5">
       <Label htmlFor="rep-filter">Brought in by</Label>
       <Select
+        items={items}
         value={selected ?? ALL}
         onValueChange={(v) => go(typeof v === "string" ? v : ALL)}
       >
@@ -53,13 +65,10 @@ export function ClientRepFilter({
           <SelectValue placeholder="Everyone" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>
-            Everyone · {total.toLocaleString()} clients
-          </SelectItem>
+          <SelectItem value={ALL}>{items[ALL]}</SelectItem>
           {reps.map((r) => (
             <SelectItem key={r.id} value={r.id}>
-              {r.name}
-              {r.active ? "" : " (former)"} · {r.clients.toLocaleString()}
+              {label(r)}
             </SelectItem>
           ))}
         </SelectContent>
