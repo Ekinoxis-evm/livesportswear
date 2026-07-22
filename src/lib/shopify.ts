@@ -663,6 +663,133 @@ export async function fetchProductTypes(): Promise<string[]> {
   return data.productTypes.edges.map((e) => e.node).filter(Boolean);
 }
 
+export type CustomerLineItem = {
+  productId: string | null;
+  title: string;
+  variantTitle: string | null;
+  sku: string | null;
+  quantity: number;
+  price: number;
+};
+
+export type CustomerOrder = {
+  id: string;
+  name: string;
+  createdAt: string;
+  net: number;
+  currency: string | null;
+  items: CustomerLineItem[];
+};
+
+type RestCustomerOrder = {
+  id: number;
+  name: string | null;
+  created_at: string;
+  cancelled_at: string | null;
+  test: boolean;
+  current_subtotal_price: string;
+  currency: string | null;
+  line_items: {
+    product_id: number | null;
+    title: string | null;
+    variant_title: string | null;
+    sku: string | null;
+    quantity: number;
+    price: string;
+  }[];
+};
+
+/**
+ * One customer's orders, newest first, with the garments on each — what the
+ * client profile shows. Shopify filters by customer server-side, so this is a
+ * single call rather than a scan.
+ */
+export async function fetchCustomerOrders(
+  customerId: string,
+  limit = 50,
+): Promise<CustomerOrder[]> {
+  const fields =
+    "id,name,created_at,cancelled_at,test,current_subtotal_price,currency,line_items";
+  const { body } = await shopifyRest<{ orders: RestCustomerOrder[] }>(
+    `/orders.json?status=any&customer_id=${encodeURIComponent(customerId)}` +
+      `&limit=${limit}&fields=${fields}`,
+  );
+  return body.orders
+    .filter((o) => !o.cancelled_at && !o.test)
+    .map((o) => ({
+      id: String(o.id),
+      name: o.name ?? `#${o.id}`,
+      createdAt: o.created_at,
+      net: Number(o.current_subtotal_price ?? 0),
+      currency: o.currency ?? null,
+      items: (o.line_items ?? []).map((li) => ({
+        productId: li.product_id != null ? String(li.product_id) : null,
+        title: li.title ?? "Item",
+        variantTitle: li.variant_title ?? null,
+        sku: li.sku ?? null,
+        quantity: li.quantity,
+        price: Number(li.price ?? 0),
+      })),
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export type ProductCard = {
+  id: string;
+  title: string;
+  productType: string | null;
+  image: string | null;
+};
+
+type ProductNodesData = {
+  nodes: ({
+    id: string;
+    title: string;
+    productType: string | null;
+    featuredMedia: { preview: { image: { url: string } | null } | null } | null;
+  } | null)[];
+};
+
+/**
+ * Product cards (title, type, image) for a set of numeric product ids — the
+ * images on a client's purchase history. Line items carry only ids, so this is
+ * the second half of that lookup. Batched; deleted products come back null and
+ * are skipped.
+ */
+export async function fetchProductsByIds(
+  ids: string[],
+): Promise<Map<string, ProductCard>> {
+  const out = new Map<string, ProductCard>();
+  const unique = [...new Set(ids)];
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const data = await shopifyGraphql<ProductNodesData>(
+      `query($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on Product {
+            id
+            title
+            productType
+            featuredMedia { preview { image { url } } }
+          }
+        }
+      }`,
+      { ids: chunk.map((id) => `gid://shopify/Product/${id}`) },
+    );
+    for (const node of data.nodes) {
+      if (!node) continue;
+      const numericId = node.id.split("/").pop() ?? node.id;
+      out.set(numericId, {
+        id: numericId,
+        title: node.title,
+        productType: node.productType || null,
+        image: node.featuredMedia?.preview?.image?.url ?? null,
+      });
+    }
+  }
+  return out;
+}
+
 export type VariantHit = {
   barcode: string;
   sku: string | null;
