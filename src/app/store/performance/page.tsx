@@ -37,10 +37,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  CloseDayDialog,
-  type CloserEntry,
-} from "@/components/store/close-day-dialog";
+import { ReportActions, type CloserEntry } from "@/components/store/report-wizard";
 import { KioskReportRecipientsCard } from "@/components/store/report-recipients-card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -486,9 +483,9 @@ export default async function StorePerformancePage({
       <KioskReportRecipientsCard recipients={reportRecipients} />
 
       <Card>
-        <CardContent className="flex items-center justify-between gap-3 py-4">
+        <CardContent className="flex flex-col gap-3 py-4">
           <span className="text-sm font-medium">End of day</span>
-          <CloseDayDialog closers={closers} alreadyClosed={Boolean(closeRow)} />
+          <ReportActions closers={closers} alreadyClosed={Boolean(closeRow)} />
         </CardContent>
       </Card>
       </TabsContent>
