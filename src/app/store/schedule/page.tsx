@@ -75,14 +75,18 @@ export default async function StoreSchedulePage({
       active ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
     );
 
+  // Every Link here is prefetch={false}, like the kiosk nav: the 45s
+  // AutoRefresh re-prefetched all of them each cycle, and since several point
+  // back at this same dynamic route it logged 364 renders a day against ~92 for
+  // the other kiosk tabs.
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h1 className="text-xl font-semibold tracking-tight">Schedule</h1>
       <div className="flex gap-2">
-        <Link href="/store/schedule" className={pill(view === "today")}>
+        <Link href="/store/schedule" prefetch={false} className={pill(view === "today")}>
           Today
         </Link>
-        <Link href="/store/schedule?view=week" className={pill(view === "week")}>
+        <Link href="/store/schedule?view=week" prefetch={false} className={pill(view === "week")}>
           Week
         </Link>
       </div>
@@ -182,6 +186,7 @@ export default async function StoreSchedulePage({
         <div className="flex items-center gap-1">
           <Link
             href={weekHref(addDays(ws, -7))}
+            prefetch={false}
             aria-label="Previous week"
             className="hover:bg-muted rounded-md border p-1.5"
           >
@@ -190,6 +195,7 @@ export default async function StoreSchedulePage({
           {ws !== thisWeek && (
             <Link
               href={weekHref(thisWeek)}
+              prefetch={false}
               className="px-1 text-sm underline-offset-4 hover:underline"
             >
               This week
@@ -197,6 +203,7 @@ export default async function StoreSchedulePage({
           )}
           <Link
             href={weekHref(addDays(ws, 7))}
+            prefetch={false}
             aria-label="Next week"
             className="hover:bg-muted rounded-md border p-1.5"
           >
