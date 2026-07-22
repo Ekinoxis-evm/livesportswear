@@ -6,6 +6,7 @@ import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { AutoRefresh } from "@/components/store/auto-refresh";
+import { VersionGuard } from "@/components/store/version-guard";
 import { StoreNav } from "@/components/store/store-nav";
 import { Button } from "@/components/ui/button";
 
@@ -22,6 +23,8 @@ export default async function StoreLayout({
     .eq("id", locationId)
     .maybeSingle();
   const bd = businessDate(loc?.timezone ?? "UTC");
+  const served =
+    process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "dev";
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -56,6 +59,7 @@ export default async function StoreLayout({
       </div>
       <StoreNav />
       <AutoRefresh />
+      <VersionGuard served={served} />
     </div>
   );
 }
