@@ -4,20 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Mail, Paperclip, Plus, X } from "lucide-react";
-import {
-  storeCloseDayDraft,
-  storeCloseDay,
-  storeSendTestReport,
-} from "@/server/store-floor";
 import type { CloseDayDraft } from "@/server/conversion-core";
+import type { ActionResult } from "@/server/shared";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Wizard } from "@/components/shared/wizard";
 import { cn } from "@/lib/utils";
 
@@ -39,12 +28,17 @@ function Metric({ label, value }: { label: string; value: string | number }) {
  */
 export function ReportWizard({
   mode,
-  closers,
+  closers = [],
+  loadDraft,
+  send,
   onDone,
   onCancel,
 }: {
   mode: "test" | "close";
-  closers: CloserEntry[];
+  /** Kiosk only — admin has no "who is closing" step. */
+  closers?: CloserEntry[];
+  loadDraft: () => Promise<ActionResult<CloseDayDraft>>;
+  send: (args: { closerId?: string; recipients: string[] }) => Promise<ActionResult<unknown>>;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -55,11 +49,10 @@ export function ReportWizard({
   const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [closer, setCloser] = useState<CloserEntry | null>(closers[0] ?? null);
 
-  // The draft is built for whoever is currently selected; the metrics don't
-  // depend on them, so loading once against the first closer is enough.
-  if (draft === null && !pending && closers.length > 0) {
+  // The metrics don't depend on who's sending, so the draft loads once.
+  if (draft === null && !pending) {
     start(async () => {
-      const res = await storeCloseDayDraft(closers[0].id);
+      const res = await loadDraft();
       if (!res.ok || !res.data) {
         toast.error(res.ok ? "Could not build the report." : res.error);
         onCancel();
@@ -81,12 +74,10 @@ export function ReportWizard({
     });
 
   function submit() {
-    if (!closer || !draft) return;
+    if (!draft) return;
+    if (mode === "close" && !closer) return;
     start(async () => {
-      const res =
-        mode === "close"
-          ? await storeCloseDay(closer.id, selected)
-          : await storeSendTestReport(selected);
+      const res = await send({ closerId: closer?.id, recipients: selected });
       if (!res.ok) {
         toast.error(res.error ?? "Something went wrong.");
         return;
@@ -175,7 +166,7 @@ export function ReportWizard({
         <p className="text-muted-foreground py-6 text-sm">Building the report…</p>
       ),
     },
-    {
+    ...(closers.length === 0 ? [] : [{
       title: "Sending",
       content: (
         <div className="flex flex-col gap-3">
@@ -209,7 +200,7 @@ export function ReportWizard({
         </div>
       ),
       validate: () => closer !== null,
-    },
+    }]),
   ];
 
   return (
@@ -222,67 +213,5 @@ export function ReportWizard({
       pending={pending}
       pendingLabel="Sending…"
     />
-  );
-}
-
-/** The two big buttons that open the wizard. */
-export function ReportActions({
-  closers,
-  alreadyClosed,
-}: {
-  closers: CloserEntry[];
-  alreadyClosed: boolean;
-}) {
-  const [mode, setMode] = useState<"test" | "close" | null>(null);
-
-  return (
-    <>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <Button
-          size="lg"
-          variant="outline"
-          className="h-16 flex-1 text-base"
-          onClick={() => setMode("test")}
-        >
-          Send a test report
-        </Button>
-        <Button
-          size="lg"
-          className="h-16 flex-1 text-base"
-          disabled={alreadyClosed || closers.length === 0}
-          onClick={() => setMode("close")}
-        >
-          {alreadyClosed ? "Day closed ✓" : "Send close of day"}
-        </Button>
-      </div>
-      {!alreadyClosed && closers.length === 0 && (
-        <p className="text-muted-foreground text-sm">
-          Closing needs someone on shift &amp; checked in.
-        </p>
-      )}
-
-      <Dialog open={mode !== null} onOpenChange={(o) => !o && setMode(null)}>
-        <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
-          <DialogHeader>
-            <DialogTitle>
-              {mode === "close" ? "Close the day" : "Send a test report"}
-            </DialogTitle>
-            <DialogDescription>
-              {mode === "close"
-                ? "Sends the daily report and ends today's queue."
-                : "Sends the same report marked [TEST]. Nothing is recorded."}
-            </DialogDescription>
-          </DialogHeader>
-          {mode && (
-            <ReportWizard
-              mode={mode}
-              closers={closers}
-              onDone={() => setMode(null)}
-              onCancel={() => setMode(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }

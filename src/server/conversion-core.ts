@@ -358,7 +358,18 @@ export async function closeDayDraftFor(closer: {
   const ineligible = await closerEligibility(closer, bd);
   if (ineligible) return { ok: false, error: ineligible };
 
-  const d = await buildDayReportData(closer.location_id);
+  return reportDraftFor(closer.location_id);
+}
+
+/**
+ * The same draft without a closer — admin previews a test send, where there is
+ * no one "closing" and no eligibility to check. `closeDayDraftFor` adds only
+ * that check on top of this.
+ */
+export async function reportDraftFor(
+  locationId: string,
+): Promise<ActionResult<CloseDayDraft>> {
+  const d = await buildDayReportData(locationId);
   return {
     ok: true,
     data: {

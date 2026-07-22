@@ -8,6 +8,15 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Send, X } from "lucide-react";
 import type { ActionResult } from "@/server/shared";
+import type { CloseDayDraft } from "@/server/conversion-core";
+import { ReportWizard } from "@/components/shared/report-wizard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,13 +43,18 @@ export function RecipientsManager({
   add,
   remove,
   sendTest,
+  loadDraft,
 }: {
   description: string;
   recipients: string[];
   add: (email: string) => Promise<ActionResult>;
   remove: (email: string) => Promise<ActionResult>;
-  sendTest: () => Promise<ActionResult<{ sentTo: number }>>;
+  sendTest: (recipients: string[]) => Promise<ActionResult<{ sentTo: number }>>;
+  /** Supplied on every real surface: makes the button open the review wizard
+   *  (recipients → numbers → send) instead of firing a send immediately. */
+  loadDraft: () => Promise<ActionResult<CloseDayDraft>>;
 }) {
+  const [wizardOpen, setWizardOpen] = useState(false);
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
@@ -87,16 +101,6 @@ export function RecipientsManager({
     });
   }
 
-  function onSendTest() {
-    start(async () => {
-      const res = await sendTest();
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success(res.data?.sentTo ? `Test report sent to ${res.data.sentTo}.` : "Test report sent.");
-    });
-  }
 
   const hasRecipients = items.length > 0;
 
@@ -160,15 +164,35 @@ export function RecipientsManager({
 
         <div className="flex items-center justify-between border-t pt-3">
           <p className="text-muted-foreground text-xs">
-            Sends today&apos;s report now, marked <span className="font-medium">[TEST]</span>,
-            without closing the day.
+            Review the recipients and the numbers, then send today&apos;s report
+            marked <span className="font-medium">[TEST]</span> — the day stays open.
           </p>
-          <Button onClick={onSendTest} disabled={pending || !hasRecipients}>
+          <Button onClick={() => setWizardOpen(true)} disabled={pending || !hasRecipients}>
             <Send className="size-4" />
             Send test report
           </Button>
         </div>
       </CardContent>
+
+      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
+        <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
+          <DialogHeader>
+            <DialogTitle>Send a test report</DialogTitle>
+            <DialogDescription>
+              The same report marked [TEST]. Nothing is recorded.
+            </DialogDescription>
+          </DialogHeader>
+          {wizardOpen && (
+            <ReportWizard
+              mode="test"
+              loadDraft={loadDraft}
+              send={({ recipients: only }) => sendTest(only)}
+              onDone={() => setWizardOpen(false)}
+              onCancel={() => setWizardOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
