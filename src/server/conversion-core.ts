@@ -2,6 +2,7 @@ import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
+import { narrowRecipients } from "@/lib/report-recipients";
 import { totals, byPerson, formatPct, type ConversionTotals } from "@/lib/conversion";
 import { breakMinutes, type BreakRow } from "@/lib/breaks";
 import { workedHours } from "@/lib/attendance";
@@ -400,11 +401,10 @@ export async function closeDayDraftFor(closer: {
  * the day's Shopify sales) into store_day_closes and emails the daily report
  * with the full-detail CSV attached. Idempotent on (location, business_date).
  */
-export async function closeDayFor(closer: {
-  id: string;
-  name: string;
-  location_id: string;
-}): Promise<ActionResult> {
+export async function closeDayFor(
+  closer: { id: string; name: string; location_id: string },
+  onlyRecipients?: string[],
+): Promise<ActionResult> {
   const service = createServiceClient();
 
   const { data: loc } = await service
@@ -426,7 +426,8 @@ export async function closeDayFor(closer: {
     .maybeSingle();
   if (existing) return { ok: false, error: "The day is already closed." };
 
-  const d = await buildDayReportData(closer.location_id);
+  const base = await buildDayReportData(closer.location_id);
+  const d = { ...base, recipients: narrowRecipients(base.recipients, onlyRecipients) };
 
   // Refuse to close with nobody to report to — otherwise the day is marked
   // closed and the report is unsendable forever (no resend path exists).
@@ -481,8 +482,10 @@ export async function closeDayFor(closer: {
  */
 export async function sendTestReportFor(
   locationId: string,
+  onlyRecipients?: string[],
 ): Promise<ActionResult<{ sentTo: number }>> {
-  const d = await buildDayReportData(locationId);
+  const base = await buildDayReportData(locationId);
+  const d = { ...base, recipients: narrowRecipients(base.recipients, onlyRecipients) };
   if (d.recipients.length === 0)
     return { ok: false, error: "No recipients configured — add an email first." };
 

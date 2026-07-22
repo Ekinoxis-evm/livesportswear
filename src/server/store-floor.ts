@@ -626,17 +626,30 @@ export async function storeCloseDayDraft(
  * Close the day from the kiosk — the selected closer must be on today's
  * published schedule and checked in (the rule predates the kiosk).
  */
-export async function storeCloseDay(closedById: string): Promise<ActionResult> {
-  const { locationId, service } = await storeCtx();
+export async function storeCloseDay(
+  closedById: string,
+  onlyRecipients?: string[],
+): Promise<ActionResult> {
+  const { locationId, service, bd } = await storeCtx();
   const emp = await targetEmployee(service, locationId, closedById);
   if (!emp) return { ok: false, error: "That employee isn't at this store." };
 
-  const res = await closeDayFor({
-    id: emp.id,
-    name: emp.name,
-    location_id: locationId,
-  });
+  const res = await closeDayFor(
+    { id: emp.id, name: emp.name, location_id: locationId },
+    onlyRecipients,
+  );
   if (res.ok) {
+    // End the day's queue so the board stops offering "take a client". This
+    // deliberately does NOT check anyone out — the closer does this during
+    // their shift when the store shuts, and everyone still taps their own PIN
+    // checkout. Forcing it here would cut short the hours of whoever is still
+    // working after the report goes out.
+    await service
+      .from("floor_days")
+      .update({ closed_at: new Date().toISOString(), closed_by: emp.id })
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .is("closed_at", null);
     revalidatePath("/store", "layout");
   }
   return res;
@@ -687,7 +700,9 @@ export async function storeRemoveReportRecipient(email: unknown): Promise<Action
   return { ok: true };
 }
 
-export async function storeSendTestReport(): Promise<ActionResult<{ sentTo: number }>> {
+export async function storeSendTestReport(
+  onlyRecipients?: string[],
+): Promise<ActionResult<{ sentTo: number }>> {
   const { locationId } = await storeCtx();
-  return sendTestReportFor(locationId);
+  return sendTestReportFor(locationId, onlyRecipients);
 }

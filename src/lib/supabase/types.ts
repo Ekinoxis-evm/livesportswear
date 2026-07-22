@@ -620,18 +620,24 @@ export type Database = {
       floor_days: {
         Row: {
           business_date: string
+          closed_at: string | null
+          closed_by: string | null
           location_id: string
           opened_at: string
           opened_by: string | null
         }
         Insert: {
           business_date: string
+          closed_at?: string | null
+          closed_by?: string | null
           location_id: string
           opened_at?: string
           opened_by?: string | null
         }
         Update: {
           business_date?: string
+          closed_at?: string | null
+          closed_by?: string | null
           location_id?: string
           opened_at?: string
           opened_by?: string | null
