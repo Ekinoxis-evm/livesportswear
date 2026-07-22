@@ -107,13 +107,23 @@ export async function runCountrySync(onlyMissing = false): Promise<CountrySyncRe
   }
   const supabase = createServiceClient();
 
-  const query = supabase.from("customer_origin").select("shopify_customer_id");
-  const { data: rows, error } = onlyMissing
-    ? await query.is("country_iso", null)
-    : await query;
-  if (error) return { ok: false, error: error.message };
-
-  const ids = (rows ?? []).map((r) => r.shopify_customer_id);
+  // PostgREST caps a plain select at 1,000 rows. Without paging, the first run
+  // silently processed ~1,000 of 5,960 clients and left the rest looking like
+  // they had no phone — 16.7% placed instead of the ~72% the data supports.
+  const PAGE = 1000;
+  const ids: string[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let q = supabase
+      .from("customer_origin")
+      .select("shopify_customer_id")
+      .range(from, from + PAGE - 1);
+    if (onlyMissing) q = q.is("country_iso", null);
+    const { data, error } = await q;
+    if (error) return { ok: false, error: error.message };
+    const batch = data ?? [];
+    ids.push(...batch.map((r) => r.shopify_customer_id));
+    if (batch.length < PAGE) break;
+  }
 
   // Group by outcome instead of updating per client: ~30 countries plus the
   // unknown bucket means ~30 statements rather than one per row.

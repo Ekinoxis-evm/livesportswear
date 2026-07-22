@@ -31,6 +31,31 @@ import {
 
 const PAGE_SIZE = 50;
 
+type TallyRow = { staff_id: string | null; country_iso: string | null };
+
+/**
+ * Every attribution row, paged. The rollups on this page describe the WHOLE
+ * book, and PostgREST caps a plain select at 1,000 rows — without paging the
+ * "counts must sum to the total" property silently breaks again above 1,000
+ * clients, which is the exact bug this page already had once.
+ */
+async function allOriginRows(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+): Promise<TallyRow[]> {
+  const PAGE = 1000;
+  const out: TallyRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase
+      .from("customer_origin")
+      .select("staff_id, country_iso")
+      .range(from, from + PAGE - 1);
+    const batch = (data ?? []) as TallyRow[];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
 type OriginRow = {
   shopify_customer_id: string;
   first_order_name: string | null;
@@ -68,9 +93,9 @@ export default async function ClientsPage({
   // book, not the 50 clients on screen. ~6k two-letter strings is nothing, and
   // deriving country per page is exactly what made the old card disagree with
   // its own total.
-  const [{ data: employeeRows }, { data: tallyRows }] = await Promise.all([
+  const [{ data: employeeRows }, tallyRows] = await Promise.all([
     supabase.from("employees").select("id, name, shopify_staff_id, active").order("name"),
-    supabase.from("customer_origin").select("staff_id, country_iso"),
+    allOriginRows(supabase),
   ]);
   const employees = employeeRows ?? [];
   // staff_id is the stored truth; the employee is resolved here, so mapping a
@@ -84,10 +109,7 @@ export default async function ClientsPage({
 
   // How the attribution actually landed — shown on the page so the numbers
   // aren't a black box, and so unmapped staff are visible rather than silent.
-  const allRows = (tallyRows ?? []) as {
-    staff_id: string | null;
-    country_iso: string | null;
-  }[];
+  const allRows = tallyRows;
   const countByStaff = new Map<string, number>();
   for (const t of allRows) {
     const key = t.staff_id ? normalizeStaffId(t.staff_id) : "";
