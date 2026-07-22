@@ -1,10 +1,12 @@
 "use server";
 
 import { z } from "zod";
+import { formatInTimeZone } from "date-fns-tz";
 import { revalidatePath } from "next/cache";
 import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
+import { retakePatch } from "@/lib/retake";
 import { hashPin, PIN_RE } from "@/lib/kiosk-pin";
 import {
   doOpenDay,
@@ -58,7 +60,7 @@ async function storeCtx() {
     .eq("id", locationId)
     .maybeSingle();
   const tz = loc?.timezone ?? "UTC";
-  return { locationId, service, bd: businessDate(tz) };
+  return { locationId, service, tz, bd: businessDate(tz) };
 }
 
 async function targetEmployee(
@@ -467,6 +469,111 @@ export async function storeFinish(
     revalidatePath("/store", "layout");
   }
   return res;
+}
+
+export type RetakeCandidate = {
+  id: string;
+  time: string;
+  sold: boolean;
+  isReturn: boolean;
+  customer: string | null;
+  orderName: string | null;
+  orderTotal: number | null;
+};
+
+// Mirrors the order shape the finish flow already sends (lib/finish-schema.ts).
+const retakeOrderSchema = z.object({
+  id: z.string().min(1).max(30),
+  name: z.string().min(1).max(30),
+  total: z.number().min(0),
+  customer_id: z.string().max(30).nullish(),
+  customer_name: z.string().max(120).nullish(),
+  customer_email: z.string().max(200).nullish(),
+  customer_phone: z.string().max(40).nullish(),
+});
+
+/** Today's attendances for one employee — the pick-list for a re-take. */
+export async function storeRetakeCandidates(
+  employeeId: string,
+): Promise<ActionResult<RetakeCandidate[]>> {
+  const { locationId, service, bd, tz } = await storeCtx();
+  const emp = await targetEmployee(service, locationId, employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+
+  const { data, error } = await service
+    .from("client_events")
+    .select(
+      "id, attended_at, sold, kind, customer_name, shopify_order_name, order_total",
+    )
+    .eq("location_id", locationId)
+    .eq("employee_id", emp.id)
+    .eq("business_date", bd)
+    .order("attended_at", { ascending: false });
+  if (error) return { ok: false, error: error.message };
+
+  return {
+    ok: true,
+    data: (data ?? []).map((e) => ({
+      id: e.id,
+      time: formatInTimeZone(new Date(e.attended_at), tz, "HH:mm"),
+      sold: e.sold,
+      isReturn: e.kind === "return",
+      customer: e.customer_name,
+      orderName: e.shopify_order_name,
+      orderTotal: e.order_total == null ? null : Number(e.order_total),
+    })),
+  };
+}
+
+const retakeSchema = z.object({
+  employeeId: z.string().uuid(),
+  eventId: z.string().uuid(),
+  order: retakeOrderSchema.optional(),
+});
+
+/**
+ * A client the rep already attended today came back and bought. Adds the sale to
+ * the attendance she ALREADY logged instead of creating a new one, so the same
+ * person isn't counted twice against conversion.
+ *
+ * The scoping below IS the security boundary: the event must belong to this
+ * employee, at the store in the JWT claim, on TODAY's business date. Without the
+ * date check a kiosk left open overnight could rewrite yesterday's closed
+ * numbers.
+ */
+export async function storeRetake(input: unknown): Promise<ActionResult> {
+  const { locationId, service, bd } = await storeCtx();
+  const parsed = retakeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const emp = await targetEmployee(service, locationId, parsed.data.employeeId);
+  if (!emp) return { ok: false, error: "That employee isn't at this store." };
+
+  const { data: existing } = await service
+    .from("client_events")
+    .select(
+      "sold, order_total, shopify_order_id, shopify_order_name, shopify_customer_id, customer_name, customer_email, customer_phone",
+    )
+    .eq("id", parsed.data.eventId)
+    .eq("location_id", locationId)
+    .eq("employee_id", emp.id)
+    .eq("business_date", bd)
+    .maybeSingle();
+  if (!existing) {
+    return { ok: false, error: "That client isn't on today's list for this person." };
+  }
+
+  const patch = retakePatch(existing, parsed.data.order ?? null);
+  const { error } = await service
+    .from("client_events")
+    .update(patch)
+    .eq("id", parsed.data.eventId)
+    .eq("location_id", locationId)
+    .eq("business_date", bd);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/store", "layout");
+  return { ok: true };
 }
 
 const searchSchema = z.string().trim().min(2).max(60);
