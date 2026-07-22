@@ -2,7 +2,7 @@ import "server-only";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
-import { narrowRecipients } from "@/lib/report-recipients";
+import { resolveRecipients } from "@/lib/report-recipients";
 import { totals, byPerson, formatPct, type ConversionTotals } from "@/lib/conversion";
 import { breakMinutes, type BreakRow } from "@/lib/breaks";
 import { workedHours } from "@/lib/attendance";
@@ -438,7 +438,7 @@ export async function closeDayFor(
   if (existing) return { ok: false, error: "The day is already closed." };
 
   const base = await buildDayReportData(closer.location_id);
-  const d = { ...base, recipients: narrowRecipients(base.recipients, onlyRecipients) };
+  const d = { ...base, recipients: resolveRecipients(base.recipients, onlyRecipients) };
 
   // Refuse to close with nobody to report to — otherwise the day is marked
   // closed and the report is unsendable forever (no resend path exists).
@@ -496,7 +496,7 @@ export async function sendTestReportFor(
   onlyRecipients?: string[],
 ): Promise<ActionResult<{ sentTo: number }>> {
   const base = await buildDayReportData(locationId);
-  const d = { ...base, recipients: narrowRecipients(base.recipients, onlyRecipients) };
+  const d = { ...base, recipients: resolveRecipients(base.recipients, onlyRecipients) };
   if (d.recipients.length === 0)
     return { ok: false, error: "No recipients configured — add an email first." };
 

@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Mail, Paperclip, Plus, X } from "lucide-react";
 import type { CloseDayDraft } from "@/server/conversion-core";
 import type { ActionResult } from "@/server/shared";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Wizard } from "@/components/shared/wizard";
 import { cn } from "@/lib/utils";
 
 export type CloserEntry = { id: string; name: string };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
@@ -25,6 +28,10 @@ function Metric({ label, value }: { label: string; value: string | number }) {
  * One wizard, two sends. The steps are identical so a rep learns a single flow;
  * only the last action differs — the test changes nothing, the close writes the
  * day's snapshot and ends the floor's queue.
+ *
+ * Step 1 starts from the stored recipient list and lets the closer drop or add
+ * an address FOR THIS SEND — the saved list isn't touched (`resolveRecipients`
+ * on the server keeps it a list of valid emails).
  */
 export function ReportWizard({
   mode,
@@ -35,7 +42,7 @@ export function ReportWizard({
   onCancel,
 }: {
   mode: "test" | "close";
-  /** Kiosk only — admin has no "who is closing" step. */
+  /** Kiosk only — admin has no "who is sending" step. */
   closers?: CloserEntry[];
   loadDraft: () => Promise<ActionResult<CloseDayDraft>>;
   send: (args: { closerId?: string; recipients: string[] }) => Promise<ActionResult<unknown>>;
@@ -46,36 +53,60 @@ export function ReportWizard({
   const [pending, start] = useTransition();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<CloseDayDraft | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [dropped, setDropped] = useState<Set<string>>(new Set());
+  const [added, setAdded] = useState<string[]>([]);
+  const [newEmail, setNewEmail] = useState("");
   const [closer, setCloser] = useState<CloserEntry | null>(closers[0] ?? null);
 
-  // The metrics don't depend on who's sending, so the draft loads once.
-  if (draft === null && !pending) {
-    start(async () => {
-      const res = await loadDraft();
-      if (!res.ok || !res.data) {
-        toast.error(res.ok ? "Could not build the report." : res.error);
-        onCancel();
-        return;
-      }
-      setDraft(res.data);
-    });
-  }
+  // The draft loads once, in an effect — building it during render kept
+  // re-triggering the transition and the wizard spun forever.
+  useEffect(() => {
+    let live = true;
+    loadDraft()
+      .then((res) => {
+        if (!live) return;
+        if (res.ok && res.data) setDraft(res.data);
+        else {
+          setLoadError(true);
+          toast.error(res.ok ? "Could not build the report." : res.error);
+        }
+      })
+      .catch(() => live && setLoadError(true));
+    return () => {
+      live = false;
+    };
+  }, [loadDraft]);
 
-  const all = draft?.recipients ?? [];
-  const selected = all.filter((e) => !dropped.has(e));
+  const stored = draft?.recipients ?? [];
+  const norm = (e: string) => e.trim().toLowerCase();
+  const selected = [
+    ...stored.filter((e) => !dropped.has(norm(e))),
+    ...added,
+  ];
 
   const toggle = (email: string) =>
     setDropped((prev) => {
       const next = new Set(prev);
-      if (next.has(email)) next.delete(email);
-      else next.add(email);
+      const key = norm(email);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
+  function addEmail() {
+    const email = norm(newEmail);
+    if (!EMAIL_RE.test(email)) {
+      toast.error("Enter a valid email.");
+      return;
+    }
+    if (!selected.some((e) => norm(e) === email)) setAdded((a) => [...a, email]);
+    setNewEmail("");
+  }
+
   function submit() {
     if (!draft) return;
-    if (mode === "close" && !closer) return;
+    if (closers.length > 0 && !closer) return;
     start(async () => {
       const res = await send({ closerId: closer?.id, recipients: selected });
       if (!res.ok) {
@@ -90,54 +121,100 @@ export function ReportWizard({
     });
   }
 
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <p className="text-muted-foreground text-sm">Couldn&apos;t build the report.</p>
+        <Button variant="outline" onClick={onCancel}>
+          Close
+        </Button>
+      </div>
+    );
+  }
+
+  if (!draft) {
+    return (
+      <p className="text-muted-foreground py-10 text-center text-sm">
+        Building the report…
+      </p>
+    );
+  }
+
   const steps = [
     {
       title: "Recipients",
       content: (
         <div className="flex flex-col gap-3">
           <p className="text-muted-foreground text-sm">
-            Everyone on the list gets it. Remove someone for this send only — the
-            saved list isn&apos;t changed.
+            These get today&apos;s report. Remove or add someone for this send —
+            the saved list stays as it is.
           </p>
-          {all.length === 0 ? (
-            <p className="text-sm text-amber-600">
-              No recipients configured — add one before sending.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {all.map((email) => {
-                const on = !dropped.has(email);
-                return (
-                  <button
-                    key={email}
-                    type="button"
-                    onClick={() => toggle(email)}
-                    className={cn(
-                      "flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
-                      on ? "hover:bg-muted" : "border-dashed opacity-50",
-                    )}
-                  >
-                    <span className="truncate">{email}</span>
-                    {on ? (
-                      <X className="text-muted-foreground size-4 shrink-0" />
-                    ) : (
-                      <Plus className="text-muted-foreground size-4 shrink-0" />
-                    )}
-                  </button>
-                );
-              })}
-              <p className="text-muted-foreground text-xs">
-                Sending to {selected.length} of {all.length}.
-              </p>
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            {stored.map((email) => {
+              const on = !dropped.has(norm(email));
+              return (
+                <button
+                  key={email}
+                  type="button"
+                  onClick={() => toggle(email)}
+                  className={cn(
+                    "flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                    on ? "hover:bg-muted" : "border-dashed opacity-50",
+                  )}
+                >
+                  <span className="truncate">{email}</span>
+                  {on ? (
+                    <X className="text-muted-foreground size-4 shrink-0" />
+                  ) : (
+                    <Plus className="text-muted-foreground size-4 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+            {added.map((email) => (
+              <button
+                key={email}
+                type="button"
+                onClick={() => setAdded((a) => a.filter((e) => e !== email))}
+                className="border-primary/40 flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 text-left text-sm hover:bg-muted"
+              >
+                <span className="truncate">
+                  {email} <span className="text-muted-foreground text-xs">· added</span>
+                </span>
+                <X className="text-muted-foreground size-4 shrink-0" />
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              inputMode="email"
+              placeholder="Add an email for this send…"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addEmail();
+                }
+              }}
+            />
+            <Button type="button" variant="outline" onClick={addEmail}>
+              <Plus className="size-4" /> Add
+            </Button>
+          </div>
+
+          <p className="text-muted-foreground text-xs">
+            Sending to {selected.length} recipient{selected.length === 1 ? "" : "s"}.
+          </p>
         </div>
       ),
-      validate: () => all.length > 0,
+      validate: () => selected.length > 0,
     },
     {
       title: "Numbers",
-      content: draft ? (
+      content: (
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-2">
             <Metric label="Attended" value={draft.attended} />
@@ -152,55 +229,56 @@ export function ReportWizard({
             <Metric label="Cash received" value={draft.cashReceived ?? "—"} />
           </div>
           <div className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm">
+            <span className="text-muted-foreground text-xs">Subject</span>
             <span className="font-medium">
               {mode === "test" ? `[TEST] ${draft.subject}` : draft.subject}
             </span>
-            <span className="text-muted-foreground flex items-center gap-1.5">
+            <span className="text-muted-foreground mt-1 flex items-center gap-1.5">
               <Paperclip className="size-3.5 shrink-0" />
               CSV + XLSX + PDF · {draft.eventCount} clients · {draft.checkinCount}{" "}
               check-ins
             </span>
           </div>
         </div>
-      ) : (
-        <p className="text-muted-foreground py-6 text-sm">Building the report…</p>
       ),
     },
-    ...(closers.length === 0 ? [] : [{
-      title: "Sending",
-      content: (
-        <div className="flex flex-col gap-3">
-          <p className="text-muted-foreground text-sm">
-            Who is sending this? Defaults to whoever is on the floor now.
-          </p>
-          {closers.map((c) => (
-            <Button
-              key={c.id}
-              size="lg"
-              variant={closer?.id === c.id ? "default" : "outline"}
-              className="h-14 justify-start"
-              disabled={pending}
-              onClick={() => setCloser(c)}
-            >
-              {c.name}
-            </Button>
-          ))}
-          <div className="flex items-start gap-1.5 rounded-lg border p-3 text-sm">
-            <Mail className="mt-0.5 size-3.5 shrink-0" />
-            <span className="text-muted-foreground">
-              {selected.join(", ")}
-            </span>
-          </div>
-          {mode === "close" && (
-            <p className="text-muted-foreground text-xs">
-              Closing ends today&apos;s queue. Everyone still needs to tap their
-              own PIN check-out.
-            </p>
-          )}
-        </div>
-      ),
-      validate: () => closer !== null,
-    }]),
+    ...(closers.length === 0
+      ? []
+      : [
+          {
+            title: "Sending",
+            content: (
+              <div className="flex flex-col gap-3">
+                <p className="text-muted-foreground text-sm">
+                  Who is sending this? Defaults to who&apos;s on the floor now.
+                </p>
+                {closers.map((c) => (
+                  <Button
+                    key={c.id}
+                    size="lg"
+                    variant={closer?.id === c.id ? "default" : "outline"}
+                    className="h-14 justify-start"
+                    disabled={pending}
+                    onClick={() => setCloser(c)}
+                  >
+                    {c.name}
+                  </Button>
+                ))}
+                <div className="flex items-start gap-1.5 rounded-lg border p-3 text-sm">
+                  <Mail className="mt-0.5 size-3.5 shrink-0" />
+                  <span className="text-muted-foreground">{selected.join(", ")}</span>
+                </div>
+                {mode === "close" && (
+                  <p className="text-muted-foreground text-xs">
+                    Closing ends today&apos;s queue. Everyone still taps their own
+                    PIN check-out.
+                  </p>
+                )}
+              </div>
+            ),
+            validate: () => closer !== null,
+          },
+        ]),
   ];
 
   return (

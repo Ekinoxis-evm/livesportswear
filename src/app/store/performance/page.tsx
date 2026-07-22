@@ -38,7 +38,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ReportActions, type CloserEntry } from "@/components/store/report-actions";
-import { KioskReportRecipientsCard } from "@/components/store/report-recipients-card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default async function StorePerformancePage({
@@ -174,12 +173,6 @@ export default async function StorePerformancePage({
   ]);
   const currency = goalRow?.currency ?? daySales?.currency ?? "USD";
 
-  const { data: recipientRows } = await service
-    .from("store_report_recipients")
-    .select("email")
-    .eq("location_id", locationId)
-    .order("created_at");
-  const reportRecipients = (recipientRows ?? []).map((r) => r.email);
 
   // Today's orders split by channel (POS vs online) + per-seller avg ticket.
   const staffToName = new Map<string, string>();
@@ -480,10 +473,10 @@ export default async function StorePerformancePage({
       </TabsContent>
 
       <TabsContent value="close" className="flex flex-col gap-4">
-      <KioskReportRecipientsCard recipients={reportRecipients} />
-
+      {/* Just the two buttons — no email block. Recipients are step 1 of the
+          wizard each button opens, editable per send. */}
       <Card>
-        <CardContent className="flex flex-col gap-3 py-4">
+        <CardContent className="flex flex-col gap-3 py-5">
           <span className="text-sm font-medium">End of day</span>
           <ReportActions closers={closers} alreadyClosed={Boolean(closeRow)} />
         </CardContent>
