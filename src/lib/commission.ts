@@ -39,19 +39,31 @@ export function commissionFor(
   };
 }
 
+/**
+ * Money, always to the cent. Sales here are per-order amounts that rarely land
+ * on a whole dollar, and rounding them made totals look like they disagreed
+ * with Shopify — the app's numbers have to reconcile against the register to
+ * the cent.
+ *
+ * Chart axis ticks deliberately don't use this (they format compactly, e.g.
+ * "$12K", in components/dashboard/sales-charts.tsx).
+ */
 export function formatMoney(amount: number, currency = "USD"): string {
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   } catch {
-    return amount.toLocaleString();
+    return amount.toFixed(2);
   }
 }
 
 /** Currency with cents — used where precise amounts matter (the daily report). */
+/** @deprecated formatMoney is now exact to the cent; kept so the day-report
+ * callers keep working. Prefer formatMoney. */
 export function formatMoneyExact(amount: number, currency = "USD"): string {
   try {
     return new Intl.NumberFormat("en-US", {

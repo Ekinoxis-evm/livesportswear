@@ -175,7 +175,7 @@ describe("buildResults", () => {
     const r = buildResults(s, "2026-07-15", "USD");
     expect(r.standings[0]).toMatchObject({
       name: "Maryna",
-      prizes: ["2× bra, t-shirt", "$200", "Free day off"],
+      prizes: ["2× bra, t-shirt", "$200.00", "Free day off"],
       won: true,
     });
     expect(r.standings[1]).toMatchObject({
@@ -189,7 +189,7 @@ describe("buildResults", () => {
 
 describe("labels", () => {
   it("prizeLabel formats each item type", () => {
-    expect(prizeLabel(cash(200), "USD")).toBe("$200");
+    expect(prizeLabel(cash(200), "USD")).toBe("$200.00");
     expect(
       prizeLabel({ type: "clothing", garments: ["bra", "t-shirt"], qty: 2 }, "USD"),
     ).toBe("2× bra, t-shirt");
@@ -209,7 +209,7 @@ describe("labels", () => {
         },
         "USD",
       ),
-    ).toBe("1st in the challenge · sell $5,000+ · store goal · personal goal");
+    ).toBe("1st in the challenge · sell $5,000.00+ · store goal · personal goal");
     expect(
       conditionsLabel(
         { position: null, min_sales: null, requires_store_goal: false, requires_personal_goal: false },
