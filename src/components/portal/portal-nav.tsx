@@ -2,18 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartColumn, CalendarDays, Trophy, Settings } from "lucide-react";
+import { ChartColumn, CalendarDays, Trophy, Settings, Contact } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Performance is a tab hub — /portal/sales and /portal/clients belong to it, so
-// it claims those paths too and stays lit while the rep moves between tabs.
+// Performance is a tab hub — /portal/sales belongs to it, so it claims that
+// path too and stays lit while the rep moves between its tabs.
 const ITEMS = [
-  {
-    href: "/portal",
-    label: "Performance",
-    icon: ChartColumn,
-    also: ["/portal/sales", "/portal/clients"],
-  },
+  { href: "/portal", label: "Performance", icon: ChartColumn, also: ["/portal/sales"] },
+  { href: "/portal/clients", label: "Clients", icon: Contact },
   { href: "/portal/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/portal/rewards", label: "Rewards", icon: Trophy },
   { href: "/portal/settings", label: "Settings", icon: Settings },

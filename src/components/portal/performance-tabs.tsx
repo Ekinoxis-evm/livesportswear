@@ -4,10 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+// Clients left this hub — it's a relationship tool, not a daily-floor metric,
+// and lives at its own /portal/clients tab now. The attendance and conversion
+// numbers stay here.
 const TABS = [
   { href: "/portal", label: "Overview" },
   { href: "/portal/sales", label: "Sales" },
-  { href: "/portal/clients", label: "Clients" },
 ];
 
 export function PortalPerformanceTabs() {
