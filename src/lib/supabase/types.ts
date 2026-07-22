@@ -1449,6 +1449,10 @@ export type Database = {
       current_location_id: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       upsert_customer_origin: { Args: { rows: Json }; Returns: undefined }
+      client_origin_tallies: {
+        Args: never
+        Returns: { staff_id: string | null; country_iso: string | null; clients: number }[]
+      }
     }
     Enums: {
       employee_role: "sales_rep" | "shift_lead" | "store_manager"

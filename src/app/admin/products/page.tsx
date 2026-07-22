@@ -67,31 +67,39 @@ export default async function ProductsPage({
       </form>
 
       {types.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={href({ type: "", after: null })}
-            className={cn(
-              "rounded-full border px-3 py-1 text-sm",
-              !type ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
-            )}
-          >
-            All types
-          </Link>
-          {types.map((t) => (
+        /* A <details> rather than a pill row: there are 30+ product types and
+           laying them all out pushed the catalog off the screen. Native
+           disclosure keeps it server-rendered with no JS. */
+        <details className="rounded-md border" open={Boolean(type)}>
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+            Type: <span className="text-muted-foreground">{type || "All"}</span>
+          </summary>
+          <div className="flex flex-wrap gap-2 border-t p-3">
             <Link
-              key={t}
-              href={href({ type: t, after: null })}
+              href={href({ type: "", after: null })}
               className={cn(
                 "rounded-full border px-3 py-1 text-sm",
-                type === t
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "hover:bg-muted",
+                !type ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
               )}
             >
-              {t}
+              All types
             </Link>
-          ))}
-        </div>
+            {types.map((t) => (
+              <Link
+                key={t}
+                href={href({ type: t, after: null })}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-sm",
+                  type === t
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-muted",
+                )}
+              >
+                {t}
+              </Link>
+            ))}
+          </div>
+        </details>
       )}
 
       {!configured ? (
@@ -115,32 +123,35 @@ export default async function ProductsPage({
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map((p) => (
-              <Card key={p.id} className="overflow-hidden py-0">
-                <div className="bg-muted aspect-square w-full">
-                  {p.image && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.image}
-                      alt=""
-                      className="size-full object-cover"
-                      loading="lazy"
-                    />
-                  )}
-                </div>
-                <CardContent className="flex flex-col gap-1 p-3">
-                  <span className="line-clamp-2 text-sm font-medium">{p.title}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {p.productType ?? "—"}
-                  </span>
-                  <div className="mt-1 flex items-baseline justify-between gap-2">
-                    <span className="text-sm font-semibold tabular-nums">
+          <Card>
+            <CardContent className="p-0">
+              <ul className="divide-y">
+                {products.map((p) => (
+                  <li key={p.id} className="flex items-center gap-3 p-3">
+                    <div className="bg-muted size-12 shrink-0 overflow-hidden rounded">
+                      {p.image && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.image}
+                          alt=""
+                          className="size-full object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm font-medium">{p.title}</span>
+                      <span className="text-muted-foreground truncate text-xs">
+                        {p.productType ?? "—"}
+                        {p.status !== "ACTIVE" ? ` · ${p.status.toLowerCase()}` : ""}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums">
                       {p.price != null ? formatMoney(p.price, p.currency ?? "USD") : "—"}
                     </span>
                     <span
                       className={cn(
-                        "text-xs tabular-nums",
+                        "w-20 shrink-0 text-right text-xs tabular-nums",
                         (p.inventory ?? 0) > 0
                           ? "text-muted-foreground"
                           : "font-medium text-amber-600 dark:text-amber-500",
@@ -148,16 +159,11 @@ export default async function ProductsPage({
                     >
                       {p.inventory ?? 0} in stock
                     </span>
-                  </div>
-                  {p.status !== "ACTIVE" && (
-                    <span className="text-muted-foreground text-xs uppercase">
-                      {p.status.toLowerCase()}
-                    </span>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
 
           {page.hasNextPage && page.endCursor && (
             <div className="flex justify-center">

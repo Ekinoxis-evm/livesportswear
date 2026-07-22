@@ -72,19 +72,22 @@ export type CountryTally = { country: Country | null; clients: number };
  * disagree with its own total.
  */
 export function countryTally(
-  rows: { country_iso: string | null }[],
+  rows: { country_iso: string | null; clients?: number }[],
 ): CountryTally[] {
   const byIso = new Map<string, CountryTally>();
   let unknown = 0;
 
   for (const row of rows) {
+    // `clients` lets a pre-grouped row carry its own count, so the caller can
+    // pass a database GROUP BY result instead of one object per client.
+    const weight = row.clients ?? 1;
     const country = countryFromIso(row.country_iso);
     if (!country) {
-      unknown += 1;
+      unknown += weight;
       continue;
     }
     const tally = byIso.get(country.iso) ?? { country, clients: 0 };
-    tally.clients += 1;
+    tally.clients += weight;
     byIso.set(country.iso, tally);
   }
 
