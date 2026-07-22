@@ -559,6 +559,110 @@ export async function searchProducts(query: string): Promise<ProductHit[]> {
   }));
 }
 
+export type CatalogProduct = {
+  id: string;
+  title: string;
+  productType: string | null;
+  status: string;
+  inventory: number | null;
+  price: number | null;
+  currency: string | null;
+  image: string | null;
+};
+
+export type CatalogPage = {
+  products: CatalogProduct[];
+  hasNextPage: boolean;
+  endCursor: string | null;
+};
+
+type CatalogData = {
+  products: {
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    nodes: {
+      id: string;
+      title: string;
+      productType: string | null;
+      status: string;
+      totalInventory: number | null;
+      featuredMedia: { preview: { image: { url: string } | null } | null } | null;
+      priceRangeV2: {
+        minVariantPrice: { amount: string; currencyCode: string } | null;
+      } | null;
+    }[];
+  };
+};
+
+/**
+ * One page of the product catalog, cursor-paginated. The store has ~3,600
+ * products, so this is never loaded whole — the admin page hydrates the page
+ * it's showing.
+ *
+ * `search` and `productType` compose into Shopify's query syntax; the type is
+ * quoted because values contain spaces ("BIKINI TOP").
+ */
+export async function fetchProductCatalog({
+  search,
+  productType,
+  after,
+  first = 40,
+}: {
+  search?: string;
+  productType?: string;
+  after?: string | null;
+  first?: number;
+} = {}): Promise<CatalogPage> {
+  const clauses: string[] = [];
+  const sanitized = (search ?? "").replace(/["\\()]/g, " ").trim();
+  if (sanitized) clauses.push(`(title:*${sanitized}* OR sku:*${sanitized}*)`);
+  if (productType) {
+    clauses.push(`product_type:"${productType.replace(/"/g, "")}"`);
+  }
+
+  const data = await shopifyGraphql<CatalogData>(
+    `query($first: Int!, $after: String, $q: String) {
+      products(first: $first, after: $after, query: $q, sortKey: TITLE) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          title
+          productType
+          status
+          totalInventory
+          featuredMedia { preview { image { url } } }
+          priceRangeV2 { minVariantPrice { amount currencyCode } }
+        }
+      }
+    }`,
+    { first, after: after ?? null, q: clauses.join(" AND ") || null },
+  );
+
+  return {
+    products: data.products.nodes.map((p) => ({
+      id: p.id.split("/").pop() ?? p.id,
+      title: p.title,
+      productType: p.productType || null,
+      status: p.status,
+      inventory: p.totalInventory,
+      price: p.priceRangeV2?.minVariantPrice
+        ? Number(p.priceRangeV2.minVariantPrice.amount)
+        : null,
+      currency: p.priceRangeV2?.minVariantPrice?.currencyCode ?? null,
+      image: p.featuredMedia?.preview?.image?.url ?? null,
+    })),
+    hasNextPage: data.products.pageInfo.hasNextPage,
+    endCursor: data.products.pageInfo.endCursor,
+  };
+}
+
+/** The store's product types — the catalog's category filter. */
+export async function fetchProductTypes(): Promise<string[]> {
+  const data = await shopifyGraphql<{
+    productTypes: { edges: { node: string }[] };
+  }>(`query { productTypes(first: 250) { edges { node } } }`, {});
+  return data.productTypes.edges.map((e) => e.node).filter(Boolean);
+}
+
 export type VariantHit = {
   barcode: string;
   sku: string | null;
