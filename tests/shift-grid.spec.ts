@@ -1,0 +1,91 @@
+import { describe, expect, it } from "vitest";
+import { buildShiftGrid, isAfternoon } from "@/lib/scheduling/shift-grid";
+import type { StatShift } from "@/lib/scheduling/stats";
+
+const shift = (o: Partial<StatShift> = {}): StatShift => ({
+  employee_id: "e1",
+  date: "2026-03-23",
+  start_time: "09:00:00",
+  end_time: "17:00:00",
+  shift_template_id: null,
+  ...o,
+});
+
+const days = ["2026-03-23", "2026-03-24", "2026-03-25"];
+const employees = [
+  { id: "e1", name: "Vale" },
+  { id: "e2", name: "Patricia" },
+];
+
+describe("isAfternoon", () => {
+  it("is AM before noon", () => {
+    expect(isAfternoon("09:00")).toBe(false);
+    expect(isAfternoon("11:59:59")).toBe(false);
+  });
+  it("is PM from noon on", () => {
+    expect(isAfternoon("12:00")).toBe(true);
+    expect(isAfternoon("20:30:00")).toBe(true);
+  });
+});
+
+describe("buildShiftGrid", () => {
+  it("counts a shift in exactly one half by its start time", () => {
+    const g = buildShiftGrid(
+      [shift({ start_time: "09:00" }), shift({ start_time: "14:00" })],
+      employees,
+      days,
+    );
+    const e1 = g.rows.find((r) => r.employeeId === "e1")!;
+    expect(e1.cells[0]).toEqual({ am: 1, pm: 1 });
+    expect(e1.total).toBe(2);
+  });
+
+  it("gives every employee a row, zeros included", () => {
+    const g = buildShiftGrid([shift()], employees, days);
+    const e2 = g.rows.find((r) => r.employeeId === "e2")!;
+    expect(e2.total).toBe(0);
+    expect(e2.cells).toEqual([
+      { am: 0, pm: 0 },
+      { am: 0, pm: 0 },
+      { am: 0, pm: 0 },
+    ]);
+  });
+
+  it("keeps every day as a column even with no shifts", () => {
+    const g = buildShiftGrid([shift({ date: "2026-03-25" })], employees, days);
+    expect(g.days).toHaveLength(3);
+    const e1 = g.rows.find((r) => r.employeeId === "e1")!;
+    expect(e1.cells[0]).toEqual({ am: 0, pm: 0 }); // Mon empty
+    expect(e1.cells[2]).toEqual({ am: 1, pm: 0 }); // Wed has it
+  });
+
+  it("sums column totals across everyone", () => {
+    const g = buildShiftGrid(
+      [
+        shift({ employee_id: "e1", start_time: "08:00" }),
+        shift({ employee_id: "e2", start_time: "13:00" }),
+      ],
+      employees,
+      days,
+    );
+    expect(g.dayTotals[0]).toEqual({ am: 1, pm: 1 });
+  });
+
+  it("ignores shifts outside the day window or for unknown employees", () => {
+    const g = buildShiftGrid(
+      [
+        shift({ date: "2026-03-30" }), // outside window
+        shift({ employee_id: "ghost" }), // unknown employee
+      ],
+      employees,
+      days,
+    );
+    expect(g.rows.every((r) => r.total === 0)).toBe(true);
+    expect(g.dayTotals.every((c) => c.am === 0 && c.pm === 0)).toBe(true);
+  });
+
+  it("orders rows by the employee list, not by shift data", () => {
+    const g = buildShiftGrid([shift({ employee_id: "e2" })], employees, days);
+    expect(g.rows.map((r) => r.name)).toEqual(["Vale", "Patricia"]);
+  });
+});
