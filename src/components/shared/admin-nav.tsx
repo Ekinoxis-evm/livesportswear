@@ -30,8 +30,7 @@ const isGroup = (e: NavEntry): e is NavGroup & { primary: boolean } =>
   "children" in e;
 
 // The Employees group keeps everyone's routes where they are — it's a nav
-// grouping, not a route move. Rewards/Commission both open the "Sales &
-// Rewards setup" page, deep-linked to their section.
+// grouping, not a route move. Rewards and Commission are now their own pages.
 export const NAV_ITEMS: NavEntry[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, primary: true },
   {
@@ -43,8 +42,8 @@ export const NAV_ITEMS: NavEntry[] = [
       { href: "/admin/employees", label: "Profiles" },
       { href: "/admin/schedules", label: "Schedule" },
       { href: "/admin/performance", label: "Performance" },
-      { href: "/admin/commission#rewards", label: "Rewards" },
-      { href: "/admin/commission#commission", label: "Commission" },
+      { href: "/admin/rewards", label: "Rewards" },
+      { href: "/admin/commission", label: "Commission" },
     ],
   },
   { href: "/admin/clients", label: "Clients", icon: Contact, primary: false },

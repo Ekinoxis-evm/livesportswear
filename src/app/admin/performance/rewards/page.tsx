@@ -80,9 +80,9 @@ export default async function RewardsTabPage() {
     <div className="flex flex-col gap-6">
       {contests.length === 0 && (
         <p className="text-muted-foreground text-sm">
-          No contests yet — create one in{" "}
-          <Link href="/admin/commission" className="underline underline-offset-4">
-            Sales &amp; Rewards setup
+          No contests yet — create one under{" "}
+          <Link href="/admin/rewards" className="underline underline-offset-4">
+            Rewards
           </Link>
           .
         </p>
