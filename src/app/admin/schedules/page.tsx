@@ -11,6 +11,8 @@ import { businessDate } from "@/lib/business-date";
 import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
 import { validateSchedule, biweeklyHourWarnings } from "@/lib/scheduling/rules";
+import { buildShiftGrid } from "@/lib/scheduling/shift-grid";
+import { ShiftCountGrid } from "@/components/schedule/shift-count-grid";
 import { getPayPeriod } from "@/lib/payroll-config";
 import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
@@ -333,6 +335,16 @@ export default async function SchedulesPage({
         hoursByEmployee={hoursByEmployee}
         daysOff={daysOff}
       />
+
+      {shiftRows.length > 0 && (
+        <ShiftCountGrid
+          grid={buildShiftGrid(
+            shiftRows,
+            empList.map((e) => ({ id: e.id, name: e.name })),
+            days,
+          )}
+        />
+      )}
     </div>
   );
 }
