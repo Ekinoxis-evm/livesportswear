@@ -30,11 +30,17 @@ export const config: VercelConfig = {
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline'",
+          // 'wasm-unsafe-eval': the inventory barcode reader (zxing, iOS Safari)
+          // instantiates WebAssembly, which CSP3 blocks without it. It permits
+          // ONLY WebAssembly, not arbitrary eval. The .wasm itself is served
+          // same-origin from public/zxing/ (covered by connect-src 'self'),
+          // never the package's jsdelivr CDN.
+          "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: blob: https://*.supabase.co",
           "font-src 'self'",
           "connect-src 'self' https://*.supabase.co",
+          "worker-src 'self' blob:",
           "frame-ancestors 'none'",
           "object-src 'none'",
           "base-uri 'none'",
