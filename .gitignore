@@ -54,3 +54,6 @@ next-env.d.ts
 .idea
 .vscode/settings.json
 
+
+# Working spreadsheets dropped in docs/ for reference — never commit (may hold real business/customer data)
+docs/*.xlsx
