@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { formatInTimeZone } from "date-fns-tz";
+import { ClipboardCheck, PackagePlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -68,30 +69,58 @@ export default async function InventoryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            <span className="font-medium">Counting</span> updates Shopify to what you scan ·{" "}
-            <span className="font-medium">New Stock</span> adds a received shipment on top.
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Two ways to update what Shopify holds. Pick the one that matches what
+          you&apos;re doing.
+        </p>
+      </div>
+
+      {/* The mental model that was missing: these two jobs do opposite things,
+          so they get their own cards, colours and a plain "when to use" line. */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="border-primary/30 flex flex-col gap-3 p-5">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="text-primary size-5 shrink-0" />
+            <span className="font-semibold">Count what&apos;s on the floor</span>
+          </div>
+          <p className="text-muted-foreground text-sm">
+            Scan everything on the racks. At finish, Shopify is <em>set</em> to
+            exactly what you counted — anything not scanned goes to zero. Use for
+            a stock-take.
           </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <StartReceivingButton
-            locations={locs.map((l) => ({
-              id: l.id,
-              name: l.name,
-              hasOpen: openRestockByLocation.has(l.id),
-            }))}
-          />
-          <StartCountButton
-            locations={locs.map((l) => ({
-              id: l.id,
-              name: l.name,
-              hasOpen: openCountByLocation.has(l.id),
-            }))}
-          />
-        </div>
+          <div className="mt-auto">
+            <StartCountButton
+              locations={locs.map((l) => ({
+                id: l.id,
+                name: l.name,
+                hasOpen: openCountByLocation.has(l.id),
+              }))}
+            />
+          </div>
+        </Card>
+
+        <Card className="flex flex-col gap-3 border-amber-500/30 p-5">
+          <div className="flex items-center gap-2">
+            <PackagePlus className="size-5 shrink-0 text-amber-600 dark:text-amber-500" />
+            <span className="font-semibold">Receive a shipment</span>
+          </div>
+          <p className="text-muted-foreground text-sm">
+            A delivery arrived (invoice / packing list). Verify what came in and
+            it&apos;s <em>added on top</em> of current on-hand — nothing is zeroed.
+            Use when new stock lands.
+          </p>
+          <div className="mt-auto">
+            <StartReceivingButton
+              locations={locs.map((l) => ({
+                id: l.id,
+                name: l.name,
+                hasOpen: openRestockByLocation.has(l.id),
+              }))}
+            />
+          </div>
+        </Card>
       </div>
 
       {/* The book: our counted truth per store */}
@@ -180,7 +209,21 @@ export default async function InventoryPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{restock ? "New Stock" : "Counting"}</Badge>
+                        <span
+                          className={
+                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium " +
+                            (restock
+                              ? "border-amber-500/40 text-amber-700 dark:text-amber-400"
+                              : "border-primary/40 text-primary")
+                          }
+                        >
+                          {restock ? (
+                            <PackagePlus className="size-3.5" />
+                          ) : (
+                            <ClipboardCheck className="size-3.5" />
+                          )}
+                          {restock ? "Receiving" : "Counting"}
+                        </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground tabular-nums">
                         {formatInTimeZone(new Date(c.started_at), tz, "MMM d · HH:mm")}
