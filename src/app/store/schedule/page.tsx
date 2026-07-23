@@ -222,8 +222,8 @@ export default async function StoreSchedulePage({
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-muted/50">
-                <th className="bg-muted/50 sticky left-0 z-10 p-2 text-left font-medium">
+              <tr className="bg-schedule-header text-schedule-rail-foreground">
+                <th className="bg-schedule-rail text-schedule-rail-foreground sticky left-0 z-10 p-2 text-left font-medium">
                   Shift
                 </th>
                 {days.map((d) => (

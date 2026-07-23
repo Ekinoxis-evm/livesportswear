@@ -255,13 +255,13 @@ export function ScheduleGrid({
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="bg-muted/50">
-              <th className="sticky left-0 z-10 bg-muted/50 p-2 text-left font-medium">
+            <tr className="bg-schedule-header text-schedule-rail-foreground">
+              <th className="bg-schedule-rail text-schedule-rail-foreground sticky left-0 z-10 p-2 text-left font-medium">
                 Employee
               </th>
               {days.map((d) => (
                 <th key={d} className="min-w-32 p-2 text-left font-medium">
-                  <span className="text-muted-foreground">
+                  <span className="opacity-70">
                     {SHORT_WEEKDAYS[isoWeekday(d) - 1]}
                   </span>{" "}
                   <span className="tabular-nums">{d.slice(8, 10)}</span>
