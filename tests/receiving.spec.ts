@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   mapCsvRows,
+  mapInvoiceMatrix,
+  looksLikeMatrix,
+  gridToRows,
   receivingRows,
   receivingTotals,
   buildReceivingWrites,
@@ -45,6 +48,60 @@ describe("mapCsvRows", () => {
 
   it("returns nothing for an empty sheet", () => {
     expect(mapCsvRows([])).toEqual([]);
+  });
+});
+
+describe("mapInvoiceMatrix — the supplier size-matrix invoice", () => {
+  // The real shape of docs/Invoice + Packing.xlsx: Reference · Color · sizes.
+  const invoiceRow = (o: Record<string, unknown>) => ({
+    Order: "2799646",
+    Reference: "",
+    Color: "",
+    Description: "",
+    XS: "",
+    S: "",
+    M: "",
+    L: "",
+    XL: "",
+    ...o,
+  });
+
+  it("explodes each filled size cell into reference.size.color", () => {
+    const rows = [
+      invoiceRow({ Reference: "46586", Color: "00RX80", Description: "Melt Square Bra", M: "3", L: "2" }),
+    ];
+    expect(mapInvoiceMatrix(rows)).toEqual([
+      { code: "46586.M.00RX80", codeType: "sku", description: "Melt Square Bra · M", qty: 3 },
+      { code: "46586.L.00RX80", codeType: "sku", description: "Melt Square Bra · L", qty: 2 },
+    ]);
+  });
+
+  it("matches the exact SKU shape seen live (2XL keeps its casing)", () => {
+    const rows = [{ Reference: "P1153", Color: "00RX89", XS: "", S: "", M: "", L: "", XL: "", "2XL": "4" }];
+    expect(mapInvoiceMatrix(rows)[0].code).toBe("P1153.2XL.00RX89");
+  });
+
+  it("skips empty size cells and rows with no reference/colour", () => {
+    const rows = [
+      invoiceRow({ Reference: "46588", Color: "00RX80", M: "2" }), // one cell only
+      invoiceRow({ Reference: "", Color: "", M: "9" }), // header/total noise
+    ];
+    const out = mapInvoiceMatrix(rows);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ code: "46588.M.00RX80", qty: 2 });
+  });
+
+  it("is detected as a matrix, and mapCsvRows routes to it automatically", () => {
+    const rows = [invoiceRow({ Reference: "46589", Color: "00RX80", S: "2" })];
+    expect(looksLikeMatrix(rows)).toBe(true);
+    expect(mapCsvRows(rows)).toEqual(mapInvoiceMatrix(rows));
+  });
+
+  it("a flat qty sheet is NOT treated as a matrix", () => {
+    // Has a single Quantity column → the flat path, even with a size column.
+    const rows = [{ SKU: "84939.S", Color: "00RX80", Quantity: "5", XS: "", S: "" }];
+    expect(looksLikeMatrix(rows)).toBe(false);
+    expect(mapCsvRows(rows)[0]).toMatchObject({ code: "84939.S", qty: 5 });
   });
 });
 
@@ -112,5 +169,30 @@ describe("buildReceivingWrites", () => {
       new Map([["790", fresh(1)]]),
     );
     expect(writes).toEqual([]);
+  });
+});
+
+describe("gridToRows — .xlsx grid with a title block above the header", () => {
+  it("finds the header row and keys the data below it", () => {
+    const grid = [
+      ["COMMERCIAL INVOICE", "", ""],           // cover title
+      ["Exporter: LIVE", "", ""],               // address noise
+      ["Order", "Reference", "Color", "M", "L"],// the real header
+      ["2799646", "46586", "00RX80", 3, 2],
+      ["2799646", "46588", "00RX80", "", 4],
+    ];
+    const rows = gridToRows(grid);
+    expect(rows).toHaveLength(2);
+    // and it flows straight into the matrix mapper
+    const lines = mapCsvRows(rows);
+    expect(lines).toEqual([
+      { code: "46586.M.00RX80", codeType: "sku", description: "46586 · M", qty: 3 },
+      { code: "46586.L.00RX80", codeType: "sku", description: "46586 · L", qty: 2 },
+      { code: "46588.L.00RX80", codeType: "sku", description: "46588 · L", qty: 4 },
+    ]);
+  });
+
+  it("returns nothing when no row reads as a header", () => {
+    expect(gridToRows([["hello", "world"], ["a", "b"]])).toEqual([]);
   });
 });

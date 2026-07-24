@@ -135,7 +135,7 @@ function ExtractPhase({ countId }: { countId: string }) {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv,application/pdf,image/*"
+            accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf,image/*"
             className="hidden"
             onChange={onUpload}
           />

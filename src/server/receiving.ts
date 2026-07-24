@@ -16,7 +16,7 @@ import {
   setOnHandQuantities,
   type VariantHit,
 } from "@/lib/shopify";
-import { mapCsvRows, buildReceivingWrites, type ExtractedLine, type ReceivingItem } from "@/lib/receiving";
+import { mapCsvRows, gridToRows, buildReceivingWrites, type ExtractedLine, type ReceivingItem } from "@/lib/receiving";
 import { extractLinesFromDocument } from "@/lib/receiving-extract";
 import { type ActionResult, firstError, dbError } from "@/server/shared";
 
@@ -115,12 +115,49 @@ export async function uploadReceivingDoc(formData: FormData): Promise<ActionResu
 // ---------------------------------------------------------------------------
 // 3. Extract line items from the stored document (CSV parse or AI for PDF/photo)
 // ---------------------------------------------------------------------------
-function mediaKind(path: string, blobType: string): "csv" | "pdf" | "image" | "other" {
+function mediaKind(
+  path: string,
+  blobType: string,
+): "csv" | "xlsx" | "pdf" | "image" | "other" {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "csv" || blobType.includes("csv") || blobType === "text/plain") return "csv";
+  if (ext === "xlsx" || ext === "xls" || blobType.includes("spreadsheetml") || blobType.includes("ms-excel"))
+    return "xlsx";
   if (ext === "pdf" || blobType === "application/pdf") return "pdf";
   if (["png", "jpg", "jpeg", "webp", "heic"].includes(ext) || blobType.startsWith("image/")) return "image";
   return "other";
+}
+
+/**
+ * An .xlsx (supplier invoice) → extracted lines. Reads every sheet, keeps the
+ * one that yields the most lines: the workbook usually has a title/cover sheet
+ * and the line data on another (the invoice's data is on its "invoice" sheet).
+ */
+async function extractXlsx(blob: Blob): Promise<ExtractedLine[]> {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await blob.arrayBuffer());
+
+  let best: ExtractedLine[] = [];
+  wb.eachSheet((ws) => {
+    const grid: unknown[][] = [];
+    ws.eachRow({ includeEmpty: true }, (row) => {
+      const cells: unknown[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, col) => {
+        let v: unknown = cell.value;
+        if (v && typeof v === "object" && "richText" in v) {
+          v = (v as { richText: { text: string }[] }).richText.map((t) => t.text).join("");
+        } else if (v && typeof v === "object" && "result" in v) {
+          v = (v as { result: unknown }).result; // formula → its computed value
+        }
+        cells[col - 1] = v;
+      });
+      grid.push(cells);
+    });
+    const lines = mapCsvRows(gridToRows(grid));
+    if (lines.length > best.length) best = lines;
+  });
+  return best;
 }
 
 export async function extractDocument(
@@ -149,13 +186,16 @@ export async function extractDocument(
       });
       return { ok: true, data: { lines: mapCsvRows(parsedCsv.data) } };
     }
+    if (kind === "xlsx") {
+      return { ok: true, data: { lines: await extractXlsx(blob) } };
+    }
     if (kind === "pdf" || kind === "image") {
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const mediaType = kind === "pdf" ? "application/pdf" : blob.type || "image/jpeg";
       const lines = await extractLinesFromDocument(bytes, mediaType);
       return { ok: true, data: { lines } };
     }
-    return { ok: false, error: "Unsupported file type — use CSV, PDF, or an image." };
+    return { ok: false, error: "Unsupported file type — use CSV, XLSX, PDF, or an image." };
   } catch (err) {
     const message =
       err instanceof Error && /gateway|api key|unauthorized|model/i.test(err.message)

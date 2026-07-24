@@ -20,6 +20,14 @@ const BARCODE_KEYS = ["barcode", "upc", "ean", "gtin", "codigo de barras"];
 const SKU_KEYS = ["sku", "style", "style code", "style number", "item", "item code", "reference", "ref", "model", "referencia"];
 const QTY_KEYS = ["qty", "quantity", "qty shipped", "quantity shipped", "units", "count", "cantidad"];
 const DESC_KEYS = ["description", "product", "name", "title", "item description", "producto", "descripcion"];
+const COLOR_KEYS = ["color", "colour", "cor", "colored"];
+// Size headers become the middle segment of the SKU verbatim (SKU is
+// reference.SIZE.color, e.g. 46586.M.00RX80 / P1153.2XL.00RX89). Kept as an
+// ordered set so a header is matched case-insensitively but reproduced exactly.
+const SIZE_HEADERS = [
+  "xs", "s", "m", "l", "xl", "2xl", "3xl", "xxl", "xxxl",
+  "u", "un", "unico", "único", "os", "one size",
+];
 
 const norm = (s: string) => s.trim().toLowerCase();
 
@@ -42,13 +50,122 @@ function toInt(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Size columns present in the header, mapped to the exact header text. */
+function sizeColumns(keys: string[]): { key: string; size: string }[] {
+  return keys
+    .filter((k) => SIZE_HEADERS.includes(norm(k)))
+    .map((k) => ({ key: k, size: k.trim() }));
+}
+
+/**
+ * The supplier invoice arrives as a size MATRIX: one row per garment
+ * (Reference + Color + Description) with a quantity under each size column
+ * (XS/S/M/L/XL…). Shopify variants are per-size, keyed by SKU
+ * `reference.SIZE.color` (verified live: 46586.M.00RX80, P1153.2XL.00RX89), so
+ * each filled cell explodes into its own line with that assembled SKU.
+ *
+ * Used only when the sheet looks like a matrix — a Reference column, a Color
+ * column, and at least two size columns. Otherwise `mapCsvRows` handles the
+ * flat barcode/SKU/qty shape.
+ */
+export function mapInvoiceMatrix(rows: Record<string, unknown>[]): ExtractedLine[] {
+  if (rows.length === 0) return [];
+  const keys = Object.keys(rows[0]);
+  const refCol = pickColumn(keys, SKU_KEYS);
+  const colorCol = pickColumn(keys, COLOR_KEYS);
+  const descCol = pickColumn(keys, DESC_KEYS);
+  const sizes = sizeColumns(keys);
+  if (!refCol || !colorCol || sizes.length < 2) return [];
+
+  const lines: ExtractedLine[] = [];
+  for (const row of rows) {
+    const reference = String(row[refCol] ?? "").trim();
+    const color = String(row[colorCol] ?? "").trim();
+    const description = descCol ? String(row[descCol] ?? "").trim() : "";
+    if (!reference || !color) continue; // header/total/blank rows
+
+    for (const { key, size } of sizes) {
+      const qty = toInt(row[key]);
+      if (qty <= 0) continue;
+      lines.push({
+        code: `${reference}.${size}.${color}`,
+        codeType: "sku",
+        description: description ? `${description} · ${size}` : `${reference} · ${size}`,
+        qty,
+      });
+    }
+  }
+  return lines;
+}
+
+/** A row is usable as a header when it names a code column plus quantities. */
+function isHeaderRow(cells: string[]): boolean {
+  const keys = cells.map((c) => c.trim()).filter(Boolean);
+  if (keys.length === 0) return false;
+  const hasCode =
+    pickColumn(keys, BARCODE_KEYS) !== null || pickColumn(keys, SKU_KEYS) !== null;
+  const hasQty =
+    pickColumn(keys, QTY_KEYS) !== null || sizeColumns(keys).length >= 2;
+  return hasCode && hasQty;
+}
+
+/**
+ * Turn a spreadsheet grid (rows of cells, from an .xlsx sheet) into the
+ * header-keyed rows the mappers expect. The header often isn't the first row —
+ * supplier invoices carry a title/address block above it — so this finds the
+ * first row that reads as a header and keys everything below it. Blank trailing
+ * columns are dropped; duplicate headers keep the first.
+ */
+export function gridToRows(grid: unknown[][]): Record<string, unknown>[] {
+  const asText = (v: unknown) => (v == null ? "" : String(v));
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(grid.length, 15); i++) {
+    if (isHeaderRow((grid[i] ?? []).map(asText))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return [];
+
+  const headers = (grid[headerIdx] ?? []).map(asText);
+  const rows: Record<string, unknown>[] = [];
+  for (let i = headerIdx + 1; i < grid.length; i++) {
+    const cells = grid[i] ?? [];
+    const row: Record<string, unknown> = {};
+    let any = false;
+    headers.forEach((h, c) => {
+      const key = h.trim();
+      if (!key || key in row) return;
+      row[key] = cells[c] ?? "";
+      if (asText(cells[c]).trim()) any = true;
+    });
+    if (any) rows.push(row);
+  }
+  return rows;
+}
+
+/** True when the sheet is a size matrix rather than a flat qty list. */
+export function looksLikeMatrix(rows: Record<string, unknown>[]): boolean {
+  if (rows.length === 0) return false;
+  const keys = Object.keys(rows[0]);
+  return (
+    pickColumn(keys, SKU_KEYS) !== null &&
+    pickColumn(keys, COLOR_KEYS) !== null &&
+    sizeColumns(keys).length >= 2 &&
+    pickColumn(keys, QTY_KEYS) === null // a single-qty column means it's flat
+  );
+}
+
 /**
  * Map header-keyed CSV rows (papaparse `header:true` output) to extracted lines.
- * Detects the barcode / SKU / qty / description columns by header synonyms;
- * skips rows with neither a code nor a positive quantity.
+ * A size-matrix invoice explodes per size (`mapInvoiceMatrix`); otherwise the
+ * flat barcode / SKU / qty shape is detected by header synonyms, skipping rows
+ * with neither a code nor a positive quantity.
  */
 export function mapCsvRows(rows: Record<string, unknown>[]): ExtractedLine[] {
   if (rows.length === 0) return [];
+  if (looksLikeMatrix(rows)) return mapInvoiceMatrix(rows);
+
   const keys = Object.keys(rows[0]);
   const barcodeCol = pickColumn(keys, BARCODE_KEYS);
   const skuCol = pickColumn(keys, SKU_KEYS);
