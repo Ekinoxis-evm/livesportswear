@@ -8,6 +8,7 @@ import { normalizeStaffId } from "@/lib/shopify-range";
 import { buildOrdersView } from "@/lib/orders-today";
 import { OrdersToday, type OrderListRow } from "@/components/store/orders-today";
 import { AttendanceToday, type AttendanceRow } from "@/components/store/attendance-today";
+import { TeamTodayTable } from "@/components/store/team-today-table";
 import { getDaySalesCached, getDayOrdersCached } from "@/lib/shopify-day-cache";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { spanDays } from "@/lib/date-range";
@@ -26,7 +27,6 @@ import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { GoalIndicator } from "@/components/shared/goal-indicator";
 import { goalPace } from "@/lib/goal-pace";
-import { ScrollTable } from "@/components/shared/scroll-table";
 import {
   SalesBreakdownBlock,
   SalesBreakdownSubline,
@@ -447,40 +447,17 @@ export default async function StorePerformancePage({
           {tableRows.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nobody has checked in yet.</p>
           ) : (
-            <ScrollTable density="comfortable">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground text-left">
-                    <th className="py-2 font-medium">Employee</th>
-                    <th className="py-2 text-right font-medium">Attended</th>
-                    <th className="py-2 text-right font-medium">Sold</th>
-                    <th className="py-2 text-right font-medium">Conversion</th>
-                    <th className="py-2 text-right font-medium">Returns</th>
-                    <th className="py-2 text-right font-medium">Hours</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableRows.map((p) => (
-                    <tr key={p.employeeId} className="border-b last:border-0">
-                      <td className="py-2 font-medium">
-                        {nameOf.get(p.employeeId) ?? "—"}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">{p.attended}</td>
-                      <td className="py-2 text-right tabular-nums">{p.sold}</td>
-                      <td className="py-2 text-right tabular-nums">
-                        {p.attended > 0 ? formatPct(p.conversion) : "—"}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">
-                        {p.returns > 0 ? p.returns : "—"}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">
-                        {hoursOf.get(p.employeeId) ?? "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </ScrollTable>
+            <TeamTodayTable
+              rows={tableRows.map((p) => ({
+                employeeId: p.employeeId,
+                name: nameOf.get(p.employeeId) ?? "—",
+                attended: p.attended,
+                sold: p.sold,
+                conversion: p.conversion,
+                returns: p.returns,
+                hours: hoursOf.get(p.employeeId) ?? null,
+              }))}
+            />
           )}
         </CardContent>
       </Card>

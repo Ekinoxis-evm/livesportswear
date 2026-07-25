@@ -3,6 +3,8 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { SortButton, ariaSort } from "@/components/shared/sortable-header"
+import type { SortState } from "@/lib/use-table-sort"
 
 function Table({
   className,
@@ -92,7 +94,20 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableHead({
+  className,
+  sortKey,
+  sort,
+  onSort,
+  children,
+  ...props
+}: React.ComponentProps<"th"> & {
+  /** Pass all three to make this header click-to-sort (from useTableSort). */
+  sortKey?: string
+  sort?: SortState
+  onSort?: (key: string) => void
+}) {
+  const sortable = sortKey != null && sort !== undefined && onSort != null
   return (
     <th
       data-slot="table-head"
@@ -100,8 +115,17 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
         "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
+      aria-sort={sortable ? ariaSort(sort, sortKey) : undefined}
       {...props}
-    />
+    >
+      {sortable ? (
+        <SortButton sortKey={sortKey} sort={sort} onSort={onSort}>
+          {children}
+        </SortButton>
+      ) : (
+        children
+      )}
+    </th>
   )
 }
 

@@ -1,5 +1,9 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { SortableTh } from "@/components/shared/sortable-header";
+import { useTableSort } from "@/lib/use-table-sort";
 import { formatMoney } from "@/lib/commission";
 import { Badge } from "@/components/ui/badge";
 import type { SalesRankRow } from "@/lib/sales-period";
@@ -27,38 +31,61 @@ export function SalesRankTable({
   /** The kiosk passes `comfortable`; admin keeps the compact default. */
   density?: "compact" | "comfortable";
 }) {
+  // The incoming order IS the leaderboard rank (net desc). Freeze it so the "#"
+  // column keeps meaning even after the viewer sorts by another column.
+  const ranked = rows.map((r, i) => ({ ...r, rank: i + 1 }));
+  const { rows: sorted, sort, onSort } = useTableSort(ranked, {
+    rank: (r) => r.rank,
+    name: (r) => r.name,
+    store: (r) => r.store,
+    value: (r) => r.breakdown?.gross ?? null,
+    discounts: (r) => r.breakdown?.discounts ?? null,
+    returns: (r) => r.breakdown?.returns ?? null,
+    net: (r) => r.net,
+    goal: (r) => r.goalPct,
+    share: (r) => r.sharePct,
+    rate: (r) => r.rate,
+    commission: (r) => r.earned,
+    tier: (r) => r.nextTierLabel,
+  });
+
   if (rows.length === 0) {
     return <p className="text-muted-foreground text-sm">No sales to rank yet.</p>;
   }
   const th = "py-2 text-right font-medium";
   const money = (v: number) => formatMoney(v, currency);
+  const H = (key: string, label: string, className: string) => (
+    <SortableTh sortKey={key} sort={sort} onSort={onSort} className={className}>
+      {label}
+    </SortableTh>
+  );
   return (
     <ScrollTable density={density} maxHeight="28rem">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-muted-foreground text-left">
-            <th className="py-2 font-medium">#</th>
-            <th className="py-2 font-medium">Employee</th>
-            {showStore && <th className="py-2 font-medium">Store</th>}
-            <th className={th}>Value</th>
-            <th className={th}>Discounts</th>
-            <th className={th}>Returns</th>
-            <th className={th}>Net</th>
-            {showGoal && <th className={th}>Goal</th>}
-            {showShare && <th className={th}>Share</th>}
+            {H("rank", "#", "py-2 font-medium")}
+            {H("name", "Employee", "py-2 font-medium")}
+            {showStore && H("store", "Store", "py-2 font-medium")}
+            {H("value", "Value", th)}
+            {H("discounts", "Discounts", th)}
+            {H("returns", "Returns", th)}
+            {H("net", "Net", th)}
+            {showGoal && H("goal", "Goal", th)}
+            {showShare && H("share", "Share", th)}
             {showCommission && (
               <>
-                <th className={th}>Rate</th>
-                <th className={th}>Commission</th>
-                <th className={th}>To next tier</th>
+                {H("rate", "Rate", th)}
+                {H("commission", "Commission", th)}
+                {H("tier", "To next tier", th)}
               </>
             )}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
+          {sorted.map((r, i) => (
             <tr key={r.name + i} className="border-b last:border-0">
-              <td className="text-muted-foreground py-2 tabular-nums">{i + 1}</td>
+              <td className="text-muted-foreground py-2 tabular-nums">{r.rank}</td>
               <td className="py-2 font-medium">{r.name}</td>
               {showStore && (
                 <td className="text-muted-foreground py-2">{r.store ?? "—"}</td>
