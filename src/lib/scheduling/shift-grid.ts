@@ -16,6 +16,40 @@ export function isAfternoon(startTime: string): boolean {
 
 export type ShiftCell = { am: number; pm: number };
 
+export type ShiftTotalRow = {
+  employeeId: string;
+  name: string;
+  am: number;
+  pm: number;
+  total: number;
+};
+
+/**
+ * All-time accumulated shift counts per employee (AM/PM/total), across whatever
+ * shifts are passed in — no day columns. Every employee gets a row (zeros
+ * included), ordered by total desc then name. Shifts for employees not in the
+ * list are ignored.
+ */
+export function accumulatedShiftCounts(
+  shifts: StatShift[],
+  employees: { id: string; name: string }[],
+): ShiftTotalRow[] {
+  const tally = new Map<string, { am: number; pm: number }>();
+  for (const e of employees) tally.set(e.id, { am: 0, pm: 0 });
+  for (const s of shifts) {
+    const t = tally.get(s.employee_id);
+    if (!t) continue;
+    if (isAfternoon(s.start_time)) t.pm += 1;
+    else t.am += 1;
+  }
+  return employees
+    .map((e) => {
+      const t = tally.get(e.id)!;
+      return { employeeId: e.id, name: e.name, am: t.am, pm: t.pm, total: t.am + t.pm };
+    })
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+
 export type ShiftGridRow = {
   employeeId: string;
   name: string;

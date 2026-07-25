@@ -34,12 +34,17 @@ type ShiftRow = {
   start_time: string;
   end_time: string;
   shift_template_id: string | null;
-  employee: { name: string; role: string } | null;
+  employee: { name: string; role: string; avatar_color: string | null } | null;
 };
 
 function Chip({ shift, withTime }: { shift: ShiftRow; withTime?: boolean }) {
   return (
     <span className="bg-muted flex items-center gap-1 rounded-md px-2 py-1 text-xs">
+      <span
+        aria-hidden
+        className="size-2.5 shrink-0 rounded-full border"
+        style={{ backgroundColor: shift.employee?.avatar_color ?? "transparent" }}
+      />
       {shift.employee?.role === "store_manager" && (
         <Crown className="size-3 shrink-0 text-amber-500" />
       )}
@@ -97,7 +102,7 @@ export default async function StoreWeekPage({
     const { data } = await supabase
       .from("shifts")
       .select(
-        "employee_id, date, start_time, end_time, shift_template_id, employee:employees(name, role)",
+        "employee_id, date, start_time, end_time, shift_template_id, employee:employees(name, role, avatar_color)",
       )
       .eq("schedule_id", schedule.id)
       .order("date")
@@ -197,8 +202,8 @@ export default async function StoreWeekPage({
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-schedule-header text-schedule-rail-foreground">
-                <th className="bg-schedule-rail text-schedule-rail-foreground sticky left-0 z-10 p-2 text-left font-medium">
+              <tr className="bg-muted/50">
+                <th className="bg-muted/50 sticky left-0 z-10 p-2 text-left font-medium">
                   Shift
                 </th>
                 {days.map((d) => (

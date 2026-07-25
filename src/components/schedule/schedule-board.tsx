@@ -78,6 +78,7 @@ export function ScheduleBoard({
   const [busy, setBusy] = useState(false);
 
   const nameOf = new Map(employees.map((e) => [e.id, e.name]));
+  const colorOf = new Map(employees.map((e) => [e.id, e.avatar_color]));
   const managerIds = new Set(
     employees.filter((e) => e.role === "store_manager").map((e) => e.id),
   );
@@ -255,6 +256,11 @@ export function ScheduleBoard({
                               )}
                             >
                               <span className="flex items-center gap-1 truncate">
+                                <span
+                                  aria-hidden
+                                  className="size-2.5 shrink-0 rounded-full border"
+                                  style={{ backgroundColor: colorOf.get(s.employee_id) ?? "transparent" }}
+                                />
                                 {managerIds.has(s.employee_id) && (
                                   <Crown className="size-3 shrink-0 text-amber-500" />
                                 )}

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { CopyButton } from "@/components/shared/copy-button";
 import { PhotoUpload } from "@/components/portal/photo-upload";
+import { ColorPicker } from "@/components/portal/color-picker";
 import { PhoneForm } from "@/components/portal/phone-form";
 import { EmailForm } from "@/components/portal/email-form";
 import { ChangePasswordCard } from "@/components/portal/change-password";
@@ -67,6 +68,7 @@ export default async function SettingsPage() {
               </p>
             </div>
           </div>
+          <ColorPicker color={employee.avatar_color} />
           <div className="flex flex-col gap-1.5 text-sm">
             {employee.hire_date && (
               <div className="flex justify-between gap-2">

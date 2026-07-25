@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildShiftGrid, isAfternoon } from "@/lib/scheduling/shift-grid";
+import { buildShiftGrid, isAfternoon, accumulatedShiftCounts } from "@/lib/scheduling/shift-grid";
 import type { StatShift } from "@/lib/scheduling/stats";
 
 const shift = (o: Partial<StatShift> = {}): StatShift => ({
@@ -87,5 +87,35 @@ describe("buildShiftGrid", () => {
   it("orders rows by the employee list, not by shift data", () => {
     const g = buildShiftGrid([shift({ employee_id: "e2" })], employees, days);
     expect(g.rows.map((r) => r.name)).toEqual(["Vale", "Patricia"]);
+  });
+});
+
+describe("accumulatedShiftCounts", () => {
+  const emps = [
+    { id: "e1", name: "Vale" },
+    { id: "e2", name: "Patricia" },
+  ];
+
+  it("sums AM/PM/total across all shifts, any dates", () => {
+    const out = accumulatedShiftCounts(
+      [
+        shift({ employee_id: "e1", start_time: "09:00", date: "2024-03-01" }),
+        shift({ employee_id: "e1", start_time: "14:00", date: "2024-06-15" }),
+        shift({ employee_id: "e1", start_time: "10:00", date: "2025-01-02" }),
+      ],
+      emps,
+    );
+    expect(out.find((r) => r.employeeId === "e1")).toMatchObject({ am: 2, pm: 1, total: 3 });
+  });
+
+  it("gives every employee a row, zeros included, sorted by total desc", () => {
+    const out = accumulatedShiftCounts([shift({ employee_id: "e2" })], emps);
+    expect(out[0].employeeId).toBe("e2"); // has 1
+    expect(out[1]).toMatchObject({ employeeId: "e1", total: 0 });
+  });
+
+  it("ignores shifts for unknown employees", () => {
+    const out = accumulatedShiftCounts([shift({ employee_id: "ghost" })], emps);
+    expect(out.every((r) => r.total === 0)).toBe(true);
   });
 });

@@ -255,13 +255,13 @@ export function ScheduleGrid({
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="bg-schedule-header text-schedule-rail-foreground">
-              <th className="bg-schedule-rail text-schedule-rail-foreground sticky left-0 z-10 p-2 text-left font-medium">
+            <tr className="bg-muted/50">
+              <th className="sticky left-0 z-10 bg-muted/50 p-2 text-left font-medium">
                 Employee
               </th>
               {days.map((d) => (
                 <th key={d} className="min-w-32 p-2 text-left font-medium">
-                  <span className="opacity-70">
+                  <span className="text-muted-foreground">
                     {SHORT_WEEKDAYS[isoWeekday(d) - 1]}
                   </span>{" "}
                   <span className="tabular-nums">{d.slice(8, 10)}</span>
@@ -340,8 +340,11 @@ export function ScheduleGrid({
                                 }
                                 className="flex flex-col rounded-md border-l-4 bg-card px-2 py-1 text-left text-xs shadow-sm hover:brightness-110"
                                 style={{
+                                  // The person's own colour (same one on their
+                                  // kiosk avatar) — the schedule reads by who,
+                                  // not by shift type.
                                   borderLeftColor:
-                                    tpl?.color ?? "var(--color-primary)",
+                                    emp.avatar_color ?? tpl?.color ?? "var(--color-primary)",
                                 }}
                               >
                                 <span className="font-medium">
