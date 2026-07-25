@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildShiftGrid, isAfternoon, accumulatedShiftCounts } from "@/lib/scheduling/shift-grid";
+import {
+  buildShiftGrid,
+  isAfternoon,
+  accumulatedShiftCounts,
+  weekdayShiftGrid,
+} from "@/lib/scheduling/shift-grid";
 import type { StatShift } from "@/lib/scheduling/stats";
 
 const shift = (o: Partial<StatShift> = {}): StatShift => ({
@@ -117,5 +122,57 @@ describe("accumulatedShiftCounts", () => {
   it("ignores shifts for unknown employees", () => {
     const out = accumulatedShiftCounts([shift({ employee_id: "ghost" })], emps);
     expect(out.every((r) => r.total === 0)).toBe(true);
+  });
+});
+
+describe("weekdayShiftGrid", () => {
+  const emps = [
+    { id: "e1", name: "Vale" },
+    { id: "e2", name: "Patricia" },
+  ];
+
+  it("buckets shifts by weekday across all time, AM/PM split", () => {
+    const g = weekdayShiftGrid(
+      [
+        // Two different Mondays, one AM one PM → Monday cell {am:1, pm:1}.
+        shift({ employee_id: "e1", date: "2026-03-23", start_time: "09:00" }), // Mon
+        shift({ employee_id: "e1", date: "2026-03-30", start_time: "15:00" }), // Mon
+        shift({ employee_id: "e1", date: "2026-03-25", start_time: "10:00" }), // Wed
+      ],
+      emps,
+    );
+    const e1 = g.rows.find((r) => r.employeeId === "e1")!;
+    expect(e1.cells[0]).toEqual({ am: 1, pm: 1 }); // Monday
+    expect(e1.cells[2]).toEqual({ am: 1, pm: 0 }); // Wednesday
+    expect(e1.total).toBe(3);
+  });
+
+  it("has seven weekday columns Monday…Sunday", () => {
+    const g = weekdayShiftGrid([shift({ date: "2026-03-29" })], emps); // Sunday
+    const e1 = g.rows.find((r) => r.employeeId === "e1")!;
+    expect(e1.cells).toHaveLength(7);
+    expect(e1.cells[6]).toEqual({ am: 1, pm: 0 }); // Sunday is the 7th column
+  });
+
+  it("sums weekday column totals across everyone, busiest row first", () => {
+    const g = weekdayShiftGrid(
+      [
+        shift({ employee_id: "e2", date: "2026-03-24", start_time: "08:00" }), // Tue AM
+        shift({ employee_id: "e1", date: "2026-03-24", start_time: "13:00" }), // Tue PM
+        shift({ employee_id: "e2", date: "2026-03-24", start_time: "09:00" }), // Tue AM
+      ],
+      emps,
+    );
+    expect(g.dayTotals[1]).toEqual({ am: 2, pm: 1 }); // Tuesday
+    expect(g.rows[0].employeeId).toBe("e2"); // 2 shifts, ahead of e1's 1
+  });
+
+  it("ignores unknown employees and dateless shifts", () => {
+    const g = weekdayShiftGrid(
+      [shift({ employee_id: "ghost" }), shift({ date: "" })],
+      emps,
+    );
+    expect(g.rows.every((r) => r.total === 0)).toBe(true);
+    expect(g.dayTotals.every((c) => c.am === 0 && c.pm === 0)).toBe(true);
   });
 });

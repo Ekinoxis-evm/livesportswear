@@ -7,6 +7,7 @@
  * stored (see stats.ts on why local is correct).
  */
 import type { StatShift } from "@/lib/scheduling/stats";
+import { isoWeekday } from "@/lib/scheduling/week";
 
 /** A shift starting at or after 12:00 is PM; anything earlier is AM. */
 export function isAfternoon(startTime: string): boolean {
@@ -108,4 +109,64 @@ export function buildShiftGrid(
   });
 
   return { days, rows, dayTotals };
+}
+
+export type WeekdayShiftRow = {
+  employeeId: string;
+  name: string;
+  /** Seven cells, Monday…Sunday. */
+  cells: ShiftCell[];
+  total: number;
+};
+
+export type WeekdayShiftGrid = {
+  rows: WeekdayShiftRow[];
+  /** Seven column totals, Monday…Sunday. */
+  dayTotals: ShiftCell[];
+};
+
+/**
+ * All-time shift counts bucketed by WEEKDAY: how many AM / PM shifts each person
+ * has ever worked on a Monday, a Tuesday, … a Sunday, across every schedule.
+ * Same AM/PM rule as the weekly grid; the day is `isoWeekday(s.date)` (1=Mon …
+ * 7=Sun). Every employee gets a row (zeros included), busiest first. Shifts for
+ * unknown employees, or with no date, are ignored.
+ */
+export function weekdayShiftGrid(
+  shifts: StatShift[],
+  employees: { id: string; name: string }[],
+): WeekdayShiftGrid {
+  const byEmployee = new Map<string, ShiftCell[]>();
+  for (const e of employees) {
+    byEmployee.set(
+      e.id,
+      Array.from({ length: 7 }, () => ({ am: 0, pm: 0 })),
+    );
+  }
+
+  for (const s of shifts) {
+    const cells = byEmployee.get(s.employee_id);
+    if (!cells || !s.date) continue;
+    const col = isoWeekday(s.date) - 1;
+    if (col < 0 || col > 6) continue;
+    if (isAfternoon(s.start_time)) cells[col].pm += 1;
+    else cells[col].am += 1;
+  }
+
+  const dayTotals: ShiftCell[] = Array.from({ length: 7 }, () => ({ am: 0, pm: 0 }));
+  const rows: WeekdayShiftRow[] = employees
+    .map((e) => {
+      // Non-null: every employee id was seeded into byEmployee above.
+      const cells = byEmployee.get(e.id)!;
+      let total = 0;
+      cells.forEach((cell, i) => {
+        total += cell.am + cell.pm;
+        dayTotals[i].am += cell.am;
+        dayTotals[i].pm += cell.pm;
+      });
+      return { employeeId: e.id, name: e.name, cells, total };
+    })
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+  return { rows, dayTotals };
 }
