@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, X, CalendarOff, Crown, Check } from "lucide-react";
+import { Plus, X, CalendarOff, Check } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
+import { SLOT_COLOR } from "@/lib/shift-color";
+import { ShiftChip } from "@/components/schedule/shift-chip";
 import {
   SHIFT_SLOTS,
   templateForSlot,
@@ -25,11 +27,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const hhmm = (t: string) => t.slice(0, 5);
-
-const SLOT_COLOR: Record<string, string> = {
-  morning: "#22c55e",
-  evening: "#a855f7",
-};
 
 type Shift = {
   id: string;
@@ -248,34 +245,25 @@ export function ScheduleBoard({
                         {assigned.map((s) => {
                           const off = offByCell.get(`${s.employee_id}|${d}`);
                           return (
-                            <span
+                            <ShiftChip
                               key={s.id}
-                              className={cn(
-                                "flex items-center justify-between gap-1 rounded-md px-2 py-1 text-xs",
-                                off ? "bg-destructive/15 text-destructive" : "bg-muted",
-                              )}
-                            >
-                              <span className="flex items-center gap-1 truncate">
-                                <span
-                                  aria-hidden
-                                  className="size-2.5 shrink-0 rounded-full border"
-                                  style={{ backgroundColor: colorOf.get(s.employee_id) ?? "transparent" }}
-                                />
-                                {managerIds.has(s.employee_id) && (
-                                  <Crown className="size-3 shrink-0 text-amber-500" />
-                                )}
-                                {nameOf.get(s.employee_id)}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label="Remove"
-                                disabled={busy}
-                                onClick={() => run(deleteShift(s.id), "Shift removed.")}
-                                className="shrink-0 opacity-60 hover:opacity-100"
-                              >
-                                <X className="size-3" />
-                              </button>
-                            </span>
+                              name={nameOf.get(s.employee_id) ?? "—"}
+                              color={colorOf.get(s.employee_id)}
+                              isManager={managerIds.has(s.employee_id)}
+                              off={!!off}
+                              className="justify-between"
+                              trailing={
+                                <button
+                                  type="button"
+                                  aria-label="Remove"
+                                  disabled={busy}
+                                  onClick={() => run(deleteShift(s.id), "Shift removed.")}
+                                  className="shrink-0 opacity-60 hover:opacity-100"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                              }
+                            />
                           );
                         })}
 

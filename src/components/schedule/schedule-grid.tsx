@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Plus, CalendarOff, Crown } from "lucide-react";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
+import { shiftTint } from "@/lib/shift-color";
 import {
   SHIFT_SLOTS,
   slotCreatePayload,
@@ -338,11 +339,13 @@ export function ScheduleGrid({
                                     shift: s,
                                   })
                                 }
-                                className="flex flex-col rounded-md border-l-4 bg-card px-2 py-1 text-left text-xs shadow-sm hover:brightness-110"
+                                className="flex flex-col rounded-md border border-l-4 px-2 py-1 text-left text-xs shadow-sm hover:brightness-105"
                                 style={{
                                   // The person's own colour (same one on their
                                   // kiosk avatar) — the schedule reads by who,
-                                  // not by shift type.
+                                  // not by shift type: a light tint fills the
+                                  // shift, with a stronger left stripe.
+                                  ...shiftTint(emp.avatar_color ?? tpl?.color),
                                   borderLeftColor:
                                     emp.avatar_color ?? tpl?.color ?? "var(--color-primary)",
                                 }}
