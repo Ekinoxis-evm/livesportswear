@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { SortableTh } from "@/components/shared/sortable-header";
+import { useTableSort } from "@/lib/use-table-sort";
 import { Check, X } from "lucide-react";
 import { formatMoney } from "@/lib/commission";
 import {
@@ -37,10 +39,17 @@ export function AttendanceToday({
   currency: string;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
-  const shown = rows.filter(
+  const filtered = rows.filter(
     (r) => filter === "all" || (filter === "sold" ? r.sold : !r.sold),
   );
   const soldCount = rows.filter((r) => r.sold).length;
+  const { rows: shown, sort, onSort } = useTableSort(filtered, {
+    time: (r) => r.time,
+    rep: (r) => r.rep,
+    result: (r) => (r.sold ? 1 : 0),
+    customer: (r) => r.customer,
+    order: (r) => r.orderTotal,
+  });
 
   return (
     <Card>
@@ -84,11 +93,11 @@ export function AttendanceToday({
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-muted-foreground text-left">
-                  <th className="hidden py-2 font-medium sm:table-cell">Time</th>
-                  <th className="py-2 font-medium">Salesperson</th>
-                  <th className="py-2 font-medium">Result</th>
-                  <th className="hidden py-2 font-medium sm:table-cell">Customer</th>
-                  <th className="py-2 text-right font-medium">Order</th>
+                  <SortableTh sortKey="time" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Time</SortableTh>
+                  <SortableTh sortKey="rep" sort={sort} onSort={onSort} className="py-2 font-medium">Salesperson</SortableTh>
+                  <SortableTh sortKey="result" sort={sort} onSort={onSort} className="py-2 font-medium">Result</SortableTh>
+                  <SortableTh sortKey="customer" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Customer</SortableTh>
+                  <SortableTh sortKey="order" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Order</SortableTh>
                 </tr>
               </thead>
               <tbody>
