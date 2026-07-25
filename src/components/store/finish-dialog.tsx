@@ -84,7 +84,7 @@ function FinishSteps({
 }) {
   const [step, setStep] = useState<"choice" | "order" | "contact" | "reasons">("choice");
   const [orders, setOrders] = useState<RecentOrder[] | null>(null);
-  const [order, setOrder] = useState<RecentOrder | null>(null);
+  const [selected, setSelected] = useState<RecentOrder[]>([]);
   const [reasons, setReasons] = useState<string[]>([]);
   const [products, setProducts] = useState<ProductHit[]>([]);
   const [note, setNote] = useState("");
@@ -118,6 +118,11 @@ function FinishSteps({
 
   const toggleReason = (r: string) =>
     setReasons((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]));
+
+  const toggleOrder = (o: RecentOrder) =>
+    setSelected((cur) =>
+      cur.some((x) => x.id === o.id) ? cur.filter((x) => x.id !== o.id) : [...cur, o],
+    );
 
   const addProduct = (p: ProductHit) => {
     setQuery("");
@@ -218,12 +223,15 @@ function FinishSteps({
   }
 
   if (step === "order") {
+    const isOn = (o: RecentOrder) => selected.some((x) => x.id === o.id);
+    const total = selected.reduce((s, o) => s + o.net, 0);
     return (
       <>
         <DialogHeader>
-          <DialogTitle>{target.name} — which order?</DialogTitle>
+          <DialogTitle>{target.name} — which order(s)?</DialogTitle>
           <DialogDescription>
-            Link the Shopify order so the sale knows its client.
+            Tap every order in this sale — a client who paid in two receipts links
+            both, and the totals add up.
           </DialogDescription>
         </DialogHeader>
         {orders === null ? (
@@ -233,82 +241,95 @@ function FinishSteps({
             Couldn&apos;t load orders right now — continue without linking.
           </p>
         ) : (
-          <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
-            {orders.map((o, i) => (
-              <Button
-                key={o.id}
-                variant={i === 0 ? "default" : "outline"}
-                size="lg"
-                className="h-14 justify-start gap-2.5"
-                disabled={pending}
-                onClick={() => {
-                  setOrder(o);
-                  setStep("contact");
-                }}
-              >
-                <Receipt className="size-4 shrink-0" />
-                <span className="flex min-w-0 flex-col items-start leading-tight">
-                  <span className="font-semibold tabular-nums">
-                    {o.name} · ${o.net.toFixed(2)}
+          <div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
+            {orders.map((o, i) => {
+              const on = isOn(o);
+              return (
+                <Button
+                  key={o.id}
+                  variant={on ? "default" : "outline"}
+                  size="lg"
+                  className="h-14 justify-start gap-2.5"
+                  disabled={pending}
+                  onClick={() => toggleOrder(o)}
+                >
+                  {on ? (
+                    <Check className="size-4 shrink-0" />
+                  ) : (
+                    <Receipt className="size-4 shrink-0" />
+                  )}
+                  <span className="flex min-w-0 flex-col items-start leading-tight">
+                    <span className="font-semibold tabular-nums">
+                      {o.name} · ${o.net.toFixed(2)}
+                    </span>
+                    <span className="truncate text-xs font-normal opacity-80">
+                      {o.createdAt.slice(11, 16)} ·{" "}
+                      {o.customer?.name ?? "no customer on the order"}
+                    </span>
                   </span>
-                  <span className="truncate text-xs font-normal opacity-80">
-                    {o.createdAt.slice(11, 16)} ·{" "}
-                    {o.customer?.name ?? "no customer on the order"}
-                  </span>
-                </span>
-                {i === 0 && (
-                  <span className="ml-auto shrink-0 text-xs opacity-80">latest</span>
-                )}
-              </Button>
-            ))}
+                  {!on && i === 0 && (
+                    <span className="ml-auto shrink-0 text-xs opacity-80">latest</span>
+                  )}
+                </Button>
+              );
+            })}
           </div>
         )}
-        {/* Equal weight to the order buttons on purpose: an anonymous cash
-            walk-in is legitimate and must stay one tap, but skipping should be
-            a decision rather than the quiet path — 59% of sales used to take
-            the old ghost "Skip" and lost their client. */}
+        {selected.length > 0 && (
+          <p className="text-sm font-semibold tabular-nums">
+            {selected.length} order{selected.length === 1 ? "" : "s"} · $
+            {total.toFixed(2)}
+          </p>
+        )}
+        {/* One explicit Continue, whichever path: an anonymous cash walk-in
+            (0 orders) is legitimate and stays fast, but it's now a decision
+            rather than the quiet ghost "Skip" that lost 59% of clients. */}
         <Button
-          variant="outline"
           size="lg"
-          className="h-14 justify-start gap-2.5"
+          className="h-14 justify-center gap-2.5"
           disabled={pending}
-          onClick={() => {
-            setOrder(null);
-            setStep("contact");
-          }}
+          onClick={() => setStep("contact")}
         >
-          <UserX className="size-4 shrink-0" />
-          <span className="flex min-w-0 flex-col items-start leading-tight">
-            <span className="font-semibold">No customer on this sale</span>
-            <span className="truncate text-xs font-normal opacity-80">
-              cash walk-in, or the order isn&apos;t listed
-            </span>
-          </span>
+          {selected.length === 0 ? (
+            <>
+              <UserX className="size-4 shrink-0" /> No customer on this sale
+            </>
+          ) : (
+            <>Continue</>
+          )}
         </Button>
       </>
     );
   }
 
   if (step === "contact") {
-    const linkedOrder: FinishOrder | undefined = order
-      ? {
-          id: order.id,
-          name: order.name,
-          total: order.net,
-          customer_id: order.customer?.id ?? null,
-          customer_name: order.customer?.name ?? null,
-          customer_email: order.customer?.email ?? null,
-          customer_phone: order.customer?.phone ?? null,
-        }
-      : undefined;
+    const linkedOrders: FinishOrder[] = selected.map((o) => ({
+      id: o.id,
+      name: o.name,
+      total: o.net,
+      customer_id: o.customer?.id ?? null,
+      customer_name: o.customer?.name ?? null,
+      customer_email: o.customer?.email ?? null,
+      customer_phone: o.customer?.phone ?? null,
+    }));
+    const primary = selected[0] ?? null;
+    const finishSold = (got_contact: boolean) =>
+      onSubmit(target.employeeId, {
+        kind: "walkin",
+        sold: true,
+        got_contact,
+        orders: linkedOrders.length > 0 ? linkedOrders : undefined,
+      });
     return (
       <>
         <DialogHeader>
           <DialogTitle>{target.name} — got contact?</DialogTitle>
-          {order && (
+          {primary && (
             <DialogDescription className="tabular-nums">
-              Linked to {order.name}
-              {order.customer?.name ? ` · ${order.customer.name}` : ""}
+              {selected.length > 1
+                ? `Linked to ${selected.length} orders`
+                : `Linked to ${primary.name}`}
+              {primary.customer?.name ? ` · ${primary.customer.name}` : ""}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -318,14 +339,7 @@ function FinishSteps({
             variant="outline"
             className="h-14 flex-1"
             disabled={pending}
-            onClick={() =>
-              onSubmit(target.employeeId, {
-                kind: "walkin",
-                sold: true,
-                got_contact: false,
-                order: linkedOrder,
-              })
-            }
+            onClick={() => finishSold(false)}
           >
             No
           </Button>
@@ -333,14 +347,7 @@ function FinishSteps({
             size="lg"
             className="h-14 flex-1"
             disabled={pending}
-            onClick={() =>
-              onSubmit(target.employeeId, {
-                kind: "walkin",
-                sold: true,
-                got_contact: true,
-                order: linkedOrder,
-              })
-            }
+            onClick={() => finishSold(true)}
           >
             Yes
           </Button>

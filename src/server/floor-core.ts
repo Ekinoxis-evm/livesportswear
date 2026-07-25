@@ -11,6 +11,7 @@ import {
 } from "@/lib/floor-state";
 import type { TablesUpdate } from "@/types/db";
 import type { ActionResult } from "@/server/shared";
+import { mergeLinkedOrders, type LinkedOrder } from "@/lib/linked-orders";
 
 /**
  * Bodies for the floor-queue writes, driven exclusively by the store kiosk
@@ -283,15 +284,7 @@ export type FinishResult = {
   reasons?: string[]; // mandatory (app layer) when a walk-in didn't buy
   products?: { id: string; title: string; sku?: string | null }[];
   note?: string;
-  order?: {
-    id: string;
-    name: string;
-    total: number;
-    customer_id?: string | null;
-    customer_name?: string | null;
-    customer_email?: string | null;
-    customer_phone?: string | null;
-  };
+  orders?: LinkedOrder[]; // a sold walk-in can link several orders
 };
 
 /**
@@ -345,6 +338,10 @@ export async function doFinishCustomer(
     return { ok: false, error: "Already recorded — the screen will refresh." };
   }
 
+  // The primary (first) order fills the single columns for every existing
+  // reader; order_total is the SUM; the full set rides in linked_orders.
+  const merged = mergeLinkedOrders([], result.orders ?? []);
+  const primary = merged.primary;
   const ins = await service.from("client_events").insert({
     location_id: locationId,
     employee_id: employeeId,
@@ -356,13 +353,14 @@ export async function doFinishCustomer(
     reasons: result.reasons ?? null,
     products: result.products ?? null,
     note: result.note ?? null,
-    shopify_order_id: result.order?.id ?? null,
-    shopify_order_name: result.order?.name ?? null,
-    order_total: result.order?.total ?? null,
-    shopify_customer_id: result.order?.customer_id ?? null,
-    customer_name: result.order?.customer_name ?? null,
-    customer_email: result.order?.customer_email ?? null,
-    customer_phone: result.order?.customer_phone ?? null,
+    shopify_order_id: primary?.id ?? null,
+    shopify_order_name: primary?.name ?? null,
+    order_total: primary ? merged.order_total : null,
+    linked_orders: merged.linked_orders.length > 0 ? merged.linked_orders : null,
+    shopify_customer_id: primary?.customer_id ?? null,
+    customer_name: primary?.customer_name ?? null,
+    customer_email: primary?.customer_email ?? null,
+    customer_phone: primary?.customer_phone ?? null,
   });
   if (ins.error) {
     // The client is closed but the record failed — surface it loudly; the

@@ -34,7 +34,8 @@ const walkinSchema = z
     reasons: z.array(z.string().trim().min(1).max(60)).max(6).optional(),
     products: z.array(productSchema).max(5).optional(),
     note: z.string().trim().max(300).optional(),
-    order: orderSchema.optional(),
+    // A sold walk-in can link several orders (split payment, two receipts).
+    orders: z.array(orderSchema).max(10).optional(),
   })
   .refine((v) => v.sold || (v.reasons?.length ?? 0) > 0, {
     message: "Pick at least one reason.",

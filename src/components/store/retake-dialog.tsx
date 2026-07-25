@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Receipt, UserX, X } from "lucide-react";
+import { Check, Receipt, ShoppingBag, UserX, X } from "lucide-react";
 import {
   storeRetake,
   storeRetakeCandidates,
@@ -25,10 +25,12 @@ import { cn } from "@/lib/utils";
 
 export type FloorMember = { employeeId: string; name: string };
 
+type Outcome = "sold" | "nosale";
+
 /**
- * Re-take: a client this rep already attended today came back and bought. The
- * sale is added to the attendance she ALREADY logged, so the same person isn't
- * counted twice against conversion.
+ * Re-take: a client this rep already attended today came back. Whatever happens
+ * — they buy more, or leave without buying — it folds into the attendance she
+ * ALREADY logged, so the same person is never counted twice against conversion.
  */
 export function RetakeDialog({
   open,
@@ -45,16 +47,20 @@ export function RetakeDialog({
   const [member, setMember] = useState<FloorMember | null>(null);
   const [candidates, setCandidates] = useState<RetakeCandidate[] | null>(null);
   const [event, setEvent] = useState<RetakeCandidate | null>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [orders, setOrders] = useState<RecentOrder[] | null>(null);
-  const [order, setOrder] = useState<RecentOrder | null>(null);
+  const [selected, setSelected] = useState<RecentOrder[]>([]);
+  const [gotContact, setGotContact] = useState(false);
 
   function reset() {
     setStep(0);
     setMember(null);
     setCandidates(null);
     setEvent(null);
+    setOutcome(null);
     setOrders(null);
-    setOrder(null);
+    setSelected([]);
+    setGotContact(false);
   }
 
   function pickMember(m: FloorMember) {
@@ -70,40 +76,60 @@ export function RetakeDialog({
 
   function pickEvent(c: RetakeCandidate) {
     setEvent(c);
-    setOrders(null);
-    // Fetched on demand — never on the 45s refresh loop.
-    void storeRecentOrders().then((res) => setOrders(res.ok ? (res.data ?? []) : []));
     setStep(2);
   }
 
+  function pickOutcome(o: Outcome) {
+    setOutcome(o);
+    if (o === "sold" && orders === null) {
+      // Fetched on demand — never on the 45s refresh loop.
+      void storeRecentOrders().then((res) => setOrders(res.ok ? (res.data ?? []) : []));
+    }
+    setStep(3);
+  }
+
+  const toggleOrder = (o: RecentOrder) =>
+    setSelected((cur) =>
+      cur.some((x) => x.id === o.id) ? cur.filter((x) => x.id !== o.id) : [...cur, o],
+    );
+
   function submit() {
-    if (!member || !event) return;
+    if (!member || !event || !outcome) return;
     start(async () => {
       const res = await storeRetake({
         employeeId: member.employeeId,
         eventId: event.id,
-        order: order
-          ? {
-              id: order.id,
-              name: order.name,
-              total: order.net,
-              customer_id: order.customer?.id ?? null,
-              customer_name: order.customer?.name ?? null,
-              customer_email: order.customer?.email ?? null,
-              customer_phone: order.customer?.phone ?? null,
-            }
-          : undefined,
+        sold: outcome === "sold",
+        gotContact,
+        orders:
+          outcome === "sold"
+            ? selected.map((o) => ({
+                id: o.id,
+                name: o.name,
+                total: o.net,
+                customer_id: o.customer?.id ?? null,
+                customer_name: o.customer?.name ?? null,
+                customer_email: o.customer?.email ?? null,
+                customer_phone: o.customer?.phone ?? null,
+              }))
+            : undefined,
       });
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Added to ${member.name}'s client — no extra walk-in counted.`);
+      toast.success(
+        outcome === "sold"
+          ? `Added to ${member.name}'s client — no extra walk-in counted.`
+          : `Logged ${member.name}'s return visit — no extra walk-in counted.`,
+      );
       reset();
       onClose();
       router.refresh();
     });
   }
+
+  const total = selected.reduce((s, o) => s + o.net, 0);
 
   const steps = [
     {
@@ -180,59 +206,123 @@ export function RetakeDialog({
       validate: () => event !== null,
     },
     {
-      title: "Order",
+      title: "Outcome",
       content: (
         <div className="flex flex-col gap-2">
           <p className="text-muted-foreground text-sm">
-            Link what they just bought. It&apos;s added to the sale already on this
-            client — the earlier amount isn&apos;t replaced.
+            What happened when they came back?
           </p>
-          {orders === null ? (
-            <p className="text-muted-foreground py-4 text-sm">Loading orders…</p>
-          ) : (
-            <div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
-              {orders.map((o, i) => (
-                <Button
-                  key={o.id}
-                  size="lg"
-                  variant={order?.id === o.id ? "default" : i === 0 ? "secondary" : "outline"}
-                  className="h-14 justify-start gap-2.5"
-                  disabled={pending}
-                  onClick={() => setOrder(o)}
-                >
-                  <Receipt className="size-4 shrink-0" />
-                  <span className="flex min-w-0 flex-col items-start leading-tight">
-                    <span className="font-semibold tabular-nums">
-                      {o.name} · {formatMoney(o.net, o.currency ?? "USD")}
-                    </span>
-                    <span className="truncate text-xs font-normal opacity-80">
-                      {o.createdAt.slice(11, 16)} ·{" "}
-                      {o.customer?.name ?? "no customer on the order"}
-                    </span>
-                  </span>
-                </Button>
-              ))}
-            </div>
-          )}
           <Button
             size="lg"
-            variant={order === null && orders !== null ? "secondary" : "outline"}
-            className="h-14 justify-start gap-2.5"
+            variant={outcome === "sold" ? "default" : "outline"}
+            className="h-16 justify-start gap-3"
             disabled={pending}
-            onClick={() => setOrder(null)}
+            onClick={() => pickOutcome("sold")}
           >
-            <UserX className="size-4 shrink-0" />
+            <ShoppingBag className="size-5" />
             <span className="flex flex-col items-start leading-tight">
-              <span className="font-semibold">No order to link</span>
+              Bought something
               <span className="text-xs font-normal opacity-80">
-                just mark this client as sold
+                add the order(s) to this client
+              </span>
+            </span>
+          </Button>
+          <Button
+            size="lg"
+            variant={outcome === "nosale" ? "default" : "outline"}
+            className="h-16 justify-start gap-3"
+            disabled={pending}
+            onClick={() => pickOutcome("nosale")}
+          >
+            <UserX className="size-5" />
+            <span className="flex flex-col items-start leading-tight">
+              Came back — no sale
+              <span className="text-xs font-normal opacity-80">
+                re-logged without a second walk-in
               </span>
             </span>
           </Button>
         </div>
       ),
+      validate: () => outcome !== null,
+    },
+    {
+      title: outcome === "nosale" ? "Contact" : "Order",
+      content:
+        outcome === "nosale" ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-muted-foreground text-sm">
+              They didn&apos;t buy — nothing is double-counted. Did you get their
+              contact this time?
+            </p>
+            <Button
+              size="lg"
+              variant={gotContact ? "default" : "outline"}
+              className="h-14 justify-start gap-2.5"
+              disabled={pending}
+              onClick={() => setGotContact((v) => !v)}
+            >
+              {gotContact ? <Check className="size-4" /> : <UserX className="size-4" />}
+              Got their contact this time
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-muted-foreground text-sm">
+              Tap what they just bought. It&apos;s added to this client — the earlier
+              amount isn&apos;t replaced.
+            </p>
+            {orders === null ? (
+              <p className="text-muted-foreground py-4 text-sm">Loading orders…</p>
+            ) : (
+              <div className="flex max-h-56 flex-col gap-2 overflow-y-auto">
+                {orders.map((o) => {
+                  const on = selected.some((x) => x.id === o.id);
+                  return (
+                    <Button
+                      key={o.id}
+                      size="lg"
+                      variant={on ? "default" : "outline"}
+                      className="h-14 justify-start gap-2.5"
+                      disabled={pending}
+                      onClick={() => toggleOrder(o)}
+                    >
+                      {on ? (
+                        <Check className="size-4 shrink-0" />
+                      ) : (
+                        <Receipt className="size-4 shrink-0" />
+                      )}
+                      <span className="flex min-w-0 flex-col items-start leading-tight">
+                        <span className="font-semibold tabular-nums">
+                          {o.name} · {formatMoney(o.net, o.currency ?? "USD")}
+                        </span>
+                        <span className="truncate text-xs font-normal opacity-80">
+                          {o.createdAt.slice(11, 16)} ·{" "}
+                          {o.customer?.name ?? "no customer on the order"}
+                        </span>
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+            {selected.length > 0 && (
+              <p className="text-sm font-semibold tabular-nums">
+                {selected.length} order{selected.length === 1 ? "" : "s"} ·{" "}
+                {formatMoney(total)}
+              </p>
+            )}
+          </div>
+        ),
     },
   ];
+
+  const finishLabel =
+    outcome === "nosale"
+      ? "Save visit"
+      : selected.length > 0
+        ? "Add to client"
+        : "Mark as sold";
 
   return (
     <Dialog
@@ -248,8 +338,8 @@ export function RetakeDialog({
         <DialogHeader>
           <DialogTitle>Re-take a client</DialogTitle>
           <DialogDescription>
-            Adds the sale to a client already attended today, instead of counting
-            them as a new walk-in.
+            Folds a returning client into the attendance already logged today,
+            instead of counting them as a new walk-in.
           </DialogDescription>
         </DialogHeader>
         <Wizard
@@ -257,7 +347,7 @@ export function RetakeDialog({
           step={step}
           onStepChange={setStep}
           onFinish={submit}
-          finishLabel="Add to client"
+          finishLabel={finishLabel}
           pending={pending}
           pendingLabel="Saving…"
         />

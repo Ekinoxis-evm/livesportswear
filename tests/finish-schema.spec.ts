@@ -8,6 +8,19 @@ describe("finishSchema", () => {
     ).toBe(true);
   });
 
+  it("accepts a sold walk-in linking several orders", () => {
+    const res = finishSchema.safeParse({
+      kind: "walkin",
+      sold: true,
+      got_contact: false,
+      orders: [
+        { id: "1", name: "#1042", total: 120 },
+        { id: "2", name: "#1051", total: 85, customer_name: "Maria" },
+      ],
+    });
+    expect(res.success).toBe(true);
+  });
+
   it("accepts a no-sale with at least one reason", () => {
     const res = finishSchema.safeParse({
       kind: "walkin",

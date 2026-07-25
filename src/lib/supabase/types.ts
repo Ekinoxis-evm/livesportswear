@@ -169,6 +169,7 @@ export type Database = {
           got_contact: boolean
           id: string
           kind: string
+          linked_orders: Json | null
           location_id: string
           note: string | null
           order_total: number | null
@@ -191,6 +192,7 @@ export type Database = {
           got_contact?: boolean
           id?: string
           kind?: string
+          linked_orders?: Json | null
           location_id: string
           note?: string | null
           order_total?: number | null
@@ -213,6 +215,7 @@ export type Database = {
           got_contact?: boolean
           id?: string
           kind?: string
+          linked_orders?: Json | null
           location_id?: string
           note?: string | null
           order_total?: number | null

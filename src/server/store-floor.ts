@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
-import { retakePatch } from "@/lib/retake";
+import { retakePatch, type RetakeOrder } from "@/lib/retake";
 import { hashPin, PIN_RE } from "@/lib/kiosk-pin";
 import {
   doOpenDay,
@@ -464,7 +464,7 @@ export async function storeFinish(
     reasons: d.kind === "walkin" && !d.sold ? d.reasons : undefined,
     products: d.kind === "walkin" && !d.sold ? d.products : undefined,
     note: d.kind === "walkin" && !d.sold ? d.note : undefined,
-    order: d.kind === "walkin" && d.sold ? d.order : undefined,
+    orders: d.kind === "walkin" && d.sold ? d.orders : undefined,
   });
   if (res.ok) {
     revalidatePath("/store", "layout");
@@ -529,7 +529,11 @@ export async function storeRetakeCandidates(
 const retakeSchema = z.object({
   employeeId: z.string().uuid(),
   eventId: z.string().uuid(),
-  order: retakeOrderSchema.optional(),
+  // The outcome of the return visit: bought more (with the orders it linked) or
+  // came back and still didn't buy (optionally capturing contact this time).
+  sold: z.boolean(),
+  orders: z.array(retakeOrderSchema).max(10).optional(),
+  gotContact: z.boolean().optional(),
 });
 
 /**
@@ -553,7 +557,7 @@ export async function storeRetake(input: unknown): Promise<ActionResult> {
   const { data: existing } = await service
     .from("client_events")
     .select(
-      "sold, order_total, shopify_order_id, shopify_order_name, shopify_customer_id, customer_name, customer_email, customer_phone",
+      "sold, got_contact, order_total, shopify_order_id, shopify_order_name, shopify_customer_id, customer_name, customer_email, customer_phone, linked_orders",
     )
     .eq("id", parsed.data.eventId)
     .eq("location_id", locationId)
@@ -564,7 +568,12 @@ export async function storeRetake(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "That client isn't on today's list for this person." };
   }
 
-  const patch = retakePatch(existing, parsed.data.order ?? null);
+  const patch = retakePatch(
+    { ...existing, linked_orders: existing.linked_orders as RetakeOrder[] | null },
+    parsed.data.sold
+      ? { sold: true, orders: parsed.data.orders ?? [], gotContact: parsed.data.gotContact }
+      : { sold: false, gotContact: parsed.data.gotContact },
+  );
   const { error } = await service
     .from("client_events")
     .update(patch)
