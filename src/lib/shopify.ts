@@ -254,11 +254,12 @@ export type RecentOrder = {
   createdAt: string;
   net: number;
   currency: string | null;
+  // Only the id (to link) and name (to display). Contact (email/phone)
+  // deliberately stays server-side: Shopify owns it, and it must not ride to
+  // the kiosk browser or get stored back onto client_events (nothing reads it).
   customer: {
     id: string;
     name: string;
-    email: string | null;
-    phone: string | null;
   } | null;
 };
 
@@ -305,8 +306,6 @@ export async function fetchRecentOrders(limit = 6): Promise<RecentOrder[]> {
           ? {
               id: String(o.customer.id),
               name: customerName || "Customer",
-              email: o.customer.email ?? null,
-              phone: o.customer.phone ?? null,
             }
           : null,
       };

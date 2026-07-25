@@ -25,8 +25,6 @@ export type ExistingEvent = {
   shopify_order_name: string | null;
   shopify_customer_id: string | null;
   customer_name: string | null;
-  customer_email: string | null;
-  customer_phone: string | null;
   linked_orders: LinkedOrder[] | null;
 };
 
@@ -43,8 +41,6 @@ export type RetakePatch = {
   shopify_order_name?: string | null;
   shopify_customer_id?: string | null;
   customer_name?: string | null;
-  customer_email?: string | null;
-  customer_phone?: string | null;
 };
 
 // A prior sale reconstructed from the legacy single columns carries this
@@ -70,8 +66,6 @@ function existingOrders(existing: ExistingEvent): LinkedOrder[] {
       total: prior,
       customer_id: existing.shopify_customer_id,
       customer_name: existing.customer_name,
-      customer_email: existing.customer_email,
-      customer_phone: existing.customer_phone,
     },
   ];
 }
@@ -112,7 +106,5 @@ export function retakePatch(
     shopify_order_name: existing.shopify_order_name ?? ref?.name ?? null,
     shopify_customer_id: existing.shopify_customer_id ?? firstWith("customer_id"),
     customer_name: existing.customer_name ?? firstWith("customer_name"),
-    customer_email: existing.customer_email ?? firstWith("customer_email"),
-    customer_phone: existing.customer_phone ?? firstWith("customer_phone"),
   };
 }

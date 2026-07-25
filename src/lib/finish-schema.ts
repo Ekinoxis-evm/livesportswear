@@ -20,8 +20,6 @@ const orderSchema = z.object({
   total: z.number().min(0),
   customer_id: z.string().max(30).nullish(),
   customer_name: z.string().max(120).nullish(),
-  customer_email: z.string().max(200).nullish(),
-  customer_phone: z.string().max(40).nullish(),
 });
 export type FinishOrder = z.input<typeof orderSchema>;
 

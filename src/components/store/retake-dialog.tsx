@@ -109,8 +109,6 @@ export function RetakeDialog({
                 total: o.net,
                 customer_id: o.customer?.id ?? null,
                 customer_name: o.customer?.name ?? null,
-                customer_email: o.customer?.email ?? null,
-                customer_phone: o.customer?.phone ?? null,
               }))
             : undefined,
       });
