@@ -42,9 +42,19 @@
   (`src/app/portal/(performance)/`) uses `PeriodPills` with the same
   `resolveSalesPeriod`/`periodBounds` pair, but renders a `Stat`/`StatGrid` grid
   (`src/components/portal/stats.tsx`) instead of `SalesRankTable` — one person
-  has no ranking to show. `GoalBar` is the shared goal-progress bar; `DayBars`
-  (`components/portal/day-bars.tsx`) is a CSS-only per-day chart, no recharts,
-  used for periods up to ~62 days.
+  has no ranking to show. `DayBars` (`components/portal/day-bars.tsx`) is a
+  CSS-only per-day chart, no recharts, used for periods up to ~62 days.
+- **Goal progress**: `GoalIndicator` (`src/components/shared/goal-indicator.tsx`)
+  is the shared monthly-goal visual — a **fill-card** where the goal colour fills
+  the card left→right to the percent, with the "left to reach" + per-day-pace
+  figures on top (reached turns emerald). Used on portal · kiosk · admin; math is
+  pure in `src/lib/goal-pace.ts` (`goalPace`). It replaced the old `GoalBar`.
+- **A shift on a schedule**: `ShiftChip` (`src/components/schedule/shift-chip.tsx`)
+  — name + time on a **light tint of the employee's profile colour**, not a dot.
+  The tint helper is `shiftTint` in `src/lib/shift-color.ts` (a `color-mix`, works
+  on light + dark cards); the admin grid keeps a stronger left stripe over it.
+  Colour is never the only signal (name/time carry the shift). Reuse both — the
+  `SLOT_COLOR` map + a local `Chip` used to be copy-pasted across four surfaces.
 - **Inline `<Alert>`**: persistent state messages on a page (e.g. "This schedule has 3 warnings").
 - **Daily-report recipients**: the recipient chips + add-field + "Send test report"
   editor is the shared `RecipientsManager` (`src/components/shared/recipients-manager.tsx`),
@@ -59,7 +69,20 @@ Every data table is a live viewport, not a printout. Two shells, same behaviour:
 - **`ScrollTable`** (`src/components/shared/scroll-table.tsx`) wraps hand-rolled
   `<table>` markup.
 - **`Table`** (`src/components/ui/table.tsx`) already renders its own container,
-  so the 10 shadcn call sites get the same treatment for free.
+  so the shadcn call sites get the same treatment for free.
+
+**Click-to-sort (added 2026-07-25).** Sorting is a shared, opt-in capability —
+don't hand-roll per-table sort. `useTableSort(rows, accessors, initial?)`
+(`src/lib/use-table-sort.ts`) returns sorted rows + `{sort, onSort}`; the pure
+`sortRows` comparator (stable, empties-last) is unit-tested. For the header,
+hand-rolled tables use `<SortableTh sortKey sort onSort>`
+(`src/components/shared/sortable-header.tsx`); shadcn tables pass
+`sortKey`/`sort`/`onSort` to `<TableHead>`. Give each column a **comparable**
+accessor (the raw number/string, not the formatted `"$118.40"`). A server-page
+table becomes a small `"use client"` wrapper fed serializable rows. **Client
+sort only suits fully-loaded tables** — server-paginated lists (admin/portal
+clients, inventory book) need server-side sort (a `?sort=` param in the query),
+or client sort would silently reorder just the current page.
 
 Both give: **both-axis scroll** capped by `maxHeight` (long lists scroll in place
 instead of pushing the page), a **sticky `<thead>`**, a **pinned first column**

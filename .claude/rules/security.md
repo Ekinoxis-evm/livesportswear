@@ -23,14 +23,10 @@
   location create (`createLocation`) and backfilled by 0017. Rotation: not yet
   built — recreate via SQL if a link leaks.
 
-## Attendance validation tokens (0015)
-- `attendance_validations.token` follows the same rules as employee magic
-  tokens: 32-byte base64url, never logged, never echoed in errors (`validateAttendance`
-  returns a generic "no longer valid" message — no token enumeration).
-- Scoped tighter than magic tokens: single-use (`used_at`), bound to one
-  check-in + kind, only meaningful to a signed-in employee at the same store on
-  the same business date, and rotated every time the employee re-marks
-  entry/exit.
+## Attendance validation tokens (0015 — DROPPED 0050)
+- The `attendance_validations` QR-token flow (peer entry/exit attestation) was
+  removed when the kiosk became the only check-in surface, and the table was
+  **dropped 2026-07-25 (migration 0050)**. No token surface remains.
 
 ## Row-Level Security
 - **Every table has RLS enabled. Default deny.**
@@ -77,18 +73,29 @@
 - Don't log full employee email or phone. Mask: `j***@liveactivewear.com` (`sendSafe`
   masks recipients before logging).
 - Audit log captures the diff but not the magic token field.
-- **Customer PII** (`client_events.customer_name/email/phone`): may be *rendered* to
-  authorized surfaces (day report, admin Clients view, kiosk "Clients attended" list) but
-  NEVER logged. When passing to client components, pass only what's shown — the kiosk
-  attendance list passes `customer_name` only, never email/phone.
+- **Customer PII**: `client_events.customer_name` may be *rendered* to authorized
+  surfaces (day report, admin Clients view, kiosk "Clients attended" list) but
+  NEVER logged. **Email/phone are no longer captured on the kiosk (2026-07-25):**
+  the recent-orders pick-list ships only `id` + `name`, and the finish/re-take
+  flow stops writing `customer_email/_phone` — nothing read them, and Shopify owns
+  contact (fetched directly, RLS-scoped, by the admin/portal client books). When
+  passing customers to client components, pass only what's shown.
+
+- **Changing who is an admin** (`setEmployeeAdmin`, 2026-07-25 fix): gated by
+  `requireMasterAdmin` (like `inviteAdmin`/`removeAdmin`) — a location-scoped
+  admin can no longer promote anyone. A promoted employee becomes a
+  **location-scoped** admin (`admin_scope="location"`, mapped in `admin_locations`
+  to their own store), never a master. Demote revokes the mapping. A missing
+  `admin_scope` reads as master, so it must always be set explicitly.
 
 ## Report recipients & receiving (0039–0040)
 - `store_report_recipients` writes: admin path is RLS-enforced via `createServerClient`
-  (`src/server/report-recipients.ts`, `requireAdmin` + `accessibleLocationIds` check); the
-  kiosk path (`src/server/store-floor.ts` `storeAdd/Remove/ListReportRecipient`,
-  `storeSendTestReport`) uses the **service client** but is location-scoped by the store JWT
-  claim via `storeCtx()` — the location is never a client input. Same single-writer posture
-  as the rest of the kiosk.
+  (`src/server/report-recipients.ts`, `requireAdmin` + `accessibleLocationIds` check). The
+  kiosk's `storeSendTestReport` (`src/server/store-floor.ts`) uses the **service client** but
+  is location-scoped by the store JWT claim via `storeCtx()` — the location is never a client
+  input. (The unused kiosk recipient add/remove/list actions were removed 2026-07-25; recipient
+  editing goes through the shared `RecipientsManager`.) Same single-writer posture as the rest
+  of the kiosk.
 - **AI receiving extraction** (`src/lib/receiving-extract.ts`): uploaded arrival documents
   (PDF/photo) are sent to Anthropic (direct `ANTHROPIC_API_KEY`, or the Vercel AI Gateway) for
   line-item extraction — i.e. document contents leave our infra to a third-party model
