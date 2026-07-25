@@ -78,6 +78,25 @@ export async function updateOwnPhone(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+const colorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Pick a colour.");
+
+/** Employee changes their own colour — the one on their avatar and shifts. */
+export async function updateOwnColor(input: unknown): Promise<ActionResult> {
+  const { employee } = await requireEmployee();
+  const parsed = colorSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Pick a colour." };
+
+  const service = createServiceClient();
+  const { error } = await service
+    .from("employees")
+    .update({ avatar_color: parsed.data })
+    .eq("id", employee.id);
+  if (error) return { ok: false, error: "Couldn't save your colour." };
+
+  revalidatePath("/portal", "layout");
+  return { ok: true };
+}
+
 const emailSchema = z.string().trim().toLowerCase().email().max(254);
 
 /**

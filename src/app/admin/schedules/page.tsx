@@ -11,8 +11,9 @@ import { businessDate } from "@/lib/business-date";
 import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
 import { validateSchedule, biweeklyHourWarnings } from "@/lib/scheduling/rules";
-import { buildShiftGrid } from "@/lib/scheduling/shift-grid";
+import { buildShiftGrid, accumulatedShiftCounts } from "@/lib/scheduling/shift-grid";
 import { ShiftCountGrid } from "@/components/schedule/shift-count-grid";
+import { ShiftTotals } from "@/components/schedule/shift-totals";
 import { getPayPeriod } from "@/lib/payroll-config";
 import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +113,20 @@ export default async function SchedulesPage({
       .eq("schedule_id", schedule.id);
     shiftRows = data ?? [];
   }
+
+  // Every shift ever scheduled at this store — for the all-time accumulated
+  // counts (start_time is all the AM/PM split needs).
+  const { data: allShiftRows } = await supabase
+    .from("shifts")
+    .select("employee_id, start_time, schedules!inner(location_id)")
+    .eq("schedules.location_id", locationId);
+  const accumulatedShifts = (allShiftRows ?? []).map((s) => ({
+    employee_id: s.employee_id,
+    start_time: s.start_time,
+    date: "",
+    end_time: "",
+    shift_template_id: null,
+  }));
 
   const empList = employees ?? [];
   const empIds = empList.map((e) => e.id);
@@ -343,6 +358,16 @@ export default async function SchedulesPage({
             empList.map((e) => ({ id: e.id, name: e.name })),
             days,
           )}
+        />
+      )}
+
+      {accumulatedShifts.length > 0 && (
+        <ShiftTotals
+          rows={accumulatedShiftCounts(
+            accumulatedShifts,
+            empList.map((e) => ({ id: e.id, name: e.name })),
+          )}
+          colorById={new Map(empList.map((e) => [e.id, e.avatar_color]))}
         />
       )}
     </div>
