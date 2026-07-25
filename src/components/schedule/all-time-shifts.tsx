@@ -6,6 +6,8 @@ import type {
   WeekdayShiftGrid,
 } from "@/lib/scheduling/shift-grid";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { SortableTh } from "@/components/shared/sortable-header";
+import { useTableSort } from "@/lib/use-table-sort";
 import { Cell, SHORT_WEEKDAYS } from "@/components/schedule/shift-cell";
 import {
   Card,
@@ -90,19 +92,25 @@ function TotalsTable({
     (a, r) => ({ am: a.am + r.am, pm: a.pm + r.pm, total: a.total + r.total }),
     { am: 0, pm: 0, total: 0 },
   );
+  const { rows: sorted, sort, onSort } = useTableSort(rows, {
+    name: (r) => r.name,
+    am: (r) => r.am,
+    pm: (r) => r.pm,
+    total: (r) => r.total,
+  });
   return (
     <ScrollTable maxHeight="30rem">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-muted-foreground border-b text-left">
-            <th className="py-2 font-medium">Employee</th>
-            <th className="py-2 text-right font-medium">AM</th>
-            <th className="py-2 text-right font-medium">PM</th>
-            <th className="py-2 text-right font-medium">Total</th>
+            <SortableTh sortKey="name" sort={sort} onSort={onSort} className="py-2 font-medium">Employee</SortableTh>
+            <SortableTh sortKey="am" sort={sort} onSort={onSort} className="py-2 text-right font-medium">AM</SortableTh>
+            <SortableTh sortKey="pm" sort={sort} onSort={onSort} className="py-2 text-right font-medium">PM</SortableTh>
+            <SortableTh sortKey="total" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Total</SortableTh>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {sorted.map((r) => (
             <tr key={r.employeeId} className="border-b last:border-0">
               <td className="py-2 font-medium">
                 <span className="flex items-center gap-2">

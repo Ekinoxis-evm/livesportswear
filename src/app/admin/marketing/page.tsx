@@ -13,14 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { monthLabel } from "@/lib/format-date";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { CampaignsTable } from "@/components/admin/campaigns-table";
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
@@ -127,34 +120,7 @@ export default async function MarketingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Campaign</TableHead>
-                    <TableHead className="text-right">Spend</TableHead>
-                    <TableHead className="hidden text-right sm:table-cell">
-                      Revenue
-                    </TableHead>
-                    <TableHead className="text-right">ROAS</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {campaigns.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatMoney(c.spend, currency)}
-                      </TableCell>
-                      <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                        {formatMoney(c.revenue, currency)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {c.spend > 0 ? `${(c.revenue / c.spend).toFixed(2)}×` : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <CampaignsTable rows={campaigns} currency={currency} />
             </CardContent>
           </Card>
         </>

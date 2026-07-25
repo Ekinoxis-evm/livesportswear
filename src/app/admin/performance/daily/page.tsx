@@ -6,6 +6,7 @@ import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct } from "@/lib/conversion";
 import { stampStatus, workedHours, type AttendanceStamp } from "@/lib/attendance";
+import { PerformancePeopleTable } from "@/components/admin/performance-people-table";
 import { breakMinutes, overBreakBudget, type BreakRow } from "@/lib/breaks";
 import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
@@ -308,32 +309,16 @@ export default async function PerformancePage({
             No clients logged this day.
           </p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead className="text-right">Attended</TableHead>
-                <TableHead className="text-right">Sold</TableHead>
-                <TableHead className="text-right">Contacts</TableHead>
-                <TableHead className="text-right">Conversion</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {people.map((p) => (
-                <TableRow key={p.employeeId}>
-                  <TableCell className="font-medium">
-                    {nameOf.get(p.employeeId) ?? "Unknown"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{p.attended}</TableCell>
-                  <TableCell className="text-right tabular-nums">{p.sold}</TableCell>
-                  <TableCell className="text-right tabular-nums">{p.contacts}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatPct(p.conversion)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <PerformancePeopleTable
+            rows={people.map((p) => ({
+              employeeId: p.employeeId,
+              name: nameOf.get(p.employeeId) ?? "Unknown",
+              attended: p.attended,
+              sold: p.sold,
+              contacts: p.contacts,
+              conversion: p.conversion,
+            }))}
+          />
         )}
       </Card>
 
