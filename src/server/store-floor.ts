@@ -23,9 +23,7 @@ import {
 import {
   closeDayFor,
   closeDayDraftFor,
-  managedReportEmails,
   sendTestReportFor,
-  reportDraftFor,
   type CloseDayDraft,
 } from "@/server/conversion-core";
 import { isShopifyConfigured } from "@/lib/shopify-config";
@@ -36,7 +34,7 @@ import {
   type RecentOrder,
 } from "@/lib/shopify";
 import { finishSchema, type FinishInput } from "@/lib/finish-schema";
-import { firstError, dbError, type ActionResult } from "@/server/shared";
+import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
 
@@ -664,56 +662,9 @@ export async function storeCloseDay(
 }
 
 // ---------------------------------------------------------------------------
-// Daily-report recipients — the same managed list as admin, editable from the
-// kiosk. Store-scoped: the location is the store JWT's claim, never an input.
+// Daily-report test send — store-scoped: the location is the store JWT's claim,
+// never an input. (Recipient editing lives in the shared RecipientsManager.)
 // ---------------------------------------------------------------------------
-const storeEmailSchema = z.string().trim().toLowerCase().email();
-
-export async function storeListReportRecipients(): Promise<
-  ActionResult<{ recipients: string[] }>
-> {
-  const { locationId } = await storeCtx();
-  return { ok: true, data: { recipients: await managedReportEmails(locationId) } };
-}
-
-export async function storeAddReportRecipient(email: unknown): Promise<ActionResult> {
-  const { locationId, service } = await storeCtx();
-  const parsed = storeEmailSchema.safeParse(email);
-  if (!parsed.success) return { ok: false, error: "Enter a valid email address." };
-
-  const { error } = await service
-    .from("store_report_recipients")
-    .insert({ location_id: locationId, email: parsed.data });
-  if (error)
-    return {
-      ok: false,
-      error: dbError(error, { "23505": "That email is already a recipient." }),
-    };
-  revalidatePath("/store/performance");
-  return { ok: true };
-}
-
-export async function storeRemoveReportRecipient(email: unknown): Promise<ActionResult> {
-  const { locationId, service } = await storeCtx();
-  const parsed = storeEmailSchema.safeParse(email);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
-
-  const { error } = await service
-    .from("store_report_recipients")
-    .delete()
-    .eq("location_id", locationId)
-    .ilike("email", parsed.data);
-  if (error) return { ok: false, error: dbError(error) };
-  revalidatePath("/store/performance");
-  return { ok: true };
-}
-
-/** The report a test send would produce — for the wizard's review step. */
-export async function storeReportDraft(): Promise<ActionResult<CloseDayDraft>> {
-  const { locationId } = await storeCtx();
-  return reportDraftFor(locationId);
-}
-
 export async function storeSendTestReport(
   onlyRecipients?: string[],
 ): Promise<ActionResult<{ sentTo: number }>> {

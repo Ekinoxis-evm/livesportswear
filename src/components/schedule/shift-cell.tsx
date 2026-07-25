@@ -3,7 +3,7 @@ import type { ShiftCell } from "@/lib/scheduling/shift-grid";
 export const SHORT_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** One half of a cell — a count that dims to nothing when it's zero. */
-export function Half({ label, n }: { label: string; n: number }) {
+function Half({ label, n }: { label: string; n: number }) {
   return (
     <span className="flex flex-1 flex-col items-center">
       <span className="text-[10px] uppercase opacity-50">{label}</span>
