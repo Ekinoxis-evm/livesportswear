@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollTable } from "@/components/shared/scroll-table";
-import { ContactButtons } from "@/components/portal/contact-buttons";
+import { ContactButtons } from "@/components/shared/contact-buttons";
 import { Stat, StatGrid } from "@/components/portal/stats";
 
 const PAGE_SIZE = 50;

@@ -21,7 +21,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ContactButtons } from "@/components/portal/contact-buttons";
+import { ContactButtons } from "@/components/shared/contact-buttons";
 import { Stat, StatGrid } from "@/components/portal/stats";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

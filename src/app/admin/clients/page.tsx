@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { ContactButtons } from "@/components/shared/contact-buttons";
 import { RebuildAttributionButton } from "@/components/admin/rebuild-attribution-button";
 import {
   ClientRepFilter,
@@ -383,8 +384,7 @@ export default async function ClientsPage({
                   <tr className="text-muted-foreground text-left">
                     <th className="py-2 font-medium">Client</th>
                     <th className="py-2 font-medium">Country</th>
-                    <th className="py-2 font-medium">Phone</th>
-                    <th className="py-2 font-medium">Email</th>
+                    <th className="py-2 font-medium">Contact</th>
                     <th className="py-2 font-medium">Brought in by</th>
                     <th className="py-2 font-medium">First order</th>
                     <th className="py-2 font-medium">Date</th>
@@ -411,15 +411,12 @@ export default async function ClientsPage({
                           </span>
                         )}
                       </td>
-                      <td className="py-2 tabular-nums">
-                        {c.customer?.phone ?? (
-                          <span className="text-muted-foreground">no phone</span>
-                        )}
-                      </td>
                       <td className="py-2">
-                        {c.customer?.email ?? (
-                          <span className="text-muted-foreground">no email</span>
-                        )}
+                        <ContactButtons
+                          phone={c.customer?.phone}
+                          email={c.customer?.email}
+                          size="sm"
+                        />
                       </td>
                       <td
                         className={cn(
