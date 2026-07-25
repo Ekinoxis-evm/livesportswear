@@ -362,8 +362,6 @@ export async function doFinishCustomer(
     linked_orders: merged.linked_orders.length > 0 ? merged.linked_orders : null,
     shopify_customer_id: primary?.customer_id ?? null,
     customer_name: primary?.customer_name ?? null,
-    customer_email: primary?.customer_email ?? null,
-    customer_phone: primary?.customer_phone ?? null,
   });
   if (ins.error) {
     // The client is closed but the record failed — surface it loudly; the

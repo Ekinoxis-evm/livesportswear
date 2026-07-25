@@ -309,8 +309,6 @@ function FinishSteps({
       total: o.net,
       customer_id: o.customer?.id ?? null,
       customer_name: o.customer?.name ?? null,
-      customer_email: o.customer?.email ?? null,
-      customer_phone: o.customer?.phone ?? null,
     }));
     const primary = selected[0] ?? null;
     const finishSold = (got_contact: boolean) =>

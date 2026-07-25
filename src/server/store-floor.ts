@@ -489,8 +489,6 @@ const retakeOrderSchema = z.object({
   total: z.number().min(0),
   customer_id: z.string().max(30).nullish(),
   customer_name: z.string().max(120).nullish(),
-  customer_email: z.string().max(200).nullish(),
-  customer_phone: z.string().max(40).nullish(),
 });
 
 /** Today's attendances for one employee — the pick-list for a re-take. */
@@ -557,7 +555,7 @@ export async function storeRetake(input: unknown): Promise<ActionResult> {
   const { data: existing } = await service
     .from("client_events")
     .select(
-      "sold, got_contact, order_total, shopify_order_id, shopify_order_name, shopify_customer_id, customer_name, customer_email, customer_phone, linked_orders",
+      "sold, got_contact, order_total, shopify_order_id, shopify_order_name, shopify_customer_id, customer_name, linked_orders",
     )
     .eq("id", parsed.data.eventId)
     .eq("location_id", locationId)

@@ -13,8 +13,6 @@ const event = (e: Partial<ExistingEvent> = {}): ExistingEvent => ({
   shopify_order_name: null,
   shopify_customer_id: null,
   customer_name: null,
-  customer_email: null,
-  customer_phone: null,
   linked_orders: null,
   ...e,
 });
@@ -79,23 +77,21 @@ describe("retakePatch — bought", () => {
   it("links the new order and its customer", () => {
     const patch = retakePatch(event(), {
       sold: true,
-      orders: [order({ customer_id: "c1", customer_name: "Maria", customer_email: "m@x.com" })],
+      orders: [order({ customer_id: "c1", customer_name: "Maria" })],
     });
     expect(patch).toMatchObject({
       shopify_order_name: "#1043",
       shopify_customer_id: "c1",
       customer_name: "Maria",
-      customer_email: "m@x.com",
     });
   });
 
-  it("never blanks contact captured on the first visit", () => {
+  it("never blanks the customer name captured on the first visit", () => {
     const patch = retakePatch(
-      event({ customer_name: "Maria", customer_phone: "+13055551234", order_total: 10, shopify_order_id: "1" }),
-      { sold: true, orders: [order({ customer_name: null, customer_phone: null })] },
+      event({ customer_name: "Maria", order_total: 10, shopify_order_id: "1" }),
+      { sold: true, orders: [order({ customer_name: null })] },
     );
     expect(patch.customer_name).toBe("Maria");
-    expect(patch.customer_phone).toBe("+13055551234");
   });
 
   it("keeps the earlier order reference and total when the re-take links none", () => {
