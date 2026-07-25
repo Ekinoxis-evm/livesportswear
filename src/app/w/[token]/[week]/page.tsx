@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Crown, Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { weekStart, weekDays, addDays, isoWeekday, formatWeekRange } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { SHIFT_SLOTS, templateForSlot, shiftMatchesSlot } from "@/lib/shift-slots";
+import { SLOT_COLOR } from "@/lib/shift-color";
+import { ShiftChip } from "@/components/schedule/shift-chip";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { getShareDaySales, getShareWeekSales } from "@/lib/share-sales-cache";
 import { staffRowsFromEntries, type SalesRankRow } from "@/lib/sales-period";
@@ -22,12 +24,6 @@ import { sumBreakdowns, type SalesBreakdown } from "@/lib/sales-breakdown";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hhmm = (t: string) => t.slice(0, 5);
 
-// Same fallback colors as the admin board's slot rows.
-const SLOT_COLOR: Record<string, string> = {
-  morning: "#22c55e",
-  evening: "#a855f7",
-};
-
 type ShiftRow = {
   employee_id: string;
   date: string;
@@ -39,22 +35,12 @@ type ShiftRow = {
 
 function Chip({ shift, withTime }: { shift: ShiftRow; withTime?: boolean }) {
   return (
-    <span className="bg-muted flex items-center gap-1 rounded-md px-2 py-1 text-xs">
-      <span
-        aria-hidden
-        className="size-2.5 shrink-0 rounded-full border"
-        style={{ backgroundColor: shift.employee?.avatar_color ?? "transparent" }}
-      />
-      {shift.employee?.role === "store_manager" && (
-        <Crown className="size-3 shrink-0 text-amber-500" />
-      )}
-      <span className="truncate">{shift.employee?.name ?? "—"}</span>
-      {withTime && (
-        <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">
-          {hhmm(shift.start_time)}–{hhmm(shift.end_time)}
-        </span>
-      )}
-    </span>
+    <ShiftChip
+      name={shift.employee?.name ?? "—"}
+      color={shift.employee?.avatar_color}
+      isManager={shift.employee?.role === "store_manager"}
+      timeLabel={withTime ? `${hhmm(shift.start_time)}–${hhmm(shift.end_time)}` : undefined}
+    />
   );
 }
 
