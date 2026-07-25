@@ -1,21 +1,9 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { LocationFormSheet } from "@/components/location/location-form-sheet";
-import { LocationActiveToggle } from "@/components/location/location-actions";
 import { StoreAccountPanel } from "@/components/location/store-account-panel";
-import { CopyButton } from "@/components/shared/copy-button";
-import { businessDate } from "@/lib/business-date";
-import { weekStart } from "@/lib/scheduling/week";
+import { LocationsTable } from "@/components/admin/locations-table";
 import {
   Card,
   CardContent,
@@ -59,62 +47,7 @@ export default async function LocationsPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Slug</TableHead>
-              <TableHead>Timezone</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {locations.map((loc) => (
-              <TableRow key={loc.id} className={loc.active ? "" : "opacity-60"}>
-                <TableCell className="font-medium">
-                  <span className="flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className="size-3 shrink-0 rounded-full border"
-                      style={{
-                        backgroundColor: loc.color ?? "transparent",
-                      }}
-                    />
-                    {loc.name}
-                  </span>
-                </TableCell>
-                <TableCell className="text-muted-foreground font-mono text-xs">
-                  {loc.slug}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {loc.timezone}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={loc.active ? "default" : "secondary"}>
-                    {loc.active ? "Active" : "Inactive"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    {loc.share_token && (
-                      <CopyButton
-                        value={`${appUrl}/w/${loc.share_token}/${weekStart(businessDate(loc.timezone))}`}
-                        label="Copy schedule link"
-                      />
-                    )}
-                    <LocationFormSheet location={loc}>
-                      <Button variant="ghost" size="sm">
-                        Edit
-                      </Button>
-                    </LocationFormSheet>
-                    <LocationActiveToggle id={loc.id} active={loc.active} />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <LocationsTable rows={locations} appUrl={appUrl} />
       )}
 
       {locations && locations.length > 0 && (

@@ -4,8 +4,7 @@ import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
 import { getPayPeriod } from "@/lib/payroll-config";
 import { sprintRange, payday } from "@/lib/scheduling/payroll";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Card,
@@ -14,17 +13,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { EmployeeRowActions } from "@/components/employee/employee-actions";
+import { EmployeesTable } from "@/components/admin/employees-table";
 import { PayPeriodForm } from "@/components/settings/pay-period-form";
-import { formatMoney } from "@/lib/commission";
 import { shortDate, shortDateRange } from "@/lib/format-date";
 
 export default async function EmployeesPage() {
@@ -123,63 +113,19 @@ export default async function EmployeesPage() {
           <AlertDescription>Add your first team member.</AlertDescription>
         </Alert>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden sm:table-cell">Email</TableHead>
-              <TableHead className="tabular-nums">Rate</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {employees.map((emp) => (
-              <TableRow key={emp.id} className={emp.active ? "" : "opacity-60"}>
-                <TableCell className="font-medium">
-                  <span className="flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className="size-3 shrink-0 rounded-full border"
-                      style={{
-                        backgroundColor: emp.avatar_color ?? "transparent",
-                      }}
-                    />
-                    <Link
-                      href={`/admin/employees/${emp.id}`}
-                      className="hover:underline"
-                    >
-                      {emp.name}
-                    </Link>
-                    {!emp.active && <Badge variant="secondary">Inactive</Badge>}
-                  </span>
-                </TableCell>
-                <TableCell className="text-muted-foreground hidden sm:table-cell">
-                  {emp.email}
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  {rateBy.get(emp.id) != null
-                    ? `${formatMoney(Number(rateBy.get(emp.id)), currency)}/h`
-                    : "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Link href={`/admin/employees/${emp.id}`}>
-                      <Button variant="ghost" size="sm">
-                        Details
-                      </Button>
-                    </Link>
-                    <EmployeeRowActions
-                      id={emp.id}
-                      active={emp.active}
-                      token={emp.magic_token}
-                      appUrl={appUrl}
-                    />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <EmployeesTable
+          currency={currency}
+          appUrl={appUrl}
+          rows={employees.map((emp) => ({
+            id: emp.id,
+            name: emp.name,
+            email: emp.email,
+            avatarColor: emp.avatar_color,
+            active: emp.active,
+            magicToken: emp.magic_token,
+            rate: rateBy.get(emp.id) != null ? Number(rateBy.get(emp.id)) : null,
+          }))}
+        />
       )}
     </div>
   );
