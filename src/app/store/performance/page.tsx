@@ -24,7 +24,7 @@ import {
 } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
-import { GoalPaceLine } from "@/components/shared/goal-pace-line";
+import { GoalIndicator } from "@/components/shared/goal-indicator";
 import { goalPace } from "@/lib/goal-pace";
 import { ScrollTable } from "@/components/shared/scroll-table";
 import {
@@ -335,13 +335,14 @@ export default async function StorePerformancePage({
                   />
                 </div>
               )}
-              {monthGoal > 0 && (
-                <GoalPaceLine
-                  pace={goalPace(monthGoal, monthTotal, bd, month)}
-                  format={(n) => formatMoney(n, currency)}
-                />
-              )}
             </div>
+          )}
+
+          {mode === "month" && monthGoal > 0 && (
+            <GoalIndicator
+              pace={goalPace(monthGoal, monthTotal, bd, month)}
+              format={(n) => formatMoney(n, currency)}
+            />
           )}
 
           {mode !== "month" &&

@@ -29,7 +29,7 @@ import {
 } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
-import { GoalPaceLine } from "@/components/shared/goal-pace-line";
+import { GoalIndicator } from "@/components/shared/goal-indicator";
 import { goalPace } from "@/lib/goal-pace";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
@@ -266,14 +266,12 @@ export default async function SalesTabPage({
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
                 {paceRows.map((r) => (
-                  <div
-                    key={r.name}
-                    className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-2 last:border-0 last:pb-0"
-                  >
+                  <div key={r.name} className="flex flex-col gap-1.5">
                     <span className="text-sm font-medium">{r.name}</span>
-                    <GoalPaceLine
+                    <GoalIndicator
                       pace={r.pace}
                       format={(n) => formatMoney(n, currency)}
+                      compact
                     />
                   </div>
                 ))}
