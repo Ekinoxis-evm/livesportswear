@@ -11,9 +11,13 @@ import { businessDate } from "@/lib/business-date";
 import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
 import { validateSchedule, biweeklyHourWarnings } from "@/lib/scheduling/rules";
-import { buildShiftGrid, accumulatedShiftCounts } from "@/lib/scheduling/shift-grid";
+import {
+  buildShiftGrid,
+  accumulatedShiftCounts,
+  weekdayShiftGrid,
+} from "@/lib/scheduling/shift-grid";
 import { ShiftCountGrid } from "@/components/schedule/shift-count-grid";
-import { ShiftTotals } from "@/components/schedule/shift-totals";
+import { AllTimeShifts } from "@/components/schedule/all-time-shifts";
 import { getPayPeriod } from "@/lib/payroll-config";
 import type { Violation } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
@@ -114,16 +118,16 @@ export default async function SchedulesPage({
     shiftRows = data ?? [];
   }
 
-  // Every shift ever scheduled at this store — for the all-time accumulated
-  // counts (start_time is all the AM/PM split needs).
+  // Every shift ever scheduled at this store — for the all-time views. `date`
+  // powers the by-weekday bucketing; `start_time` the AM/PM split.
   const { data: allShiftRows } = await supabase
     .from("shifts")
-    .select("employee_id, start_time, schedules!inner(location_id)")
+    .select("employee_id, start_time, date, schedules!inner(location_id)")
     .eq("schedules.location_id", locationId);
   const accumulatedShifts = (allShiftRows ?? []).map((s) => ({
     employee_id: s.employee_id,
     start_time: s.start_time,
-    date: "",
+    date: s.date,
     end_time: "",
     shift_template_id: null,
   }));
@@ -362,8 +366,12 @@ export default async function SchedulesPage({
       )}
 
       {accumulatedShifts.length > 0 && (
-        <ShiftTotals
-          rows={accumulatedShiftCounts(
+        <AllTimeShifts
+          totals={accumulatedShiftCounts(
+            accumulatedShifts,
+            empList.map((e) => ({ id: e.id, name: e.name })),
+          )}
+          weekday={weekdayShiftGrid(
             accumulatedShifts,
             empList.map((e) => ({ id: e.id, name: e.name })),
           )}

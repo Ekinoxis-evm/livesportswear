@@ -1,6 +1,7 @@
 import { isoWeekday } from "@/lib/scheduling/week";
-import type { ShiftGrid, ShiftCell } from "@/lib/scheduling/shift-grid";
+import type { ShiftGrid } from "@/lib/scheduling/shift-grid";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { Cell, SHORT_WEEKDAYS } from "@/components/schedule/shift-cell";
 import {
   Card,
   CardContent,
@@ -8,40 +9,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-const SHORT_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-/** One half of a cell — a count that dims to nothing when it's zero. */
-function Half({ label, n }: { label: string; n: number }) {
-  return (
-    <span className="flex flex-1 flex-col items-center">
-      <span className="text-[10px] uppercase opacity-50">{label}</span>
-      <span
-        className={
-          "tabular-nums " + (n > 0 ? "font-semibold" : "text-muted-foreground/40")
-        }
-      >
-        {n}
-      </span>
-    </span>
-  );
-}
-
-function Cell({ cell }: { cell: ShiftCell }) {
-  const empty = cell.am === 0 && cell.pm === 0;
-  return (
-    <div
-      className={
-        "flex items-stretch gap-px rounded-md border text-sm " +
-        (empty ? "opacity-50" : "")
-      }
-    >
-      <Half label="AM" n={cell.am} />
-      <span className="bg-border w-px" aria-hidden />
-      <Half label="PM" n={cell.pm} />
-    </div>
-  );
-}
 
 /**
  * Shift counts for the displayed week: employees down the rows, days across the
