@@ -9,6 +9,7 @@ import { customRangeInTz } from "@/lib/shopify-range";
 import { getStaffSalesCached, getShopSalesCached } from "@/lib/shopify-range-cache";
 import { repMonthlyData } from "@/lib/monthly-series";
 import { shortDate } from "@/lib/format-date";
+import { formatMoney } from "@/lib/commission";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -28,6 +29,8 @@ import {
 } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
+import { GoalPaceLine } from "@/components/shared/goal-pace-line";
+import { goalPace } from "@/lib/goal-pace";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
 export default async function SalesTabPage({
@@ -119,12 +122,39 @@ export default async function SalesTabPage({
   let rankRows: SalesRankRow[] = [];
   let shopTotal: (SalesBreakdown & { orders: number }) | null = null;
   const unmappedCount = locActive.filter((e) => !e.shopify_staff_id).length;
+  // Per-rep goal pace, month mode only: how far each is from their monthly goal
+  // and what they must average per remaining day. Managers see who's behind.
+  let paceRows: {
+    name: string;
+    pace: ReturnType<typeof goalPace>;
+  }[] = [];
   if (mode === "month") {
-    const { data: monthSalesRows } = await supabase
-      .from("monthly_sales")
-      .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
-      .eq("month", today.slice(0, 7));
+    const monthStr = today.slice(0, 7);
+    const [{ data: monthSalesRows }, { data: goalRows }] = await Promise.all([
+      supabase
+        .from("monthly_sales")
+        .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
+        .eq("month", monthStr),
+      supabase
+        .from("employee_goals")
+        .select("employee_id, goal_amount")
+        .eq("year", Number(monthStr.slice(0, 4)))
+        .eq("month", Number(monthStr.slice(5, 7))),
+    ]);
     rankRows = monthRows(monthSalesRows ?? [], locActive, { keepZeros: true });
+    const soldOf = new Map(
+      (monthSalesRows ?? []).map((r) => [r.employee_id, Number(r.amount)]),
+    );
+    const goalOf = new Map(
+      (goalRows ?? []).map((r) => [r.employee_id, Number(r.goal_amount)]),
+    );
+    paceRows = locActive
+      .map((e) => ({
+        name: e.name,
+        pace: goalPace(goalOf.get(e.id) ?? 0, soldOf.get(e.id) ?? 0, today, monthStr),
+      }))
+      .filter((r) => r.pace.goal > 0)
+      .sort((a, b) => b.pace.remaining - a.pace.remaining);
   } else if (isShopifyConfigured()) {
     const range = customRangeInTz(bounds.from, bounds.to, location.timezone);
     const [entries, shop] = await Promise.all([
@@ -224,6 +254,32 @@ export default async function SalesTabPage({
               <SalesRankTable rows={rankRows} currency={currency} showShare />
             </CardContent>
           </Card>
+
+          {paceRows.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Goal pace</CardTitle>
+                <CardDescription>
+                  Who&apos;s left to reach their monthly goal, and the daily pace
+                  needed — behind first.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                {paceRows.map((r) => (
+                  <div
+                    key={r.name}
+                    className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-2 last:border-0 last:pb-0"
+                  >
+                    <span className="text-sm font-medium">{r.name}</span>
+                    <GoalPaceLine
+                      pace={r.pace}
+                      format={(n) => formatMoney(n, currency)}
+                    />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {unmappedCount > 0 && (
             <p className="text-muted-foreground text-xs">

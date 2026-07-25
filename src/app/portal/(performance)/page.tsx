@@ -20,6 +20,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Stat, StatGrid, GoalBar } from "@/components/portal/stats";
+import { GoalPaceLine } from "@/components/shared/goal-pace-line";
+import { goalPace } from "@/lib/goal-pace";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
 export default async function PortalOverviewPage() {
@@ -172,6 +174,10 @@ export default async function PortalOverviewPage() {
             label="Your monthly goal"
             value={mySales}
             goal={goalAmount}
+            format={(n) => formatMoney(n, currency)}
+          />
+          <GoalPaceLine
+            pace={goalPace(goalAmount, mySales, today, month)}
             format={(n) => formatMoney(n, currency)}
           />
 

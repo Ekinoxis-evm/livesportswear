@@ -24,6 +24,8 @@ import {
 } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
+import { GoalPaceLine } from "@/components/shared/goal-pace-line";
+import { goalPace } from "@/lib/goal-pace";
 import { ScrollTable } from "@/components/shared/scroll-table";
 import {
   SalesBreakdownBlock,
@@ -332,6 +334,12 @@ export default async function StorePerformancePage({
                     style={{ width: `${Math.min((monthTotal / monthGoal) * 100, 100)}%` }}
                   />
                 </div>
+              )}
+              {monthGoal > 0 && (
+                <GoalPaceLine
+                  pace={goalPace(monthGoal, monthTotal, bd, month)}
+                  format={(n) => formatMoney(n, currency)}
+                />
               )}
             </div>
           )}
