@@ -67,10 +67,11 @@ export default async function MarketingPage() {
 
   const byCampaign = new Map<
     string,
-    { name: string; spend: number; revenue: number; purchases: number }
+    { id: string; name: string; spend: number; revenue: number; purchases: number }
   >();
   for (const r of insights) {
     const c = byCampaign.get(r.campaign_id) ?? {
+      id: r.campaign_id,
       name: r.campaign_name ?? "—",
       spend: 0,
       revenue: 0,
@@ -139,7 +140,7 @@ export default async function MarketingPage() {
                 </TableHeader>
                 <TableBody>
                   {campaigns.map((c) => (
-                    <TableRow key={c.name}>
+                    <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatMoney(c.spend, currency)}
