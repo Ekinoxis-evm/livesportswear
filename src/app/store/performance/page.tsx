@@ -77,7 +77,7 @@ export default async function StorePerformancePage({
     service
       .from("client_events")
       .select(
-        "id, employee_id, attended_at, kind, return_type, sold, got_contact, order_total, shopify_order_name, customer_name",
+        "id, employee_id, attended_at, kind, return_type, sold, got_contact, order_total, shopify_order_name, linked_orders, customer_name",
       )
       .eq("location_id", locationId)
       .eq("business_date", bd),
@@ -203,6 +203,11 @@ export default async function StorePerformancePage({
       gotContact: e.got_contact,
       orderName: e.shopify_order_name,
       orderTotal: e.order_total,
+      orderCount: Array.isArray(e.linked_orders)
+        ? e.linked_orders.length
+        : e.shopify_order_name
+          ? 1
+          : 0,
       customer: e.customer_name,
     }));
 

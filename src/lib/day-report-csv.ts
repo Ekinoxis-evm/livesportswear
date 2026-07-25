@@ -19,17 +19,21 @@ export type ReportEvent = {
   reasons?: string[] | null;
   products?: { title: string; sku?: string | null }[] | null;
   note?: string | null;
-  orderName?: string | null; // linked Shopify order, e.g. "#1234"
-  orderTotal?: number | null;
+  orderName?: string | null; // primary linked Shopify order, e.g. "#1234"
+  orderTotal?: number | null; // SUM across all linked orders
+  orderCount?: number | null; // how many orders are linked (>1 = split sale)
   customerName?: string | null;
 };
 
-export const orderLabel = (e: Pick<ReportEvent, "orderName" | "orderTotal">) =>
-  e.orderName
-    ? e.orderTotal != null
-      ? `${e.orderName} ($${e.orderTotal.toFixed(2)})`
-      : e.orderName
-    : "";
+export const orderLabel = (
+  e: Pick<ReportEvent, "orderName" | "orderTotal" | "orderCount">,
+) => {
+  if (!e.orderName) return "";
+  const extra = e.orderCount && e.orderCount > 1 ? ` +${e.orderCount - 1} more` : "";
+  return e.orderTotal != null
+    ? `${e.orderName}${extra} ($${e.orderTotal.toFixed(2)})`
+    : `${e.orderName}${extra}`;
+};
 
 export const productLabel = (p: { title: string; sku?: string | null }) =>
   p.sku ? `${p.title} [${p.sku}]` : p.title;

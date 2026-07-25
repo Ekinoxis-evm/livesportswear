@@ -52,6 +52,26 @@ describe("buildDayReportCsv", () => {
     expect(lines).toContain("Maryna,09:30,17:30,8,25,validated,validated");
   });
 
+  it("flags a split sale with the extra-order count and summed total", () => {
+    const csv = buildDayReportCsv({
+      businessDate: "2026-07-09",
+      tz,
+      events: [
+        {
+          employeeName: "Maryna",
+          attended_at: "2026-07-09T15:30:00Z",
+          sold: true,
+          got_contact: false,
+          orderName: "#1042",
+          orderTotal: 205,
+          orderCount: 2,
+        },
+      ],
+      checkins: [],
+    });
+    expect(csv).toContain("#1042 +1 more ($205.00)");
+  });
+
   it("leaves out-time and hours empty while still on the floor", () => {
     const csv = buildDayReportCsv({
       businessDate: "2026-07-09",

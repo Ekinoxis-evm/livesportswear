@@ -155,7 +155,11 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
       x.kind ?? "walkin",
       x.returnType ?? "",
       x.sold ? "sold" : "no sale",
-      x.orderName ?? "",
+      x.orderName
+        ? x.orderCount && x.orderCount > 1
+          ? `${x.orderName} +${x.orderCount - 1} more`
+          : x.orderName
+        : "",
       x.orderTotal ?? null,
       x.customerName ?? "",
       (x.reasons ?? []).join("; "),

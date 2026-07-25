@@ -23,6 +23,7 @@ export type AttendanceRow = {
   gotContact: boolean;
   orderName: string | null;
   orderTotal: number | null;
+  orderCount: number; // linked orders (>1 = split across receipts)
   customer: string | null;
 };
 
@@ -126,7 +127,10 @@ export function AttendanceToday({
                         <>
                           <span className="font-medium">{formatMoney(r.orderTotal, currency)}</span>
                           {r.orderName && (
-                            <span className="text-muted-foreground block text-xs">{r.orderName}</span>
+                            <span className="text-muted-foreground block text-xs">
+                              {r.orderName}
+                              {r.orderCount > 1 && ` +${r.orderCount - 1}`}
+                            </span>
                           )}
                         </>
                       ) : (
