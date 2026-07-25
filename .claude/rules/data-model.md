@@ -143,16 +143,22 @@ layer (counts), not money.
   business date** — without the date check a kiosk left open overnight could
   rewrite a closed day.
 - `shopify_order_id/_name`, `order_total`, `shopify_customer_id`,
-  `customer_name/_email/_phone` (added 0037) — a sold walk-in optionally
-  links the real Shopify order + its customer (picked from the last orders
-  on the kiosk). The client-history seed, read by `/admin/clients` (per
-  customer: latest contact, the rep who captured it = first got_contact
-  event, visits, linked totals; live Shopify orders/spend via
-  `fetchCustomersByIds`). PII: stays in the DB under the existing RLS;
-  NEVER log customer contact. Partial index
-  `(location_id, shopify_customer_id)` powers the grouping.
-  Historical attribution for customers created before linking now lives in
+  `customer_name` (added 0037) — a sold walk-in optionally links the real
+  Shopify order + its customer (picked from the last orders on the kiosk).
+  `shopify_customer_id` links to Shopify, where contact lives; `customer_name`
+  is the only shown field. **`customer_email/_phone` are no longer written
+  (2026-07-25 PII tightening)** — nothing read them (admin/portal client books
+  fetch contact from Shopify directly), so the kiosk stopped shipping them to
+  the browser and storing them; the columns remain nullable for old rows.
+  Historical attribution for customers created before linking lives in
   `customer_origin` (0042) — this table stays the *event* log.
+- `linked_orders jsonb` (added 0049) — a sold walk-in can span SEVERAL Shopify
+  orders (split payment, two receipts). Holds the full set as
+  `[{id,name,total,customer_*}]` (same pattern as `products`/`reasons`); the
+  single `shopify_order_*` columns mirror the FIRST (primary) order and
+  `order_total` is the SUM. Null = old row or no order linked. Merge/dedupe
+  (by id) rule is pure in `src/lib/linked-orders.ts` (`mergeLinkedOrders`),
+  shared by the finish insert and the re-take patch (`src/lib/retake.ts`).
 - index `(location_id, business_date)`, `(employee_id, business_date)`
 
 > **`client_events` is an interaction log, not a client list.** One row = one
@@ -470,23 +476,13 @@ against Shopify's CURRENT on-hand into a reviewable DRAFT; an admin reviews
 - RLS: admin-only via `admin_can_access_location` (items via exists-join to
   the parent draft); no employee/kiosk policies.
 
-### `attendance_validations` (added 0015 — LEGACY since 0019)
+### `attendance_validations` (added 0015 — DROPPED 0050)
 
-> No longer written: check-ins moved to the store kiosk, whose stamps are
-> validated directly. Kept for historical rows; drop in a future migration.
-
-One-time QR tokens for entry/exit attestation (audit trail). The employee's
-Today card shows a QR encoding `/portal/validate/{token}`; an active coworker
-at the store opens it and confirms (`validateAttendance`, `src/server/floor.ts`).
-- `id uuid pk`
-- `checkin_id uuid fk -> floor_checkins (on delete cascade)`
-- `kind text` — `entry | exit`
-- `token text not null unique` — 32-byte base64url (`generateMagicToken()`);
-  same handling rules as employee magic tokens (see security.md)
-- `created_at`, `used_at timestamptz`, `validated_by uuid fk -> employees`
-- `unique (checkin_id, kind)` — re-marking rotates the token
-- RLS: select only (admin via location join + same-location employees); all
-  writes via service-client server actions.
+> **Dropped 2026-07-25 (migration 0050).** These were one-time QR tokens for the
+> peer entry/exit attestation flow, unreferenced by any code since the store
+> kiosk (0019) became the only check-in surface (kiosk stamps are recorded
+> validated: device + PIN). The table survived only in the schema; it is now
+> gone. Kept here for historical context of migrations 0015–0049.
 
 > RLS helpers (0009): `is_master_admin()`, `admin_can_access_location(loc)`
 > (`security definer`). New tables are already location-scoped; the existing
