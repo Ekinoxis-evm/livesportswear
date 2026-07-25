@@ -107,12 +107,6 @@ export async function inviteAdmin(
   return { ok: true, data: { password, email, emailed: sent.ok } };
 }
 
-const setLocsSchema = z.object({
-  adminUserId: uuid,
-  locationIds: z.array(uuid),
-});
-
-
 /** Delete a scoped admin account (master admins can't be removed here). */
 export async function removeAdmin(adminUserId: string): Promise<ActionResult> {
   const master = await requireMasterAdmin();

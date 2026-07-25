@@ -105,16 +105,6 @@ export async function submitTimeOff(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
-const ownSchema = z
-  .object({
-    start_date: z.string().refine(isValidDateStr, "Invalid start date."),
-    end_date: z.string().refine(isValidDateStr, "Invalid end date."),
-    reason: z.preprocess(emptyToNull, z.string().max(500).nullable()),
-  })
-  .refine((d) => d.end_date >= d.start_date, {
-    message: "End date can't be before the start date.",
-    path: ["end_date"],
-  });
 
 
 const daysSchema = z.object({

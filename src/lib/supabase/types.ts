@@ -112,51 +112,6 @@ export type Database = {
         }
         Relationships: []
       }
-      attendance_validations: {
-        Row: {
-          checkin_id: string
-          created_at: string
-          id: string
-          kind: string
-          token: string
-          used_at: string | null
-          validated_by: string | null
-        }
-        Insert: {
-          checkin_id: string
-          created_at?: string
-          id?: string
-          kind: string
-          token: string
-          used_at?: string | null
-          validated_by?: string | null
-        }
-        Update: {
-          checkin_id?: string
-          created_at?: string
-          id?: string
-          kind?: string
-          token?: string
-          used_at?: string | null
-          validated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attendance_validations_checkin_id_fkey"
-            columns: ["checkin_id"]
-            isOneToOne: false
-            referencedRelation: "floor_checkins"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_validations_validated_by_fkey"
-            columns: ["validated_by"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       client_events: {
         Row: {
           attended_at: string

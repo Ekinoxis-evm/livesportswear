@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  Percent,
   Megaphone,
   MapPin,
   ScanBarcode,

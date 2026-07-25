@@ -416,34 +416,6 @@ export async function searchCustomers(
   return body.customers.map(toCustomer);
 }
 
-export type CustomerStats = { ordersCount: number; totalSpent: number };
-
-/**
- * Shopify stats for a set of customer ids — the clients view's live
- * enrichment. Failures degrade to an empty map; the page must render from
- * our own data regardless.
- */
-export async function fetchCustomersByIds(
-  ids: string[],
-): Promise<Map<string, CustomerStats>> {
-  const out = new Map<string, CustomerStats>();
-  for (let i = 0; i < ids.length; i += 250) {
-    const chunk = ids.slice(i, i + 250);
-    const { body } = await shopifyRest<{
-      customers: { id: number; orders_count: number; total_spent: string }[];
-    }>(
-      `/customers.json?ids=${chunk.join(",")}&limit=250&fields=id,orders_count,total_spent`,
-    );
-    for (const c of body.customers) {
-      out.set(String(c.id), {
-        ordersCount: c.orders_count,
-        totalSpent: Number(c.total_spent),
-      });
-    }
-  }
-  return out;
-}
-
 type RestEvent = { verb: string; author: string | null };
 
 /**
@@ -833,27 +805,6 @@ export async function lookupVariantByBarcode(
       }
     }`,
     { q: `barcode:${sanitized}` },
-  );
-  const v = data.productVariants.nodes[0];
-  return v ? variantHit(v) : null;
-}
-
-/**
- * Resolve one SKU to its variant; null when not in the catalog. Receiving docs
- * often carry a SKU/style code but no barcode — this is the fallback match after
- * `lookupVariantByBarcode`. Returns the same shape (incl. barcode) so a matched
- * line still counts by barcode downstream.
- */
-export async function lookupVariantBySku(sku: string): Promise<VariantHit | null> {
-  const sanitized = sku.replace(/["\\()]/g, "").trim();
-  if (!sanitized) return null;
-  const data = await shopifyGraphql<VariantNodes>(
-    `query($q: String!) {
-      productVariants(first: 1, query: $q) {
-        nodes { barcode sku title inventoryQuantity product { title productType } }
-      }
-    }`,
-    { q: `sku:${sanitized}` },
   );
   const v = data.productVariants.nodes[0];
   return v ? variantHit(v) : null;
