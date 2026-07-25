@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createServerClient } from "@/lib/supabase/server";
+import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
 import { getPayPeriod } from "@/lib/payroll-config";
@@ -89,7 +90,13 @@ export default async function DashboardPage({
         .lte("date", days[6]),
     ]);
 
-  const locations = locationsRes.data ?? [];
+  // A location-scoped admin only sees the stores they manage (locations are
+  // world-readable, so this must be filtered explicitly — like the Performance
+  // pages do — or the dashboard shows cards for stores they don't manage).
+  const access = await accessibleLocationIds();
+  const locations = (locationsRes.data ?? []).filter(
+    (l) => access === "all" || access.includes(l.id),
+  );
   const templates = templatesRes.data ?? [];
   const weekShifts = (weekShiftsRes.data ?? []) as (StatShift & {
     schedules: { location_id: string };

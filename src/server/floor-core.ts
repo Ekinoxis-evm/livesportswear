@@ -321,10 +321,13 @@ export async function doFinishCustomer(
         attending_count: next.walkins,
         attending_return_count: next.returns,
         rotation_count: rotationAfterFinish(cur.rotation, result.kind),
+        // Only a walk-in leaves the line: it restamps available_since (back of
+        // the queue) and clears the bump. A return keeps the member's spot AND
+        // their bump/dragged position — the "returns don't burn a turn" rule,
+        // matching doTakeClient's asymmetry.
         ...(result.kind === "walkin"
-          ? { available_since: new Date().toISOString() }
+          ? { available_since: new Date().toISOString(), bumped_at: null }
           : {}),
-        bumped_at: null,
       },
       { count: "exact" },
     )

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireMasterAdmin } from "@/lib/auth";
 import { tempPassword } from "@/lib/temp-password";
 import { sendSafe } from "@/lib/resend";
 import { CredentialsEmail } from "@/lib/emails/credentials";
@@ -234,7 +234,10 @@ export async function setEmployeeAdmin(
   employeeId: string,
   makeAdmin: boolean,
 ): Promise<ActionResult> {
-  const actor = await requireAdmin();
+  // Only a master admin may change who is an admin — same gate as
+  // inviteAdmin/removeAdmin. Otherwise a location-scoped admin could promote a
+  // same-store employee (and, worse, mint a master — see the scope claim below).
+  const actor = await requireMasterAdmin();
   if (!uuid.safeParse(employeeId).success) {
     return { ok: false, error: "Invalid employee id." };
   }
@@ -242,7 +245,7 @@ export async function setEmployeeAdmin(
   const supabase = await createServerClient();
   const { data: emp } = await supabase
     .from("employees")
-    .select("id, auth_user_id")
+    .select("id, auth_user_id, location_id")
     .eq("id", employeeId)
     .maybeSingle();
   if (!emp?.auth_user_id) {
@@ -254,12 +257,29 @@ export async function setEmployeeAdmin(
 
   const service = createServiceClient();
   const updated = await service.auth.admin.updateUserById(emp.auth_user_id, {
-    app_metadata: {
-      role: makeAdmin ? "admin" : "employee",
-      employee_id: emp.id,
-    },
+    app_metadata: makeAdmin
+      ? // A promoted employee is a LOCATION-scoped admin (like inviteAdmin) —
+        // never a master. A missing admin_scope reads as master (isMasterAdmin),
+        // so it must be set explicitly.
+        { role: "admin", admin_scope: "location", employee_id: emp.id }
+      : { role: "employee", employee_id: emp.id },
   });
   if (updated.error) return { ok: false, error: updated.error.message };
+
+  // A location-scoped admin manages nothing until mapped in admin_locations
+  // (like inviteAdmin). Promote → grant their own store; demote → revoke all.
+  const mapping = makeAdmin
+    ? await service
+        .from("admin_locations")
+        .upsert(
+          { admin_user_id: emp.auth_user_id, location_id: emp.location_id },
+          { onConflict: "admin_user_id,location_id" },
+        )
+    : await service
+        .from("admin_locations")
+        .delete()
+        .eq("admin_user_id", emp.auth_user_id);
+  if (mapping.error) return { ok: false, error: dbError(mapping.error) };
 
   revalidatePath(`/admin/employees/${emp.id}`);
   return { ok: true };
