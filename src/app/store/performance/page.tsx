@@ -246,8 +246,8 @@ export default async function StorePerformancePage({
         <TabsTrigger value="sales" className="h-11 flex-1">
           Sales
         </TabsTrigger>
-        <TabsTrigger value="clients" className="h-11 flex-1">
-          Clients
+        <TabsTrigger value="attendance" className="h-11 flex-1">
+          Attendance
         </TabsTrigger>
         <TabsTrigger value="close" className="h-11 flex-1">
           Close day
@@ -392,36 +392,17 @@ export default async function StorePerformancePage({
       )}
       </TabsContent>
 
-      <TabsContent value="clients" className="flex flex-col gap-5">
-      {/* Clients attended */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardDescription>Attended</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">{t.attended}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Sold</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">{t.sold}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Conversion</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">
-              {t.attended > 0 ? formatPct(t.conversion) : "—"}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Contacts</CardDescription>
-            <CardTitle className="text-2xl tabular-nums">{t.contacts}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <TabsContent value="attendance" className="flex flex-col gap-5">
+      <AttendanceToday
+        rows={attendanceRows}
+        currency={currency}
+        summary={{
+          attended: t.attended,
+          sold: t.sold,
+          conversion: t.attended > 0 ? formatPct(t.conversion) : "—",
+          contacts: t.contacts,
+        }}
+      />
 
       {t.returns > 0 && (
         <Card>
@@ -436,8 +417,6 @@ export default async function StorePerformancePage({
           </CardContent>
         </Card>
       )}
-
-      <AttendanceToday rows={attendanceRows} currency={currency} />
 
       <Card>
         <CardHeader>

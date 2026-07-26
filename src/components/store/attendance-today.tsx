@@ -31,12 +31,21 @@ export type AttendanceRow = {
 
 type Filter = "all" | "sold" | "nosale";
 
+export type AttendanceSummary = {
+  attended: number;
+  sold: number;
+  conversion: string;
+  contacts: number;
+};
+
 export function AttendanceToday({
   rows,
   currency,
+  summary,
 }: {
   rows: AttendanceRow[];
   currency: string;
+  summary?: AttendanceSummary;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const filtered = rows.filter(
@@ -58,6 +67,25 @@ export function AttendanceToday({
         <CardDescription>
           Every walk-in logged on the floor and how it went.
         </CardDescription>
+        {summary && (
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+            {(
+              [
+                ["Attended", String(summary.attended)],
+                ["Sold", String(summary.sold)],
+                ["Conversion", summary.conversion],
+                ["Contacts", String(summary.contacts)],
+              ] as const
+            ).map(([label, value]) => (
+              <span key={label} className="flex items-baseline gap-1.5">
+                <span className="text-xl font-bold tabular-nums">{value}</span>
+                <span className="text-muted-foreground text-xs uppercase tracking-wide">
+                  {label}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex gap-1">
