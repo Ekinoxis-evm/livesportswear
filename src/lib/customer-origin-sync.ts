@@ -15,7 +15,13 @@ import {
 } from "@/lib/customer-origin";
 
 export type AttributionResult =
-  | { ok: true; customers: number; written: number; unmappedStaff: string[] }
+  | {
+      ok: true;
+      customers: number;
+      written: number;
+      unmappedStaff: string[];
+      customerIds: string[]; // the customers seen this pass — for the stats sync
+    }
   | { ok: false; error: string };
 
 /**
@@ -82,7 +88,73 @@ export async function runAttributionSync(since?: string): Promise<AttributionRes
     customers: origins.size,
     written,
     unmappedStaff: unmappedStaffIds(origins, mapped),
+    customerIds: [...origins.keys()],
   };
+}
+
+export type StatsSyncResult =
+  | { ok: true; refreshed: number }
+  | { ok: false; error: string };
+
+/**
+ * Caches each client's Shopify stats (name, orders, total spent) onto
+ * `customer_origin` so the client lists can sort + paginate by them in the DB.
+ * `ids` refreshes exactly those (the customers just seen ordering); `staleLimit`
+ * additionally tops up with the N stalest rows (never-synced first), so a cheap
+ * cron call cycles the whole book over time without hammering Shopify.
+ *
+ * Service client: called from the cron and the admin rebuild, writes across
+ * every customer regardless of RLS scope.
+ */
+export async function runCustomerStatsSync(
+  ids?: string[],
+  staleLimit = 0,
+): Promise<StatsSyncResult> {
+  if (!isShopifyConfigured()) {
+    return { ok: false, error: "Shopify isn't connected yet." };
+  }
+  const supabase = createServiceClient();
+
+  const target = new Set<string>(ids ?? []);
+  if (staleLimit > 0) {
+    const { data, error } = await supabase
+      .from("customer_origin")
+      .select("shopify_customer_id")
+      .order("stats_synced_at", { ascending: true, nullsFirst: true })
+      .limit(staleLimit);
+    if (error) return { ok: false, error: error.message };
+    for (const r of data ?? []) target.add(r.shopify_customer_id);
+  }
+
+  const list = [...target];
+  if (list.length === 0) return { ok: true, refreshed: 0 };
+
+  let refreshed = 0;
+  // fetchCustomersDetails caps at 250 ids per call.
+  for (let i = 0; i < list.length; i += 250) {
+    const chunk = list.slice(i, i + 250);
+    let details: Map<string, ShopifyCustomer>;
+    try {
+      details = await fetchCustomersDetails(chunk);
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Shopify error." };
+    }
+    const rows = chunk
+      .map((id) => details.get(id))
+      .filter((c): c is ShopifyCustomer => c != null)
+      .map((c) => ({
+        shopify_customer_id: c.id,
+        customer_name: c.name,
+        orders_count: c.ordersCount,
+        total_spent: c.totalSpent,
+      }));
+    if (rows.length > 0) {
+      const { error } = await supabase.rpc("update_customer_stats", { rows });
+      if (error) return { ok: false, error: error.message };
+      refreshed += rows.length;
+    }
+  }
+  return { ok: true, refreshed };
 }
 
 export type CountrySyncResult =

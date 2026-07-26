@@ -9,7 +9,12 @@ import {
   type ShopifyCustomer,
 } from "@/lib/shopify";
 import { normalizeStaffId } from "@/lib/shopify-range";
-import { countryFromPhone, countryTally, type Country } from "@/lib/phone-country";
+import {
+  countryFromPhone,
+  countryFromIso,
+  countryTally,
+  type Country,
+} from "@/lib/phone-country";
 import { formatMoney } from "@/lib/commission";
 import { fullDate } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
@@ -23,6 +28,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { ServerSortTh } from "@/components/shared/server-sort-head";
 import { ContactButtons } from "@/components/shared/contact-buttons";
 import { RebuildAttributionButton } from "@/components/admin/rebuild-attribution-button";
 import {
@@ -39,34 +45,60 @@ type TallyRow = {
   clients: number;
 };
 
+// Sort keys → DB columns (the default list only; a search stays Shopify-ordered).
+const SORT_COLS: Record<string, string> = {
+  name: "customer_name",
+  first_order: "first_order_at",
+  orders: "orders_count",
+  spent: "total_spent",
+  country: "country_iso",
+};
+
 type OriginRow = {
   shopify_customer_id: string;
   first_order_name: string | null;
   first_order_at: string;
   staff_id: string | null;
+  // Cached Shopify stats (null on a search row, or before the first stats sync).
+  customer_name?: string | null;
+  orders_count?: number | null;
+  total_spent?: number | null;
+  country_iso?: string | null;
+  stats_synced_at?: string | null;
 };
 
 type ClientRow = {
   customerId: string;
-  customer: ShopifyCustomer | null;
-  country: Country | null; // read from the phone's country indicator
+  name: string;
+  phone: string | null;
+  email: string | null;
+  country: Country | null;
   broughtInBy: string; // rep name, "former staff", or "—"
   firstOrderName: string | null;
   firstOrderAt: string | null;
   visits: number; // from our own floor events, where we have them
-  linkedTotal: number;
+  orders: number | null;
+  spent: number | null;
 };
 
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; rep?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    rep?: string;
+    page?: string;
+    sort?: string;
+    dir?: string;
+  }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
   const supabase = await createServerClient();
   const q = (sp.q ?? "").trim();
   const page = Math.max(1, Number(sp.page) || 1);
+  const sort = sp.sort && SORT_COLS[sp.sort] ? sp.sort : "first_order";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
 
   // Every employee, NOT just active ones: attribution reaches back to 2024, and
   // the biggest client-bringers are often people who have since left. Filtering
@@ -140,7 +172,9 @@ export default async function ClientsPage({
       const { data } = found.length
         ? await supabase
             .from("customer_origin")
-            .select("shopify_customer_id, first_order_name, first_order_at, staff_id")
+            .select(
+              "shopify_customer_id, first_order_name, first_order_at, staff_id, customer_name, orders_count, total_spent, country_iso, stats_synced_at",
+            )
             .in(
               "shopify_customer_id",
               found.map((c) => c.id),
@@ -167,10 +201,11 @@ export default async function ClientsPage({
 
     const base = supabase
       .from("customer_origin")
-      .select("shopify_customer_id, first_order_name, first_order_at, staff_id", {
-        count: "exact",
-      })
-      .order("first_order_at", { ascending: false })
+      .select(
+        "shopify_customer_id, first_order_name, first_order_at, staff_id, customer_name, orders_count, total_spent, country_iso, stats_synced_at",
+        { count: "exact" },
+      )
+      .order(SORT_COLS[sort], { ascending: dir === "asc", nullsFirst: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     const { data, count } = await (rep?.shopify_staff_id
       ? base.eq("staff_id", normalizeStaffId(rep.shopify_staff_id))
@@ -220,20 +255,28 @@ export default async function ClientsPage({
 
   const clients: ClientRow[] = origins.map((o) => {
     const seen = visits.get(o.shopify_customer_id);
+    // `customer` here is the live per-page fetch — used for contact (email/phone)
+    // and as the fallback for a search row that has no cached stats yet.
     const customer = customers.get(o.shopify_customer_id) ?? null;
     return {
       customerId: o.shopify_customer_id,
-      customer,
-      country: countryFromPhone(customer?.phone),
+      name: o.customer_name ?? customer?.name ?? `Customer ${o.shopify_customer_id}`,
+      phone: customer?.phone ?? null,
+      email: customer?.email ?? null,
+      country: o.country_iso
+        ? countryFromIso(o.country_iso)
+        : countryFromPhone(customer?.phone),
       broughtInBy: o.staff_id
         ? (nameByStaff.get(normalizeStaffId(o.staff_id)) ?? "former staff")
         : "—",
       firstOrderName: o.first_order_name,
       firstOrderAt: o.first_order_at || null,
       visits: seen?.n ?? 0,
-      linkedTotal: seen?.total ?? 0,
+      orders: o.orders_count ?? customer?.ordersCount ?? null,
+      spent: o.total_spent ?? customer?.totalSpent ?? null,
     };
   });
+  const lastSynced = origins.find((o) => o.stats_synced_at)?.stats_synced_at ?? null;
 
   // The WHOLE book (scoped to the selected rep), from the stored country — not
   // the phones of whichever 50 rows are rendered. These counts must sum to the
@@ -247,7 +290,9 @@ export default async function ClientsPage({
   const countryScopeTotal = countryRows.reduce((a, r) => a + r.clients, 0);
 
   const pages = q ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const href = (next: Partial<{ rep: string | null; q: string; page: number }>) => {
+  const href = (
+    next: Partial<{ rep: string | null; q: string; page: number; sort: string; dir: string }>,
+  ) => {
     const p = new URLSearchParams();
     const r = next.rep === undefined ? (rep?.id ?? null) : next.rep;
     if (r) p.set("rep", r);
@@ -255,9 +300,15 @@ export default async function ClientsPage({
     if (query) p.set("q", query);
     const pg = next.page ?? page;
     if (pg > 1) p.set("page", String(pg));
-    const s = p.toString();
-    return s ? `/admin/clients?${s}` : "/admin/clients";
+    const s = next.sort ?? (sp.sort ? sort : "");
+    const d = next.dir ?? (sp.dir ? dir : "");
+    if (s) p.set("sort", s);
+    if (d) p.set("dir", d);
+    const qs = p.toString();
+    return qs ? `/admin/clients?${qs}` : "/admin/clients";
   };
+  // A search is Shopify-ordered — sort only applies to the default list.
+  const sortHref = (s: string, d: "asc" | "desc") => href({ sort: s, dir: d, page: 1 });
 
   return (
     <div className="flex flex-col gap-6">
@@ -378,27 +429,54 @@ export default async function ClientsPage({
                   : "Nothing on this page."}
             </p>
           ) : (
+            <>
+            {!q && lastSynced && (
+              <p className="text-muted-foreground mb-3 text-xs">
+                Orders &amp; spend cached from Shopify — as of{" "}
+                {fullDate(lastSynced.slice(0, 10))}. Sort applies to the full book.
+              </p>
+            )}
             <ScrollTable maxHeight="34rem">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-muted-foreground text-left">
-                    <th className="py-2 font-medium">Client</th>
-                    <th className="py-2 font-medium">Country</th>
+                    {q ? (
+                      <>
+                        <th className="py-2 font-medium">Client</th>
+                        <th className="py-2 font-medium">Country</th>
+                      </>
+                    ) : (
+                      <>
+                        <ServerSortTh sortKey="name" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 font-medium">Client</ServerSortTh>
+                        <ServerSortTh sortKey="country" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 font-medium">Country</ServerSortTh>
+                      </>
+                    )}
                     <th className="py-2 font-medium">Contact</th>
                     <th className="py-2 font-medium">Brought in by</th>
                     <th className="py-2 font-medium">First order</th>
-                    <th className="py-2 font-medium">Date</th>
+                    {q ? (
+                      <th className="py-2 font-medium">Date</th>
+                    ) : (
+                      <ServerSortTh sortKey="first_order" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 font-medium">Date</ServerSortTh>
+                    )}
                     <th className="py-2 text-right font-medium">Visits</th>
-                    <th className="py-2 text-right font-medium">Orders</th>
-                    <th className="py-2 text-right font-medium">Total spent</th>
+                    {q ? (
+                      <>
+                        <th className="py-2 text-right font-medium">Orders</th>
+                        <th className="py-2 text-right font-medium">Total spent</th>
+                      </>
+                    ) : (
+                      <>
+                        <ServerSortTh sortKey="orders" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 text-right font-medium">Orders</ServerSortTh>
+                        <ServerSortTh sortKey="spent" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 text-right font-medium">Total spent</ServerSortTh>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {clients.map((c) => (
                     <tr key={c.customerId} className="border-b last:border-0">
-                      <td className="py-2 font-medium">
-                        {c.customer?.name ?? `Customer ${c.customerId}`}
-                      </td>
+                      <td className="py-2 font-medium">{c.name}</td>
                       <td className="py-2">
                         {c.country ? (
                           <span className="whitespace-nowrap">
@@ -412,11 +490,7 @@ export default async function ClientsPage({
                         )}
                       </td>
                       <td className="py-2">
-                        <ContactButtons
-                          phone={c.customer?.phone}
-                          email={c.customer?.email}
-                          size="sm"
-                        />
+                        <ContactButtons phone={c.phone} email={c.email} size="sm" />
                       </td>
                       <td
                         className={cn(
@@ -434,16 +508,17 @@ export default async function ClientsPage({
                         {c.visits > 0 ? c.visits : "—"}
                       </td>
                       <td className="text-muted-foreground py-2 text-right tabular-nums">
-                        {c.customer ? c.customer.ordersCount : "—"}
+                        {c.orders ?? "—"}
                       </td>
                       <td className="py-2 text-right font-medium tabular-nums">
-                        {c.customer ? formatMoney(c.customer.totalSpent) : "—"}
+                        {c.spent != null ? formatMoney(c.spent) : "—"}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </ScrollTable>
+            </>
           )}
         </CardContent>
       </Card>

@@ -1,5 +1,9 @@
 import { runShopifySync } from "@/lib/shopify-sync";
-import { runAttributionSync, runCountrySync } from "@/lib/customer-origin-sync";
+import {
+  runAttributionSync,
+  runCountrySync,
+  runCustomerStatsSync,
+} from "@/lib/customer-origin-sync";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
 import { previousMonth } from "@/lib/shopify-range";
@@ -28,9 +32,16 @@ export async function GET(req: Request) {
   );
   // Only rows a previous pass never reached — a handful per run.
   const countries = await runCountrySync(true);
+  // Refresh cached stats for the customers just seen ordering, plus a bounded
+  // top-up of the stalest rows so the whole book cycles fresh over ~a couple of
+  // hours without hammering Shopify.
+  const stats = await runCustomerStatsSync(
+    attribution.ok ? attribution.customerIds : [],
+    400,
+  );
   const contests = await finalizeEndedContests();
   return Response.json(
-    { current, previous, attribution, countries, contests },
+    { current, previous, attribution, countries, stats, contests },
     { status: current.ok && previous.ok ? 200 : 500 },
   );
 }

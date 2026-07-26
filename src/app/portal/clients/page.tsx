@@ -5,7 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchCustomersDetails, type ShopifyCustomer } from "@/lib/shopify";
 import { normalizeStaffId } from "@/lib/shopify-range";
-import { countryFromPhone } from "@/lib/phone-country";
+import { countryFromIso } from "@/lib/phone-country";
 import { formatMoney } from "@/lib/commission";
 import { fullDate } from "@/lib/format-date";
 import {
@@ -16,26 +16,44 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { ServerSortTh } from "@/components/shared/server-sort-head";
 import { ContactButtons } from "@/components/shared/contact-buttons";
 import { Stat, StatGrid } from "@/components/portal/stats";
 
 const PAGE_SIZE = 50;
 
+// Sort keys → DB columns. name/orders/spent are the cached Shopify stats
+// (customer_origin.*, refreshed by runCustomerStatsSync); country is country_iso.
+const SORT_COLS: Record<string, string> = {
+  name: "customer_name",
+  first_order: "first_order_at",
+  orders: "orders_count",
+  spent: "total_spent",
+  country: "country_iso",
+};
+
 type OriginRow = {
   shopify_customer_id: string;
-  first_order_name: string | null;
   first_order_at: string;
+  customer_name: string | null;
+  orders_count: number | null;
+  total_spent: number | null;
+  country_iso: string | null;
+  stats_synced_at: string | null;
 };
 
 export default async function PortalClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; dir?: string }>;
 }) {
   const sp = await searchParams;
   const { employee } = await requireEmployee();
   const supabase = await createServerClient();
   const page = Math.max(1, Number(sp.page) || 1);
+  const sort = sp.sort && SORT_COLS[sp.sort] ? sp.sort : "first_order";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
+  const isDefault = sort === "first_order" && dir === "desc";
 
   const myStaffId = employee.shopify_staff_id
     ? normalizeStaffId(employee.shopify_staff_id)
@@ -46,38 +64,55 @@ export default async function PortalClientsPage({
   const { data, count } = myStaffId
     ? await supabase
         .from("customer_origin")
-        .select("shopify_customer_id, first_order_name, first_order_at", {
-          count: "exact",
-        })
+        .select(
+          "shopify_customer_id, first_order_at, customer_name, orders_count, total_spent, country_iso, stats_synced_at",
+          { count: "exact" },
+        )
         .eq("staff_id", myStaffId)
-        .order("first_order_at", { ascending: false })
+        .order(SORT_COLS[sort], { ascending: dir === "asc", nullsFirst: false })
         .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
     : { data: [], count: 0 };
 
   const origins = (data ?? []) as OriginRow[];
   const total = count ?? 0;
 
-  const details =
+  // Contact (email/phone) is the ONLY thing still fetched live — for the buttons,
+  // never stored. Name/orders/spend/country all come from the cached row now.
+  const contact =
     origins.length > 0 && isShopifyConfigured()
       ? await fetchCustomersDetails(origins.map((o) => o.shopify_customer_id)).catch(
           () => null,
         )
       : new Map<string, ShopifyCustomer>();
-  const shopifyDown = details === null;
-  const customers = details ?? new Map<string, ShopifyCustomer>();
+  const contactById = contact ?? new Map<string, ShopifyCustomer>();
 
-  const rows = origins.map((o) => {
-    const customer = customers.get(o.shopify_customer_id) ?? null;
-    return {
-      id: o.shopify_customer_id,
-      customer,
-      country: countryFromPhone(customer?.phone),
-      firstOrderAt: o.first_order_at,
-    };
-  });
+  const rows = origins.map((o) => ({
+    id: o.shopify_customer_id,
+    name: o.customer_name ?? "Customer",
+    country: countryFromIso(o.country_iso),
+    firstOrderAt: o.first_order_at,
+    orders: o.orders_count,
+    spent: o.total_spent,
+    phone: contactById.get(o.shopify_customer_id)?.phone ?? null,
+    email: contactById.get(o.shopify_customer_id)?.email ?? null,
+  }));
 
-  const spend = rows.reduce((a, r) => a + (r.customer?.totalSpent ?? 0), 0);
+  const spend = rows.reduce((a, r) => a + (r.spent ?? 0), 0);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const lastSynced = origins.find((o) => o.stats_synced_at)?.stats_synced_at ?? null;
+
+  const href = (next: { page?: number; sort?: string; dir?: string }) => {
+    const p = new URLSearchParams();
+    const pg = next.page ?? page;
+    if (pg > 1) p.set("page", String(pg));
+    const s = next.sort ?? (sp.sort ? sort : "");
+    const d = next.dir ?? (sp.dir ? dir : "");
+    if (s) p.set("sort", s);
+    if (d) p.set("dir", d);
+    const qs = p.toString();
+    return qs ? `/portal/clients?${qs}` : "/portal/clients";
+  };
+  const sortHref = (s: string, d: "asc" | "desc") => href({ sort: s, dir: d, page: 1 });
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,10 +143,7 @@ export default async function PortalClientsPage({
             <CardContent className="pt-6">
               <StatGrid>
                 <Stat label="Clients" value={total.toLocaleString()} />
-                <Stat
-                  label="Spend on this page"
-                  value={shopifyDown ? "—" : formatMoney(spend)}
-                />
+                <Stat label="Spend on this page" value={formatMoney(spend)} />
                 <Stat
                   label="Newest"
                   value={rows[0] ? fullDate(rows[0].firstOrderAt.slice(0, 10)) : "—"}
@@ -120,7 +152,7 @@ export default async function PortalClientsPage({
             </CardContent>
           </Card>
 
-          {page === 1 && (
+          {page === 1 && isDefault && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Latest clients</CardTitle>
@@ -136,19 +168,13 @@ export default async function PortalClientsPage({
                       href={`/portal/clients/${r.id}`}
                       className="flex min-w-0 flex-col hover:underline"
                     >
-                      <span className="font-medium">
-                        {r.customer?.name ?? "Customer"}
-                      </span>
+                      <span className="font-medium">{r.name}</span>
                       <span className="text-muted-foreground text-xs">
                         {r.country ? `${r.country.flag} ${r.country.name} · ` : ""}
                         {fullDate(r.firstOrderAt.slice(0, 10))}
                       </span>
                     </Link>
-                    <ContactButtons
-                      phone={r.customer?.phone}
-                      email={r.customer?.email}
-                      size="sm"
-                    />
+                    <ContactButtons phone={r.phone} email={r.email} size="sm" />
                   </div>
                 ))}
               </CardContent>
@@ -160,24 +186,22 @@ export default async function PortalClientsPage({
               <CardTitle className="text-base">All your clients</CardTitle>
               <CardDescription>
                 {total.toLocaleString()} in total · tap a name for their profile
+                {lastSynced && (
+                  <> · totals as of {fullDate(lastSynced.slice(0, 10))}</>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {shopifyDown && (
-                <p className="text-muted-foreground text-sm">
-                  Shopify is unavailable right now — names and totals are missing.
-                </p>
-              )}
               <ScrollTable maxHeight="32rem">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-muted-foreground text-left">
-                      <th className="py-2 font-medium">Client</th>
-                      <th className="py-2 font-medium">Country</th>
+                      <ServerSortTh sortKey="name" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 font-medium">Client</ServerSortTh>
+                      <ServerSortTh sortKey="country" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 font-medium">Country</ServerSortTh>
                       <th className="py-2 font-medium">Contact</th>
-                      <th className="py-2 font-medium">First order</th>
-                      <th className="py-2 text-right font-medium">Orders</th>
-                      <th className="py-2 text-right font-medium">Total spent</th>
+                      <ServerSortTh sortKey="first_order" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 font-medium">First order</ServerSortTh>
+                      <ServerSortTh sortKey="orders" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 text-right font-medium">Orders</ServerSortTh>
+                      <ServerSortTh sortKey="spent" sort={sort} dir={dir} hrefFor={sortHref} className="py-2 text-right font-medium">Total spent</ServerSortTh>
                       <th className="py-2"></th>
                     </tr>
                   </thead>
@@ -186,7 +210,7 @@ export default async function PortalClientsPage({
                       <tr key={r.id} className="border-b last:border-0">
                         <td className="py-2 font-medium">
                           <Link href={`/portal/clients/${r.id}`} className="hover:underline">
-                            {r.customer?.name ?? "Customer"}
+                            {r.name}
                           </Link>
                         </td>
                         <td className="py-2 whitespace-nowrap">
@@ -199,20 +223,16 @@ export default async function PortalClientsPage({
                           )}
                         </td>
                         <td className="py-2">
-                          <ContactButtons
-                            phone={r.customer?.phone}
-                            email={r.customer?.email}
-                            size="sm"
-                          />
+                          <ContactButtons phone={r.phone} email={r.email} size="sm" />
                         </td>
                         <td className="text-muted-foreground py-2 tabular-nums">
                           {fullDate(r.firstOrderAt.slice(0, 10))}
                         </td>
                         <td className="py-2 text-right tabular-nums">
-                          {r.customer ? r.customer.ordersCount : "—"}
+                          {r.orders ?? "—"}
                         </td>
                         <td className="py-2 text-right font-medium tabular-nums">
-                          {r.customer ? formatMoney(r.customer.totalSpent) : "—"}
+                          {r.spent != null ? formatMoney(r.spent) : "—"}
                         </td>
                         <td className="py-2 text-right">
                           <Link
@@ -237,7 +257,7 @@ export default async function PortalClientsPage({
                   <div className="flex gap-2">
                     {page > 1 && (
                       <Link
-                        href={`/portal/clients?page=${page - 1}`}
+                        href={href({ page: page - 1 })}
                         className="hover:bg-muted rounded-md border px-3 py-1"
                       >
                         Previous
@@ -245,7 +265,7 @@ export default async function PortalClientsPage({
                     )}
                     {page < pages && (
                       <Link
-                        href={`/portal/clients?page=${page + 1}`}
+                        href={href({ page: page + 1 })}
                         className="hover:bg-muted rounded-md border px-3 py-1"
                       >
                         Next
