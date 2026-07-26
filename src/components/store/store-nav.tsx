@@ -85,7 +85,7 @@ export function StoreNav() {
         ))}
         <Link
           href="/store"
-          aria-label="Sales"
+          aria-label="Turn"
           prefetch={false}
           className="flex flex-1 flex-col items-center justify-end gap-0.5 pb-1.5"
         >
@@ -103,7 +103,7 @@ export function StoreNav() {
               pathname === "/store" ? "text-primary" : "text-muted-foreground",
             )}
           >
-            Sales
+            Turn
           </span>
         </Link>
         {RIGHT.map((item) => (
