@@ -3,10 +3,8 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { MessageSquare } from "lucide-react";
-import {
-  saveMessageTemplate,
-  type MessageLanguage,
-} from "@/server/message-templates";
+import { saveMessageTemplate } from "@/server/message-templates";
+import type { MessageLanguage } from "@/lib/message-languages";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 

@@ -5,9 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, accessibleLocationIds } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { type ActionResult, dbError, firstError } from "@/server/shared";
+import { MESSAGE_LANGUAGES, type MessageLanguage } from "@/lib/message-languages";
 
-export const MESSAGE_LANGUAGES = ["pt", "en", "es"] as const;
-export type MessageLanguage = (typeof MESSAGE_LANGUAGES)[number];
 const KEY = "thank_you";
 
 /** The admin's accessible location ids, resolving "all" to the concrete set. */
