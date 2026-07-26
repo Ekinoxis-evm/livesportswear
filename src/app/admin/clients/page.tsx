@@ -128,10 +128,11 @@ export default async function ClientsPage({
   const rep = employees.find((e) => e.id === sp.rep) ?? null;
 
   const templates = await listMessageTemplates();
-  const messageBodies =
+  const emptyBodies = { pt: "", en: "", es: "" };
+  const messageTemplates =
     templates.ok && templates.data
-      ? templates.data.bodies
-      : { pt: "", en: "", es: "" };
+      ? templates.data.templates
+      : { thank_you: emptyBodies, hello: emptyBodies };
 
   // How the attribution actually landed — shown on the page so the numbers
   // aren't a black box, and so unmapped staff are visible rather than silent.
@@ -368,7 +369,7 @@ export default async function ClientsPage({
         </AlertDescription>
       </Alert>
 
-      <MessageTemplatesCard initial={messageBodies} />
+      <MessageTemplatesCard initial={messageTemplates} />
 
       <div className="flex flex-wrap items-end gap-4">
         <ClientRepFilter reps={repOptions} selected={rep?.id ?? null} total={attributedTotal} />

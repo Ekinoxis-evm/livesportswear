@@ -35,7 +35,7 @@ import {
   type RecentOrder,
 } from "@/lib/shopify";
 import { finishSchema, type FinishInput } from "@/lib/finish-schema";
-import { buildThankYou } from "@/lib/thank-you";
+import { buildMessage } from "@/lib/client-message";
 import { whatsappLink } from "@/lib/contact-links";
 import { MESSAGE_LANGUAGES } from "@/lib/message-languages";
 import { firstError, type ActionResult } from "@/server/shared";
@@ -662,10 +662,10 @@ export async function storeThankYouLink(
     return { ok: false, error: "This sale has no customer to message." };
   }
 
-  const text = buildThankYou({
+  const text = buildMessage({
     body: template.body,
     name: order.customer.name,
-    items: order.items,
+    appendItems: order.items,
     language: parsed.data.language,
   });
   const url = whatsappLink(order.customer.phone, text);
