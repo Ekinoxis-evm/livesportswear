@@ -7,6 +7,8 @@ import {
   receivingRows,
   receivingTotals,
   buildReceivingWrites,
+  parseSku,
+  matrixView,
   type ReceivingItem,
   type FreshOnHand,
 } from "@/lib/receiving";
@@ -194,5 +196,95 @@ describe("gridToRows — .xlsx grid with a title block above the header", () => 
 
   it("returns nothing when no row reads as a header", () => {
     expect(gridToRows([["hello", "world"], ["a", "b"]])).toEqual([]);
+  });
+});
+
+describe("HS code capture", () => {
+  it("reads an HS-code column on the flat path", () => {
+    const rows = [{ barcode: "12345", qty: "4", "HS Code": "6212.10" }];
+    expect(mapCsvRows(rows)[0].hsCode).toBe("6212.10");
+  });
+
+  it("carries the reference's HS code onto every exploded size line", () => {
+    const rows = [{ Reference: "46586", Color: "00RX80", HTS: "6109.10", M: "3", L: "2" }];
+    const out = mapInvoiceMatrix(rows);
+    expect(out.map((l) => l.hsCode)).toEqual(["6109.10", "6109.10"]);
+  });
+
+  it("leaves hsCode undefined when the document prints none", () => {
+    const rows = [{ barcode: "12345", qty: "4" }];
+    expect(mapCsvRows(rows)[0].hsCode).toBeUndefined();
+  });
+});
+
+describe("parseSku", () => {
+  it("splits reference.SIZE.color", () => {
+    expect(parseSku("46586.M.00RX80")).toEqual({ reference: "46586", size: "M", color: "00RX80" });
+  });
+
+  it("keeps a multi-segment color together", () => {
+    expect(parseSku("P1153.2XL.00.RX89")).toEqual({ reference: "P1153", size: "2XL", color: "00.RX89" });
+  });
+
+  it("returns null for a plain barcode", () => {
+    expect(parseSku("7501234567890")).toBeNull();
+    expect(parseSku(null)).toBeNull();
+  });
+});
+
+describe("matrixView — reconstructing the reference × size grid", () => {
+  const mItem = (o: Partial<ReceivingItem>): ReceivingItem =>
+    item({ id: "id-" + Math.abs(o.doc_qty ?? 0), unknown: false, ...o });
+
+  it("groups sizes of one reference into a single row, sized-ordered", () => {
+    const view = matrixView([
+      mItem({ id: "a", sku: "46586.L.00RX80", doc_qty: 2, qty: 0, hs_code: "6109.10" }),
+      mItem({ id: "b", sku: "46586.M.00RX80", doc_qty: 3, qty: 0 }),
+    ]);
+    expect(view.rows).toHaveLength(1);
+    expect(view.sizes).toEqual(["M", "L"]);
+    const row = view.rows[0];
+    expect(row.reference).toBe("46586");
+    expect(row.color).toBe("00RX80");
+    expect(row.hsCode).toBe("6109.10");
+    expect(row.cells.map((c) => c.size)).toEqual(["M", "L"]);
+    expect(row.docTotal).toBe(5);
+    expect(row.itemIds).toEqual(["a", "b"]);
+  });
+
+  it("a row is verified only when all its size lines are", () => {
+    const partly = matrixView([
+      mItem({ id: "a", sku: "46586.M.00RX80", verified: true }),
+      mItem({ id: "b", sku: "46586.L.00RX80", verified: false }),
+    ]);
+    expect(partly.rows[0].verified).toBe(false);
+
+    const fully = matrixView([
+      mItem({ id: "a", sku: "46586.M.00RX80", qty: 3, verified: true }),
+      mItem({ id: "b", sku: "46586.L.00RX80", qty: 2, verified: true }),
+    ]);
+    expect(fully.rows[0].verified).toBe(true);
+    expect(fully.summary.verifiedReferences).toBe(1);
+  });
+
+  it("routes non-matrix lines (plain barcodes) to `other`", () => {
+    const view = matrixView([
+      mItem({ id: "a", sku: "46586.M.00RX80", doc_qty: 3 }),
+      mItem({ id: "z", sku: null, barcode: "7501234567890", doc_qty: 1 }),
+    ]);
+    expect(view.rows).toHaveLength(1);
+    expect(view.other.map((i) => i.id)).toEqual(["z"]);
+  });
+
+  it("summarises references and pieces (document vs verified/arrived)", () => {
+    const view = matrixView([
+      mItem({ id: "a", sku: "46586.M.00RX80", doc_qty: 3, qty: 3, verified: true }),
+      mItem({ id: "b", sku: "46586.L.00RX80", doc_qty: 2, qty: 0, verified: false }),
+      mItem({ id: "c", sku: "90001.S.00RX01", doc_qty: 4, qty: 0, verified: false }),
+    ]);
+    expect(view.summary.references).toBe(2);
+    expect(view.summary.docPieces).toBe(9);
+    expect(view.summary.arrivedPieces).toBe(3);
+    expect(view.summary.verifiedReferences).toBe(0); // 46586 only partly verified
   });
 });

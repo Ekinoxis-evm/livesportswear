@@ -29,6 +29,9 @@ For each line return:
 - codeType: "barcode" if code is a barcode/UPC/EAN, "sku" if it's a SKU/style code, "unknown" if unclear.
 - description: the product name/description as printed.
 - qty: the number of units received on that line (integer).
+- hsCode: the harmonized-system / customs tariff code for the line if the document
+  prints one (a numeric code, often 6–10 digits, sometimes labelled HS, HTS, NCM, or
+  "partida arancelaria"). Omit it when the line shows none.
 
 Ignore subtotals, totals, taxes, shipping, and any non-product rows. If a line has
 no identifiable code, still include it with codeType "unknown" and the description.`;

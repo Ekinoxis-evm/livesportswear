@@ -217,6 +217,7 @@ const commitSchema = z.object({
         codeType: z.enum(["barcode", "sku", "unknown"]),
         description: z.string().trim().max(300).default(""),
         qty: z.number().int().min(1).max(1_000_000),
+        hsCode: z.string().trim().max(20).optional(),
       }),
     )
     .min(1)
@@ -257,6 +258,7 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
     variant_title: string | null;
     expected: number | null;
     doc_qty: number;
+    hs_code: string | null;
     unknown: boolean;
   };
   const byBarcode = new Map<string, Row>();
@@ -266,6 +268,7 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
     const existing = byBarcode.get(barcode);
     if (existing) {
       existing.doc_qty += line.qty;
+      if (!existing.hs_code && line.hsCode) existing.hs_code = line.hsCode; // keep first non-empty
       continue;
     }
     byBarcode.set(barcode, {
@@ -275,6 +278,7 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
       variant_title: hit?.variantTitle ?? null,
       expected: hit?.inventoryQuantity ?? null,
       doc_qty: line.qty,
+      hs_code: line.hsCode ?? null,
       unknown: !hit,
     });
   }
@@ -290,6 +294,7 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
     qty: 0, // arrived is filled by physical verification
     doc_qty: r.doc_qty,
     expected: r.expected,
+    hs_code: r.hs_code,
     unknown: r.unknown,
   }));
   for (let i = 0; i < rows.length; i += 500) {
@@ -343,6 +348,49 @@ export async function matchUnknownItem(input: unknown): Promise<ActionResult> {
     })
     .eq("id", parsed.data.itemId);
   if (error) return { ok: false, error: dbError(error, { "23505": "That barcode is already in this session." }) };
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// 5b. Verify a reference: tick/untick the matrix checkbox. Verifying ACCEPTS
+//     the document quantities as physically arrived (qty = doc_qty); unticking
+//     resets those lines to 0. One action for the whole (reference, color) row.
+// ---------------------------------------------------------------------------
+const verifySchema = z.object({
+  countId: z.string().uuid(),
+  itemIds: z.array(z.string().uuid()).min(1).max(200),
+  verified: z.boolean(),
+});
+
+export async function setReferenceVerified(input: unknown): Promise<ActionResult> {
+  await requireAdmin();
+  const parsed = verifySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { countId, itemIds, verified } = parsed.data;
+
+  const { supabase, count } = await loadOpenRestock(countId);
+  if (!count || count.kind !== "restock") return { ok: false, error: "Session not found." };
+  if (count.status !== "open") return { ok: false, error: "This session is already received." };
+
+  // Scope the write to THIS session's rows — never let a crafted id verify a
+  // line in another store's count.
+  const { data: rows } = await supabase
+    .from("inventory_count_items")
+    .select("id, doc_qty, unknown")
+    .eq("count_id", countId)
+    .in("id", itemIds);
+  const targets = (rows ?? []).filter((r) => !r.unknown);
+  if (targets.length === 0) return { ok: false, error: "Nothing to verify on this reference." };
+
+  for (const row of targets) {
+    const { error } = await supabase
+      .from("inventory_count_items")
+      .update({ verified, qty: verified ? (row.doc_qty ?? 0) : 0 })
+      .eq("id", row.id)
+      .eq("count_id", countId);
+    if (error) return { ok: false, error: dbError(error) };
+  }
+  revalidatePath(`/admin/inventory/${countId}`);
   return { ok: true };
 }
 

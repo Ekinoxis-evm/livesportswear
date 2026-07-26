@@ -13,6 +13,12 @@ export const extractedLineSchema = z.object({
   codeType: z.enum(["barcode", "sku", "unknown"]),
   description: z.string().trim().max(300).default(""),
   qty: z.number().int().min(0).max(1_000_000).describe("Units on this line"),
+  hsCode: z
+    .string()
+    .trim()
+    .max(20)
+    .optional()
+    .describe("Harmonized-system / customs tariff code printed for this line, if any"),
 });
 export type ExtractedLine = z.infer<typeof extractedLineSchema>;
 
@@ -21,6 +27,7 @@ const SKU_KEYS = ["sku", "style", "style code", "style number", "item", "item co
 const QTY_KEYS = ["qty", "quantity", "qty shipped", "quantity shipped", "units", "count", "cantidad"];
 const DESC_KEYS = ["description", "product", "name", "title", "item description", "producto", "descripcion"];
 const COLOR_KEYS = ["color", "colour", "cor", "colored"];
+const HS_KEYS = ["hs code", "hscode", "hs", "harmonized code", "harmonized system", "hts", "tariff", "tariff code", "partida arancelaria", "posicion arancelaria", "ncm"];
 // Size headers become the middle segment of the SKU verbatim (SKU is
 // reference.SIZE.color, e.g. 46586.M.00RX80 / P1153.2XL.00RX89). Kept as an
 // ordered set so a header is matched case-insensitively but reproduced exactly.
@@ -74,6 +81,7 @@ export function mapInvoiceMatrix(rows: Record<string, unknown>[]): ExtractedLine
   const refCol = pickColumn(keys, SKU_KEYS);
   const colorCol = pickColumn(keys, COLOR_KEYS);
   const descCol = pickColumn(keys, DESC_KEYS);
+  const hsCol = pickColumn(keys, HS_KEYS);
   const sizes = sizeColumns(keys);
   if (!refCol || !colorCol || sizes.length < 2) return [];
 
@@ -82,6 +90,7 @@ export function mapInvoiceMatrix(rows: Record<string, unknown>[]): ExtractedLine
     const reference = String(row[refCol] ?? "").trim();
     const color = String(row[colorCol] ?? "").trim();
     const description = descCol ? String(row[descCol] ?? "").trim() : "";
+    const hsCode = hsCol ? String(row[hsCol] ?? "").trim() || undefined : undefined;
     if (!reference || !color) continue; // header/total/blank rows
 
     for (const { key, size } of sizes) {
@@ -92,6 +101,7 @@ export function mapInvoiceMatrix(rows: Record<string, unknown>[]): ExtractedLine
         codeType: "sku",
         description: description ? `${description} · ${size}` : `${reference} · ${size}`,
         qty,
+        hsCode,
       });
     }
   }
@@ -171,6 +181,7 @@ export function mapCsvRows(rows: Record<string, unknown>[]): ExtractedLine[] {
   const skuCol = pickColumn(keys, SKU_KEYS);
   const qtyCol = pickColumn(keys, QTY_KEYS);
   const descCol = pickColumn(keys, DESC_KEYS);
+  const hsCol = pickColumn(keys, HS_KEYS);
 
   const lines: ExtractedLine[] = [];
   for (const row of rows) {
@@ -178,6 +189,7 @@ export function mapCsvRows(rows: Record<string, unknown>[]): ExtractedLine[] {
     const sku = skuCol ? String(row[skuCol] ?? "").trim() : "";
     const qty = qtyCol ? toInt(row[qtyCol]) : 0;
     const description = descCol ? String(row[descCol] ?? "").trim() : "";
+    const hsCode = hsCol ? String(row[hsCol] ?? "").trim() || undefined : undefined;
 
     const code = barcode || sku;
     if (!code || qty <= 0) continue; // empty / total rows
@@ -186,6 +198,7 @@ export function mapCsvRows(rows: Record<string, unknown>[]): ExtractedLine[] {
       codeType: barcode ? "barcode" : "sku",
       description,
       qty,
+      hsCode,
     });
   }
   return lines;
@@ -193,6 +206,7 @@ export function mapCsvRows(rows: Record<string, unknown>[]): ExtractedLine[] {
 
 /** A receiving count item, once matched (or flagged) against Shopify. */
 export type ReceivingItem = {
+  id?: string; // count-item row id (present once persisted)
   barcode: string;
   sku: string | null;
   product_title: string;
@@ -201,6 +215,8 @@ export type ReceivingItem = {
   doc_qty: number | null; // what the document said arrived
   qty: number; // physically verified arrived
   unknown: boolean; // not matched to a Shopify variant
+  hs_code?: string | null; // customs code from the document (matrix rows)
+  verified?: boolean; // rep confirmed this reference's physical units
 };
 
 export type ReceivingStatus = "matched" | "short" | "over" | "unmatched";
@@ -256,6 +272,133 @@ export function receivingTotals(items: ReceivingItem[]): ReceivingTotals {
     unmatched: rows.filter((r) => r.unknown).length,
     unitsArrived: rows.reduce((sum, r) => sum + r.qty, 0),
     discrepancies: rows.filter((r) => r.docDiff !== 0).length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// New-arrivals MATRIX view — reconstruct the supplier's reference × size grid
+// from the matched line items so a rep reviews the document the way it was
+// written, then ticks each reference verified. Reference/size/color come back
+// out of the SKU (`reference.SIZE.color`); the HS code is stored (0055).
+// ---------------------------------------------------------------------------
+
+/** Canonical size order for the matrix columns; unknown sizes sort last, A–Z. */
+export const SIZE_ORDER = [
+  "XS", "S", "M", "L", "XL", "2XL", "XXL", "3XL", "XXXL", "4XL",
+  "U", "UN", "UNICO", "ÚNICO", "OS", "ONE SIZE",
+];
+
+function sizeRank(size: string): number {
+  const i = SIZE_ORDER.indexOf(size.toUpperCase());
+  return i === -1 ? SIZE_ORDER.length : i;
+}
+
+/** Split a `reference.SIZE.color` SKU into its parts, or null if it isn't one. */
+export function parseSku(code: string | null | undefined): { reference: string; size: string; color: string } | null {
+  if (!code) return null;
+  const parts = code.split(".");
+  if (parts.length < 3) return null;
+  const [reference, size, ...rest] = parts;
+  const color = rest.join(".");
+  if (!reference || !size || !color) return null;
+  return { reference, size, color };
+}
+
+export type MatrixCell = {
+  size: string;
+  docQty: number; // what the document said for this size
+  arrivedQty: number; // physically verified so far
+  itemId: string | null;
+};
+
+export type MatrixRow = {
+  reference: string;
+  color: string;
+  hsCode: string | null;
+  description: string;
+  cells: MatrixCell[]; // one per size present in THIS row
+  docTotal: number;
+  arrivedTotal: number;
+  verified: boolean; // every size line of this reference is verified
+  itemIds: string[];
+};
+
+export type MatrixSummary = {
+  references: number; // distinct (reference, color) groups
+  docPieces: number; // total units per the document
+  arrivedPieces: number; // total verified/arrived units
+  verifiedReferences: number;
+};
+
+export type MatrixView = {
+  sizes: string[]; // ordered union of all size columns
+  rows: MatrixRow[];
+  other: ReceivingItem[]; // lines that don't parse as reference.SIZE.color (barcode/unmatched)
+  summary: MatrixSummary;
+};
+
+/**
+ * Group matched receiving items into the reference × size matrix. Items whose
+ * code isn't a `reference.SIZE.color` SKU (plain barcodes, unmatched lines) are
+ * returned separately in `other` so the caller can still surface them.
+ */
+export function matrixView(items: ReceivingItem[]): MatrixView {
+  const groups = new Map<string, MatrixRow>();
+  const other: ReceivingItem[] = [];
+  const sizeSet = new Set<string>();
+
+  for (const item of items) {
+    const parsed = parseSku(item.sku ?? item.barcode);
+    if (!parsed) {
+      other.push(item);
+      continue;
+    }
+    const key = `${parsed.reference}||${parsed.color}`;
+    let row = groups.get(key);
+    if (!row) {
+      row = {
+        reference: parsed.reference,
+        color: parsed.color,
+        hsCode: item.hs_code ?? null,
+        description: item.product_title,
+        cells: [],
+        docTotal: 0,
+        arrivedTotal: 0,
+        verified: true,
+        itemIds: [],
+      };
+      groups.set(key, row);
+    }
+    if (!row.hsCode && item.hs_code) row.hsCode = item.hs_code;
+    row.cells.push({
+      size: parsed.size,
+      docQty: item.doc_qty ?? 0,
+      arrivedQty: item.qty,
+      itemId: item.id ?? null,
+    });
+    row.docTotal += item.doc_qty ?? 0;
+    row.arrivedTotal += item.qty;
+    row.verified = row.verified && !!item.verified;
+    if (item.id) row.itemIds.push(item.id);
+    sizeSet.add(parsed.size);
+  }
+
+  const sizes = [...sizeSet].sort((a, b) => sizeRank(a) - sizeRank(b) || a.localeCompare(b));
+  const rows = [...groups.values()].sort(
+    (a, b) => a.reference.localeCompare(b.reference) || a.color.localeCompare(b.color),
+  );
+  for (const row of rows) row.cells.sort((a, b) => sizeRank(a.size) - sizeRank(b.size) || a.size.localeCompare(b.size));
+
+  return {
+    sizes,
+    rows,
+    other,
+    summary: {
+      references: rows.length,
+      docPieces: rows.reduce((s, r) => s + r.docTotal, 0),
+      arrivedPieces: rows.reduce((s, r) => s + r.arrivedTotal, 0),
+      verifiedReferences: rows.filter((r) => r.verified).length,
+    },
   };
 }
 

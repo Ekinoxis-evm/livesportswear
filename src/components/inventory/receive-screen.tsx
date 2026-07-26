@@ -3,19 +3,20 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, PackagePlus, Trash2, UploadCloud } from "lucide-react";
+import { Check, Loader2, PackagePlus, Trash2, UploadCloud } from "lucide-react";
 import {
   uploadReceivingDoc,
   extractDocument,
   commitExtraction,
   matchUnknownItem,
+  setReferenceVerified,
   receiveStock,
 } from "@/server/receiving";
-import { scanBarcode, adjustItem, removeItem } from "@/server/inventory";
-import { receivingRows, type ExtractedLine } from "@/lib/receiving";
+import { removeItem } from "@/server/inventory";
+import { matrixView, type ExtractedLine, type MatrixRow, type ReceivingItem } from "@/lib/receiving";
+import { ReceiveMatrix } from "@/components/inventory/receive-matrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -44,14 +45,9 @@ export type ReceiveItem = {
   expected: number | null;
   doc_qty: number | null;
   qty: number;
+  hs_code: string | null;
+  verified: boolean;
   unknown: boolean;
-};
-
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  unmatched: { label: "unmatched", className: "text-amber-600" },
-  short: { label: "short", className: "text-destructive" },
-  over: { label: "over", className: "text-amber-600" },
-  matched: { label: "", className: "" },
 };
 
 export function ReceiveScreen({
@@ -220,45 +216,62 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
   const router = useRouter();
   const [pending, start] = useTransition();
   const [confirming, setConfirming] = useState(false);
-  const scanRef = useRef<HTMLInputElement>(null);
+  const [override, setOverride] = useState(false);
 
-  const rows = useMemo(() => receivingRows(items), [items]);
-  const byBarcode = useMemo(() => new Map(items.map((i) => [i.barcode, i])), [items]);
-  const arrivedTotal = rows.reduce((s, r) => s + r.qty, 0);
-  const newTotal = rows.reduce((s, r) => s + r.newTotal, 0);
-  const anyArrived = arrivedTotal > 0;
+  const view = useMemo(() => matrixView(items as ReceivingItem[]), [items]);
+  const matchedOther = view.other.filter((i) => !i.unknown);
 
-  function scan(barcode: string) {
+  const arrivedTotal =
+    view.summary.arrivedPieces + view.other.reduce((s, i) => s + i.qty, 0);
+  const totalRefs = view.summary.references + matchedOther.length;
+  const verifiedRefs =
+    view.summary.verifiedReferences + matchedOther.filter((i) => i.verified).length;
+  const allVerified = totalRefs > 0 && verifiedRefs === totalRefs;
+  const canReceive = arrivedTotal > 0 && (allVerified || override);
+
+  function toggleRow(row: MatrixRow) {
+    if (row.itemIds.length === 0) return;
+    start(async () => {
+      const res = await setReferenceVerified({
+        countId,
+        itemIds: row.itemIds,
+        verified: !row.verified,
+      });
+      if (!res.ok) toast.error(res.error);
+      else router.refresh();
+    });
+  }
+
+  function toggleItem(item: ReceivingItem) {
+    if (!item.id) return;
+    const id = item.id;
+    start(async () => {
+      const res = await setReferenceVerified({
+        countId,
+        itemIds: [id],
+        verified: !item.verified,
+      });
+      if (!res.ok) toast.error(res.error);
+      else router.refresh();
+    });
+  }
+
+  function drop(item: ReceivingItem) {
+    if (!item.id) return;
+    const id = item.id;
+    start(async () => {
+      const res = await removeItem(id);
+      if (!res.ok) toast.error(res.error);
+      else router.refresh();
+    });
+  }
+
+  function match(item: ReceivingItem, barcode: string) {
     const code = barcode.trim();
-    if (!code) return;
+    if (!code || !item.id) return;
+    const id = item.id;
     start(async () => {
-      const res = await scanBarcode({ countId, barcode: code });
-      if (!res.ok) toast.error(res.error);
-      else router.refresh();
-    });
-  }
-
-  function setArrived(item: ReceiveItem, qty: number) {
-    start(async () => {
-      const res = await adjustItem({ itemId: item.id, qty: Math.max(0, qty) });
-      if (!res.ok) toast.error(res.error);
-      else router.refresh();
-    });
-  }
-
-  function drop(item: ReceiveItem) {
-    start(async () => {
-      const res = await removeItem(item.id);
-      if (!res.ok) toast.error(res.error);
-      else router.refresh();
-    });
-  }
-
-  function match(item: ReceiveItem, barcode: string) {
-    const code = barcode.trim();
-    if (!code) return;
-    start(async () => {
-      const res = await matchUnknownItem({ itemId: item.id, barcode: code });
+      const res = await matchUnknownItem({ itemId: id, barcode: code });
       if (!res.ok) toast.error(res.error);
       else {
         toast.success("Matched.");
@@ -282,91 +295,81 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-6">
-          <div className="flex-1">
-            <Label htmlFor="receive-scan">Scan arrivals to verify</Label>
-            <Input
-              id="receive-scan"
-              ref={scanRef}
-              autoFocus
-              placeholder="Scan or type a barcode, then Enter"
-              disabled={pending}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  scan((e.target as HTMLInputElement).value);
-                  (e.target as HTMLInputElement).value = "";
-                }
-              }}
-            />
-            <p className="text-muted-foreground mt-1 text-xs">
-              Each scan adds one to that line&apos;s arrived count. Unexpected barcodes are
-              added as new lines.
-            </p>
-          </div>
-          <div className="text-muted-foreground text-sm tabular-nums">
-            Arrived <span className="text-foreground font-semibold">{arrivedTotal}</span> · new
-            total <span className="text-foreground font-semibold">{newTotal}</span>
-          </div>
-        </CardContent>
-      </Card>
+      {view.rows.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 pt-6">
+            <div>
+              <h2 className="font-medium">Review the arrival, then verify each reference</h2>
+              <p className="text-muted-foreground text-sm">
+                Tick a reference once you&apos;ve physically checked its units — that accepts
+                the document quantities as arrived. Untick to reset it to zero.
+              </p>
+            </div>
+            <ReceiveMatrix view={view} pending={pending} onToggle={toggleRow} />
+          </CardContent>
+        </Card>
+      )}
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">In Shopify</TableHead>
-                  <TableHead className="text-right">Document</TableHead>
-                  <TableHead className="text-right">Arrived</TableHead>
-                  <TableHead className="text-right">New total</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => {
-                  const item = byBarcode.get(r.barcode)!;
-                  const badge = STATUS_BADGE[r.status];
-                  return (
+      {view.other.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-2 pt-6">
+            <h2 className="font-medium">Other lines</h2>
+            <p className="text-muted-foreground text-sm">
+              Lines without a size-matrix SKU. Match any unmatched barcodes, then verify.
+            </p>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Document</TableHead>
+                    <TableHead className="text-center">Verified</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {view.other.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
-                        <span className="font-medium">{r.product_title}</span>
-                        {r.variant_title && (
-                          <span className="text-muted-foreground ml-2 text-xs">{r.variant_title}</span>
+                        <span className="font-medium">{item.product_title}</span>
+                        {item.variant_title && (
+                          <span className="text-muted-foreground ml-2 text-xs">
+                            {item.variant_title}
+                          </span>
                         )}
-                        {badge.label && (
-                          <Badge variant="outline" className={"ml-2 " + badge.className}>
-                            {badge.label}
-                          </Badge>
-                        )}
-                        {r.unknown && (
-                          <MatchInput disabled={pending} onMatch={(bc) => match(item, bc)} />
+                        {item.unknown && (
+                          <>
+                            <Badge variant="outline" className="ml-2 text-amber-600">
+                              unmatched
+                            </Badge>
+                            <MatchInput disabled={pending} onMatch={(bc) => match(item, bc)} />
+                          </>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-right tabular-nums">
-                        {r.expected ?? "—"}
+                        {item.doc_qty ?? "—"}
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-right tabular-nums">
-                        {r.doc_qty ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min={0}
-                          defaultValue={r.qty}
-                          key={`${item.id}-${r.qty}`}
-                          disabled={pending}
-                          className="ml-auto h-8 w-20 text-right tabular-nums"
-                          onBlur={(e) => {
-                            const v = Math.max(0, parseInt(e.target.value || "0", 10));
-                            if (v !== r.qty) setArrived(item, v);
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
-                        {r.unknown ? "—" : r.newTotal}
+                      <TableCell className="text-center">
+                        {item.unknown ? (
+                          <span className="text-muted-foreground/40">—</span>
+                        ) : (
+                          <button
+                            type="button"
+                            role="checkbox"
+                            aria-checked={item.verified}
+                            aria-label={`Verify ${item.product_title}`}
+                            disabled={pending}
+                            onClick={() => toggleItem(item)}
+                            className={
+                              "inline-flex size-6 items-center justify-center rounded-md border " +
+                              (item.verified
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-input hover:bg-muted")
+                            }
+                          >
+                            {item.verified && <Check className="size-4" />}
+                          </button>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <button
@@ -380,17 +383,32 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
                         </button>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      <Button className="self-end" disabled={pending || !anyArrived} onClick={() => setConfirming(true)}>
-        <PackagePlus className="size-4" /> Receive stock
-      </Button>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {!allVerified && arrivedTotal > 0 && (
+          <label className="text-muted-foreground flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={override}
+              onChange={(e) => setOverride(e.target.checked)}
+            />
+            Receive without verifying all references
+          </label>
+        )}
+        <span className="text-muted-foreground text-sm tabular-nums">
+          {verifiedRefs}/{totalRefs} verified · {arrivedTotal} units
+        </span>
+        <Button disabled={pending || !canReceive} onClick={() => setConfirming(true)}>
+          <PackagePlus className="size-4" /> Receive stock
+        </Button>
+      </div>
 
       <Dialog open={confirming} onOpenChange={(o) => !pending && setConfirming(o)}>
         <DialogContent className="max-w-sm">
