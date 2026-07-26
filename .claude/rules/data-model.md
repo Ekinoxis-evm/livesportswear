@@ -262,6 +262,23 @@ emails the current list with a `[TEST]` subject and writes no close row).
   selection means everyone, and a selection matching nothing falls back to
   everyone: a report reaching no one is worse than one reaching the full list.
 
+### `message_templates` (added 0052)
+Admin-editable client messages, per location + language. Today only the
+`thank_you` message (the WhatsApp the kiosk sends after a sale), in `pt`/`en`/`es`.
+- `location_id uuid fk (on delete cascade)`, `key text default 'thank_you'`,
+  `language text check in ('pt','en','es')`, `body text`, `updated_at`
+- `primary key (location_id, key, language)`
+- RLS: admin-all via `admin_can_access_location(location_id)`. The kiosk reads
+  through a service-client store action scoped by its JWT location, so it needs
+  no policy of its own.
+- `{name}` is the one token the kiosk fills (client first name, dropped cleanly
+  if absent); the products just bought are **appended automatically** (localized
+  header + bullet list), so there's no product token — pure builder in
+  `src/lib/thank-you.ts`. Edited on `/admin/clients`; sent via
+  `storeThankYouLink` → `fetchOrderById` (phone + line items, server-side) →
+  `whatsappLink(phone, text)`. The `wa.me` URL carries the phone to the kiosk
+  for that one send only — never stored, never logged.
+
 ### `store_goals` (added 0009)
 Monthly store sales target — 12 months/year per location. Surfaced as progress on
 the admin dashboard.
