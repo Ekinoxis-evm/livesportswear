@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Mail, Paperclip, Plus, X } from "lucide-react";
+import { Check, Mail, Paperclip, Plus, X } from "lucide-react";
 import type { CloseDayDraft } from "@/server/conversion-core";
 import type { ActionResult } from "@/server/shared";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,11 @@ export function ReportWizard({
   /** Kiosk only — admin has no "who is sending" step. */
   closers?: CloserEntry[];
   loadDraft: () => Promise<ActionResult<CloseDayDraft>>;
-  send: (args: { closerId?: string; recipients: string[] }) => Promise<ActionResult<unknown>>;
+  send: (args: {
+    closerId?: string;
+    recipients: string[];
+    signatories?: string[];
+  }) => Promise<ActionResult<unknown>>;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -57,7 +61,15 @@ export function ReportWizard({
   const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState("");
-  const [closer, setCloser] = useState<CloserEntry | null>(closers[0] ?? null);
+  // Several on-floor reps can sign the report; the first is the recorded closer.
+  const [signerIds, setSignerIds] = useState<string[]>(
+    closers[0] ? [closers[0].id] : [],
+  );
+  const signers = closers.filter((c) => signerIds.includes(c.id));
+  const toggleSigner = (id: string) =>
+    setSignerIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
 
   // The draft loads once, in an effect — building it during render kept
   // re-triggering the transition and the wizard spun forever.
@@ -106,9 +118,13 @@ export function ReportWizard({
 
   function submit() {
     if (!draft) return;
-    if (closers.length > 0 && !closer) return;
+    if (closers.length > 0 && signers.length === 0) return;
     start(async () => {
-      const res = await send({ closerId: closer?.id, recipients: selected });
+      const res = await send({
+        closerId: signers[0]?.id,
+        recipients: selected,
+        signatories: signers.map((s) => s.name),
+      });
       if (!res.ok) {
         toast.error(res.error ?? "Something went wrong.");
         return;
@@ -250,20 +266,34 @@ export function ReportWizard({
             content: (
               <div className="flex flex-col gap-3">
                 <p className="text-muted-foreground text-sm">
-                  Who is sending this? Defaults to who&apos;s on the floor now.
+                  Who is sending this? Pick everyone who worked the floor — they all
+                  sign the report. The first is the recorded closer.
                 </p>
-                {closers.map((c) => (
-                  <Button
-                    key={c.id}
-                    size="lg"
-                    variant={closer?.id === c.id ? "default" : "outline"}
-                    className="h-14 justify-start"
-                    disabled={pending}
-                    onClick={() => setCloser(c)}
-                  >
-                    {c.name}
-                  </Button>
-                ))}
+                {closers.map((c) => {
+                  const on = signerIds.includes(c.id);
+                  return (
+                    <Button
+                      key={c.id}
+                      size="lg"
+                      variant={on ? "default" : "outline"}
+                      className="h-14 justify-between"
+                      disabled={pending}
+                      onClick={() => toggleSigner(c.id)}
+                    >
+                      <span>{c.name}</span>
+                      {on ? (
+                        <Check className="size-4" />
+                      ) : (
+                        <Plus className="size-4 opacity-60" />
+                      )}
+                    </Button>
+                  );
+                })}
+                {signers.length > 0 && (
+                  <p className="text-muted-foreground text-xs">
+                    Signed by {signers.map((s) => s.name).join(", ")}.
+                  </p>
+                )}
                 <div className="flex items-start gap-1.5 rounded-lg border p-3 text-sm">
                   <Mail className="mt-0.5 size-3.5 shrink-0" />
                   <span className="text-muted-foreground">{selected.join(", ")}</span>
@@ -276,7 +306,7 @@ export function ReportWizard({
                 )}
               </div>
             ),
-            validate: () => closer !== null,
+            validate: () => signers.length > 0,
           },
         ]),
   ];

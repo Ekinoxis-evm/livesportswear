@@ -894,6 +894,7 @@ export async function storeCloseDayDraft(
 export async function storeCloseDay(
   closedById: string,
   onlyRecipients?: string[],
+  signatories?: string[],
 ): Promise<ActionResult> {
   const { locationId, service, bd } = await storeCtx();
   const emp = await targetEmployee(service, locationId, closedById);
@@ -902,6 +903,7 @@ export async function storeCloseDay(
   const res = await closeDayFor(
     { id: emp.id, name: emp.name, location_id: locationId },
     onlyRecipients,
+    signatories,
   );
   if (res.ok) {
     // End the day's queue so the board stops offering "take a client". This
@@ -926,7 +928,8 @@ export async function storeCloseDay(
 // ---------------------------------------------------------------------------
 export async function storeSendTestReport(
   onlyRecipients?: string[],
+  signatories?: string[],
 ): Promise<ActionResult<{ sentTo: number }>> {
   const { locationId } = await storeCtx();
-  return sendTestReportFor(locationId, onlyRecipients);
+  return sendTestReportFor(locationId, onlyRecipients, signatories);
 }

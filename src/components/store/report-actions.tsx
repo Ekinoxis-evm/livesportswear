@@ -72,10 +72,10 @@ export function ReportActions({
               mode={mode}
               closers={closers}
               loadDraft={() => storeCloseDayDraft(closers[0].id)}
-              send={({ closerId, recipients }) =>
+              send={({ closerId, recipients, signatories }) =>
                 mode === "close"
-                  ? storeCloseDay(closerId as string, recipients)
-                  : storeSendTestReport(recipients)
+                  ? storeCloseDay(closerId as string, recipients, signatories)
+                  : storeSendTestReport(recipients, signatories)
               }
               onDone={() => setMode(null)}
               onCancel={() => setMode(null)}
