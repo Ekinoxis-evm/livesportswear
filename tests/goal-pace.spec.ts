@@ -47,6 +47,29 @@ describe("goalPace", () => {
     expect(p.daysLeft).toBe(29);
     expect(p.perDay).toBe(round(2900 / 29));
   });
+
+  it("paces a PERSON over workable days, not calendar days", () => {
+    // 9 calendar days left, but the rep only works 6 of them.
+    const p = goalPace(12000, 7600, "2026-07-23", "2026-07", 6);
+    expect(p.daysLeft).toBe(9); // calendar unchanged
+    expect(p.paceDays).toBe(6);
+    expect(p.workBasis).toBe(true);
+    expect(p.perDay).toBe(round(4400 / 6)); // higher than the calendar pace
+  });
+
+  it("stays on calendar days when no workable count is given (the store)", () => {
+    const p = goalPace(12000, 7600, "2026-07-23", "2026-07");
+    expect(p.workBasis).toBe(false);
+    expect(p.paceDays).toBe(9);
+    expect(p.perDay).toBe(round(4400 / 9));
+  });
+
+  it("zero workable days → no per-day (person has no shifts left)", () => {
+    const p = goalPace(1000, 400, "2026-07-20", "2026-07", 0);
+    expect(p.paceDays).toBe(0);
+    expect(p.perDay).toBe(0);
+    expect(p.remaining).toBe(600);
+  });
 });
 
 const round = (n: number) => Math.round(n * 100) / 100;

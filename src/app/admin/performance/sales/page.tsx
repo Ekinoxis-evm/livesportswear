@@ -31,6 +31,8 @@ import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { GoalIndicator } from "@/components/shared/goal-indicator";
 import { goalPace } from "@/lib/goal-pace";
+import { remainingWorkdays } from "@/lib/scheduling/workdays";
+import type { StatShift } from "@/lib/scheduling/stats";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
 export default async function SalesTabPage({
@@ -92,7 +94,9 @@ export default async function SalesTabPage({
       // the series builder only includes employees with sales in the year.
       supabase
         .from("employees")
-        .select("id, name, location_id, avatar_color, active, shopify_staff_id")
+        .select(
+          "id, name, location_id, avatar_color, active, shopify_staff_id, max_days_per_week",
+        )
         .order("name"),
       supabase
         .from("monthly_sales")
@@ -130,17 +134,30 @@ export default async function SalesTabPage({
   }[] = [];
   if (mode === "month") {
     const monthStr = today.slice(0, 7);
-    const [{ data: monthSalesRows }, { data: goalRows }] = await Promise.all([
-      supabase
-        .from("monthly_sales")
-        .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
-        .eq("month", monthStr),
-      supabase
-        .from("employee_goals")
-        .select("employee_id, goal_amount")
-        .eq("year", Number(monthStr.slice(0, 4)))
-        .eq("month", Number(monthStr.slice(5, 7))),
-    ]);
+    const monthEnd = `${monthStr}-${String(new Date(Date.UTC(Number(monthStr.slice(0, 4)), Number(monthStr.slice(5, 7)), 0)).getUTCDate()).padStart(2, "0")}`;
+    const [{ data: monthSalesRows }, { data: goalRows }, { data: shiftRows }] =
+      await Promise.all([
+        supabase
+          .from("monthly_sales")
+          .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
+          .eq("month", monthStr),
+        supabase
+          .from("employee_goals")
+          .select("employee_id, goal_amount")
+          .eq("year", Number(monthStr.slice(0, 4)))
+          .eq("month", Number(monthStr.slice(5, 7))),
+        // Published shifts from today → month-end, to count each rep's remaining
+        // WORKABLE days (they only work ~5 of 7).
+        supabase
+          .from("shifts")
+          .select(
+            "employee_id, date, start_time, end_time, shift_template_id, schedules!inner(status, location_id)",
+          )
+          .eq("schedules.status", "published")
+          .eq("schedules.location_id", location.id)
+          .gte("date", today)
+          .lte("date", monthEnd),
+      ]);
     rankRows = monthRows(monthSalesRows ?? [], locActive, { keepZeros: true });
     const soldOf = new Map(
       (monthSalesRows ?? []).map((r) => [r.employee_id, Number(r.amount)]),
@@ -148,10 +165,23 @@ export default async function SalesTabPage({
     const goalOf = new Map(
       (goalRows ?? []).map((r) => [r.employee_id, Number(r.goal_amount)]),
     );
+    const shifts: StatShift[] = (shiftRows ?? []).map((s) => ({
+      employee_id: s.employee_id,
+      date: s.date,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      shift_template_id: s.shift_template_id,
+    }));
     paceRows = locActive
       .map((e) => ({
         name: e.name,
-        pace: goalPace(goalOf.get(e.id) ?? 0, soldOf.get(e.id) ?? 0, today, monthStr),
+        pace: goalPace(
+          goalOf.get(e.id) ?? 0,
+          soldOf.get(e.id) ?? 0,
+          today,
+          monthStr,
+          remainingWorkdays(shifts, e.id, today, monthEnd, e.max_days_per_week),
+        ),
       }))
       .filter((r) => r.pace.goal > 0)
       .sort((a, b) => b.pace.remaining - a.pace.remaining);

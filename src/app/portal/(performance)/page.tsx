@@ -22,6 +22,7 @@ import {
 import { Stat, StatGrid } from "@/components/portal/stats";
 import { GoalIndicator } from "@/components/shared/goal-indicator";
 import { goalPace } from "@/lib/goal-pace";
+import { remainingWorkdays } from "@/lib/scheduling/workdays";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
 
 export default async function PortalOverviewPage() {
@@ -39,6 +40,7 @@ export default async function PortalOverviewPage() {
   const month = today.slice(0, 7);
   const year = Number(month.slice(0, 4));
   const monthNum = Number(month.slice(5, 7));
+  const monthEnd = `${month}-${String(new Date(Date.UTC(year, monthNum, 0)).getUTCDate()).padStart(2, "0")}`;
 
   const [
     { data: shiftData },
@@ -171,7 +173,13 @@ export default async function PortalOverviewPage() {
           </StatGrid>
 
           <GoalIndicator
-            pace={goalPace(goalAmount, mySales, today, month)}
+            pace={goalPace(
+              goalAmount,
+              mySales,
+              today,
+              month,
+              remainingWorkdays(shifts, employee.id, today, monthEnd, employee.max_days_per_week),
+            )}
             format={(n) => formatMoney(n, currency)}
           />
 
