@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ArrowRight } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { formatInTimeZone } from "date-fns-tz";
@@ -19,6 +19,7 @@ import {
 import { CountScreen } from "@/components/inventory/count-screen";
 import { ReceiveScreen, type ReceiveItem } from "@/components/inventory/receive-screen";
 import { receivingRows } from "@/lib/receiving";
+import { InventoryFunnel } from "@/components/inventory/inventory-funnel";
 import { DownloadCsvButton } from "@/components/inventory/download-csv-button";
 
 export default async function InventoryCountPage({
@@ -79,6 +80,18 @@ export default async function InventoryCountPage({
     </div>
   );
 
+  const funnel = <InventoryFunnel current="count" locationId={count.location_id} />;
+
+  // Finalized → the next step is the book, then Shopify. Make that a click, not a hunt.
+  const toBook = (
+    <Link
+      href={`/admin/inventory/book?location=${count.location_id}`}
+      className="bg-primary text-primary-foreground hover:opacity-90 inline-flex h-10 items-center gap-2 self-start rounded-md px-4 text-sm font-medium"
+    >
+      Go to inventory book <ArrowRight className="size-4" />
+    </Link>
+  );
+
   if (isRestock) {
     const receiveItems: ReceiveItem[] = rows.map((r) => ({
       id: r.id,
@@ -96,6 +109,7 @@ export default async function InventoryCountPage({
       return (
         <div className="flex flex-col gap-6">
           {header}
+          {funnel}
           <ReceiveScreen countId={count.id} items={receiveItems} />
         </div>
       );
@@ -107,6 +121,8 @@ export default async function InventoryCountPage({
     return (
       <div className="flex flex-col gap-6">
         {header}
+        {funnel}
+        {toBook}
         <div className="grid gap-4 sm:grid-cols-3">
           <Kpi label="Lines received" value={String(rr.filter((r) => !r.unknown).length)} />
           <Kpi label="Units added" value={String(arrived)} />
@@ -127,6 +143,7 @@ export default async function InventoryCountPage({
     return (
       <div className="flex flex-col gap-6">
         {header}
+        {funnel}
         <CountScreen countId={count.id} initialItems={rows} />
       </div>
     );
@@ -148,6 +165,8 @@ export default async function InventoryCountPage({
   return (
     <div className="flex flex-col gap-6">
       {header}
+      {funnel}
+      {toBook}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="Counted units" value={String(t.countedUnits)} />

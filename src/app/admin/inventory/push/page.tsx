@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { InventoryFunnel } from "@/components/inventory/inventory-funnel";
 import { DownloadCsvButton } from "@/components/inventory/download-csv-button";
 import { BuildPushDraftButton } from "@/components/inventory/build-push-draft-button";
 import { PushItemsTable } from "@/components/inventory/push-items-table";
@@ -114,6 +115,8 @@ export default async function InventoryPushPage({
           />
         )}
       </div>
+
+      <InventoryFunnel current="push" locationId={location.id} />
 
       {locations.length > 1 && (
         <div className="flex flex-wrap gap-2">
