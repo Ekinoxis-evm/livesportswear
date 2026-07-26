@@ -32,6 +32,7 @@ import { ServerSortTh } from "@/components/shared/server-sort-head";
 import { ContactButtons } from "@/components/shared/contact-buttons";
 import { RebuildAttributionButton } from "@/components/admin/rebuild-attribution-button";
 import { MessageTemplatesCard } from "@/components/admin/message-templates-card";
+import { CountryViews } from "@/components/admin/country-views";
 import { listMessageTemplates } from "@/server/message-templates";
 import {
   ClientRepFilter,
@@ -404,27 +405,14 @@ export default async function ClientsPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {countryRows.map((row) => (
-                <span
-                  key={row.country?.iso ?? "unknown"}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm",
-                    !row.country && "border-amber-500/40 text-amber-600 dark:text-amber-500",
-                  )}
-                >
-                  {row.country ? (
-                    <>
-                      <span aria-hidden>{row.country.flag}</span>
-                      {row.country.name}
-                    </>
-                  ) : (
-                    "No country indicator"
-                  )}
-                  <span className="font-semibold tabular-nums">{row.clients}</span>
-                </span>
-              ))}
-            </div>
+            <CountryViews
+              rows={countryRows.map((row) => ({
+                iso: row.country?.iso ?? null,
+                name: row.country?.name ?? "No country indicator",
+                flag: row.country?.flag ?? "",
+                clients: row.clients,
+              }))}
+            />
           </CardContent>
         </Card>
       )}
