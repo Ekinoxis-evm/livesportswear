@@ -329,7 +329,7 @@ export async function storeStartBreak(formData: FormData): Promise<ActionResult>
   return res;
 }
 
-/** End a break: PIN-confirmed; the member re-enters at their former position. */
+/** End a break: PIN-confirmed; the member rejoins at the BACK of the line. */
 export async function storeEndBreak(formData: FormData): Promise<ActionResult> {
   const parsed = parseStampForm(formData);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
@@ -340,8 +340,17 @@ export async function storeEndBreak(formData: FormData): Promise<ActionResult> {
   const bad = pinError(emp, parsed.data.pin);
   if (bad) return { ok: false, error: bad };
 
-  const res = await doEndBreak(service, locationId, bd, emp.id, new Date().toISOString());
+  const now = new Date().toISOString();
+  const res = await doEndBreak(service, locationId, bd, emp.id, now);
   if (res.ok) {
+    // Coming back from a break sends you to the end of the line — restamp
+    // available_since (and clear any stale bump/drag so it can't jump the
+    // queue). Whoever kept working while they were away is now ahead.
+    await patchCheckin(service, locationId, bd, emp.id, {
+      available_since: now,
+      bumped_at: null,
+      manual_pos: null,
+    });
     revalidatePath("/store", "layout");
   }
   return res;

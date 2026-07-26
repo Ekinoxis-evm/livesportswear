@@ -323,10 +323,11 @@ Marks a store day open for the rotation queue ("up system").
 ### `floor_checkins` (added 0011)
 One row per employee present on the floor today. Drives who is "up next":
 since 0036 the line is FIFO by `available_since` — first to finish is first
-up. `available_since` is stamped at check-in and on finishing a WALK-IN;
-returns, undo, back-to-line, and break-end keep the old stamp (they never
-cost the spot). `rotation_count` still increments per walk-in finish but is
-display-only ("N turns today"). See `src/lib/floor-queue.ts`
+up. `available_since` is stamped at check-in, on finishing a WALK-IN, and on
+**returning from a break** (`storeEndBreak` — coming back sends you to the
+back of the line); returns, undo, and back-to-line keep the old stamp (they
+never cost the spot). `rotation_count` still increments per walk-in finish but
+is display-only ("N turns today"). See `src/lib/floor-queue.ts`
 (`orderFloor`/`upNext`) and `src/server/floor-core.ts`.
 - `id uuid pk`
 - `location_id uuid fk -> locations`, `employee_id uuid fk -> employees`
