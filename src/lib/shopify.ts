@@ -705,6 +705,53 @@ export async function fetchCustomerOrders(
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export type OrderDetail = {
+  id: string;
+  name: string;
+  customer: { id: string; name: string; phone: string | null } | null;
+  items: { title: string; quantity: number }[];
+};
+
+/**
+ * One order by id, with its customer's PHONE and the garments on it — the two
+ * things a kiosk thank-you WhatsApp needs. Server-side only: the phone is used
+ * to build the wa.me link and is never stored or logged. Null when the order
+ * isn't found.
+ */
+export async function fetchOrderById(orderId: string): Promise<OrderDetail | null> {
+  const { body } = await shopifyRest<{
+    order: {
+      id: number;
+      name: string | null;
+      customer: {
+        id: number;
+        first_name: string | null;
+        last_name: string | null;
+        phone: string | null;
+      } | null;
+      line_items: { title: string | null; quantity: number }[];
+    } | null;
+  }>(`/orders/${encodeURIComponent(orderId)}.json?fields=id,name,customer,line_items`);
+
+  const o = body.order;
+  if (!o) return null;
+  const name = [o.customer?.first_name, o.customer?.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return {
+    id: String(o.id),
+    name: o.name ?? `#${o.id}`,
+    customer: o.customer
+      ? { id: String(o.customer.id), name: name || "Customer", phone: o.customer.phone ?? null }
+      : null,
+    items: (o.line_items ?? []).map((li) => ({
+      title: li.title ?? "",
+      quantity: li.quantity ?? 1,
+    })),
+  };
+}
+
 export type ProductCard = {
   id: string;
   title: string;

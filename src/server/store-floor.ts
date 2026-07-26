@@ -30,10 +30,14 @@ import { isShopifyConfigured } from "@/lib/shopify-config";
 import {
   searchProducts,
   fetchRecentOrders,
+  fetchOrderById,
   type ProductHit,
   type RecentOrder,
 } from "@/lib/shopify";
 import { finishSchema, type FinishInput } from "@/lib/finish-schema";
+import { buildThankYou } from "@/lib/thank-you";
+import { whatsappLink } from "@/lib/contact-links";
+import { MESSAGE_LANGUAGES } from "@/lib/message-languages";
 import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -613,6 +617,65 @@ export async function storeRecentOrders(): Promise<ActionResult<RecentOrder[]>> 
   } catch {
     return { ok: true, data: [] };
   }
+}
+
+const thankYouSchema = z.object({
+  orderId: z.string().min(1).max(30),
+  language: z.enum(MESSAGE_LANGUAGES),
+});
+
+/**
+ * Build the thank-you WhatsApp link for a just-sold order. Resolves the
+ * client's phone + the garments server-side (never shipped in the general order
+ * list), fills the admin template, and returns a `wa.me` URL for the kiosk to
+ * open. The phone rides only in this URL for this one action — never stored,
+ * never logged.
+ */
+export async function storeThankYouLink(
+  input: unknown,
+): Promise<ActionResult<{ url: string }>> {
+  const { locationId, service } = await storeCtx();
+  const parsed = thankYouSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  if (!isShopifyConfigured()) {
+    return { ok: false, error: "Shopify is unavailable right now." };
+  }
+
+  const { data: template } = await service
+    .from("message_templates")
+    .select("body")
+    .eq("location_id", locationId)
+    .eq("key", "thank_you")
+    .eq("language", parsed.data.language)
+    .maybeSingle();
+  if (!template?.body) {
+    return { ok: false, error: "No message set for that language yet." };
+  }
+
+  let order;
+  try {
+    order = await fetchOrderById(parsed.data.orderId);
+  } catch {
+    return { ok: false, error: "Couldn't reach Shopify — try again." };
+  }
+  if (!order?.customer) {
+    return { ok: false, error: "This sale has no customer to message." };
+  }
+
+  const text = buildThankYou({
+    body: template.body,
+    name: order.customer.name,
+    items: order.items,
+    language: parsed.data.language,
+  });
+  const url = whatsappLink(order.customer.phone, text);
+  if (!url) {
+    return {
+      ok: false,
+      error: "This client's number has no country code — can't open WhatsApp.",
+    };
+  }
+  return { ok: true, data: { url } };
 }
 
 /**
