@@ -184,7 +184,19 @@ create a new PII surface.
   number libphonenumber can't place. **~72% resolve; the ~28% NULL is a
   capture ceiling, not a detection failure.** A 2-letter code is not contact
   data, so this stays inside the no-client-identity rule above.
-- index `(location_id, first_order_at desc)`, `(staff_id)`, `(location_id, country_iso)`
+- `customer_name`, `orders_count`, `total_spent`, `stats_synced_at` (0051) —
+  **cached Shopify stats**, the one relaxation of the attribution-only rule: the
+  client lists (`/admin/clients`, `/portal/clients`) must SORT + paginate by
+  name/orders/spend, which needs the keys in Postgres (they were fetched per-page
+  before, so un-sortable). Refreshed by `runCustomerStatsSync`
+  (`customer-origin-sync.ts`) via the `update_customer_stats(jsonb)` RPC — the
+  cron refreshes just-ordered customers + a bounded stale top-up each run
+  (cycles the book in ~2h); admin "Rebuild attribution" does a full sweep.
+  **These LAG Shopify between syncs and are NOT the source of truth.** Email/phone
+  are still NOT stored — fetched live per page for the contact buttons only.
+- index `(location_id, first_order_at desc)`, `(staff_id)`, `(location_id, country_iso)`,
+  and (0051) `(location_id, total_spent desc)`, `(location_id, orders_count desc)`,
+  `(location_id, lower(customer_name))` for the sort paths
 - RLS: admin-only via `admin_can_access_location(location_id)`, **plus (0043) an
   employee SELECT policy scoped to their own `staff_id`** — that scope is the
   whole boundary for the portal Clients tab, and it's declarative RLS rather
