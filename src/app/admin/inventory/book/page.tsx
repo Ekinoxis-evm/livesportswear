@@ -12,22 +12,32 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ServerSortHead } from "@/components/shared/server-sort-head";
 import { DownloadCsvButton } from "@/components/inventory/download-csv-button";
 
 const PAGE_SIZE = 200;
 
+const SORT_COLS: Record<string, string> = {
+  product: "product_title",
+  sku: "sku",
+  barcode: "barcode",
+  onhand: "qty",
+  shopify: "shopify_qty",
+};
+
 export default async function InventoryBookPage({
   searchParams,
 }: {
-  searchParams: Promise<{ location?: string; q?: string }>;
+  searchParams: Promise<{ location?: string; q?: string; sort?: string; dir?: string }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
   const supabase = await createServerClient();
+  const sort = sp.sort && SORT_COLS[sp.sort] ? sp.sort : "product";
+  const dir: "asc" | "desc" = sp.dir === "desc" ? "desc" : "asc";
 
   const { data: locationRows } = await supabase
     .from("locations")
@@ -54,10 +64,11 @@ export default async function InventoryBookPage({
       `product_title.ilike.${like},sku.ilike.${like},barcode.ilike.${like}`,
     );
   }
-  const { data: rows, count: totalRows } = await query
-    .order("product_title")
-    .order("variant_title")
-    .limit(PAGE_SIZE);
+  const ascending = dir === "asc";
+  let ordered = query.order(SORT_COLS[sort], { ascending });
+  // Product is the natural grouping — keep variants together under it.
+  if (sort === "product") ordered = ordered.order("variant_title", { ascending });
+  const { data: rows, count: totalRows } = await ordered.limit(PAGE_SIZE);
   const shown = (rows ?? []) as BookRow[];
 
   // Totals over the WHOLE book (not just the shown page) — cheap aggregates.
@@ -80,13 +91,16 @@ export default async function InventoryBookPage({
     .order("variant_title");
   const csv = buildBookCsv(location.name, (csvRows ?? []) as BookRow[]);
 
-  const href = (next: Partial<{ location: string; q: string }>) => {
+  const href = (next: Partial<{ location: string; q: string; sort: string; dir: string }>) => {
     const p = new URLSearchParams({
       location: next.location ?? location.id,
       ...(next.q ?? q ? { q: next.q ?? q } : {}),
+      ...((next.sort ?? (sp.sort && sort)) ? { sort: next.sort ?? sort } : {}),
+      ...((next.dir ?? (sp.dir && dir)) ? { dir: next.dir ?? dir } : {}),
     });
     return `/admin/inventory/book?${p}`;
   };
+  const sortHref = (s: string, d: "asc" | "desc") => href({ sort: s, dir: d });
 
   return (
     <div className="flex flex-col gap-6">
@@ -180,13 +194,11 @@ export default async function InventoryBookPage({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead className="hidden sm:table-cell">SKU</TableHead>
-                      <TableHead className="hidden md:table-cell">Barcode</TableHead>
-                      <TableHead className="text-right">On hand</TableHead>
-                      <TableHead className="hidden text-right sm:table-cell">
-                        Shopify at count
-                      </TableHead>
+                      <ServerSortHead sortKey="product" sort={sort} dir={dir} hrefFor={sortHref}>Product</ServerSortHead>
+                      <ServerSortHead sortKey="sku" sort={sort} dir={dir} hrefFor={sortHref} className="hidden sm:table-cell">SKU</ServerSortHead>
+                      <ServerSortHead sortKey="barcode" sort={sort} dir={dir} hrefFor={sortHref} className="hidden md:table-cell">Barcode</ServerSortHead>
+                      <ServerSortHead sortKey="onhand" sort={sort} dir={dir} hrefFor={sortHref} className="text-right">On hand</ServerSortHead>
+                      <ServerSortHead sortKey="shopify" sort={sort} dir={dir} hrefFor={sortHref} className="hidden text-right sm:table-cell">Shopify at count</ServerSortHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
