@@ -7,6 +7,7 @@ import { buildBookCsv, type BookRow } from "@/lib/inventory-count";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { InventoryFunnel } from "@/components/inventory/inventory-funnel";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -132,6 +133,8 @@ export default async function InventoryBookPage({
           />
         </div>
       </div>
+
+      <InventoryFunnel current="book" locationId={location.id} />
 
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
         <span>

@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
 } from "@/components/ui/card";
+import { InventoryFunnel } from "@/components/inventory/inventory-funnel";
 import { SessionsTable } from "@/components/inventory/sessions-table";
 import { StartCountButton } from "@/components/inventory/start-count-button";
 import { StartReceivingButton } from "@/components/inventory/start-receiving-button";
@@ -61,12 +62,16 @@ export default async function InventoryPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Two ways to update what Shopify holds. Pick the one that matches what
-          you&apos;re doing.
-        </p>
+      <div className="flex flex-col gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            One flow, start to finish: <strong>count</strong> what&apos;s in the
+            store, it lands in the <strong>book</strong>, then you{" "}
+            <strong>push</strong> the corrections to Shopify. Start below.
+          </p>
+        </div>
+        <InventoryFunnel current="count" />
       </div>
 
       {/* The mental model that was missing: these two jobs do opposite things,
