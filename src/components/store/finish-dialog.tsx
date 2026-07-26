@@ -1,19 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Check,
   Receipt,
   Repeat,
   Search,
+  Send,
   ShoppingBag,
   Undo2,
   UserX,
   X,
 } from "lucide-react";
-import { storeSearchProducts, storeRecentOrders } from "@/server/store-floor";
-import type { FinishInput, FinishOrder } from "@/lib/finish-schema";
+import {
+  storeSearchProducts,
+  storeRecentOrders,
+  storeThankYouLink,
+} from "@/server/store-floor";
+import type { FinishInput } from "@/lib/finish-schema";
 import type { ProductHit, RecentOrder } from "@/lib/shopify";
+import type { MessageLanguage } from "@/lib/message-languages";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +40,12 @@ const NO_SALE_REASONS = [
   "Price too expensive",
   "Just browsing",
   "No reason",
+];
+
+const THANKYOU_LANGS: { code: MessageLanguage; label: string }[] = [
+  { code: "pt", label: "🇧🇷 PT" },
+  { code: "en", label: "🇺🇸 EN" },
+  { code: "es", label: "🇪🇸 ES" },
 ];
 
 export type FinishTarget = {
@@ -82,9 +95,14 @@ function FinishSteps({
   pending: boolean;
   onSubmit: (employeeId: string, input: FinishInput) => void;
 }) {
-  const [step, setStep] = useState<"choice" | "order" | "contact" | "reasons">("choice");
+  const [step, setStep] = useState<
+    "choice" | "order" | "contact" | "thankyou" | "reasons"
+  >("choice");
   const [orders, setOrders] = useState<RecentOrder[] | null>(null);
   const [selected, setSelected] = useState<RecentOrder[]>([]);
+  const [gotContact, setGotContact] = useState(false);
+  const [waUrl, setWaUrl] = useState<string | null>(null);
+  const [waLoading, setWaLoading] = useState<MessageLanguage | null>(null);
   const [reasons, setReasons] = useState<string[]>([]);
   const [products, setProducts] = useState<ProductHit[]>([]);
   const [note, setNote] = useState("");
@@ -302,22 +320,33 @@ function FinishSteps({
     );
   }
 
+  const primary = selected[0] ?? null;
+  const finishSold = (got_contact: boolean) =>
+    onSubmit(target.employeeId, {
+      kind: "walkin",
+      sold: true,
+      got_contact,
+      orders:
+        selected.length > 0
+          ? selected.map((o) => ({
+              id: o.id,
+              name: o.name,
+              total: o.net,
+              customer_id: o.customer?.id ?? null,
+              customer_name: o.customer?.name ?? null,
+            }))
+          : undefined,
+    });
+
   if (step === "contact") {
-    const linkedOrders: FinishOrder[] = selected.map((o) => ({
-      id: o.id,
-      name: o.name,
-      total: o.net,
-      customer_id: o.customer?.id ?? null,
-      customer_name: o.customer?.name ?? null,
-    }));
-    const primary = selected[0] ?? null;
-    const finishSold = (got_contact: boolean) =>
-      onSubmit(target.employeeId, {
-        kind: "walkin",
-        sold: true,
-        got_contact,
-        orders: linkedOrders.length > 0 ? linkedOrders : undefined,
-      });
+    // A sold order with a real customer can get a thank-you WhatsApp; anonymous
+    // cash sales just record. (Pass `got` explicitly — setGotContact hasn't
+    // flushed yet for the no-customer branch that submits immediately.)
+    const proceed = (got: boolean) => {
+      setGotContact(got);
+      if (primary?.customer) setStep("thankyou");
+      else finishSold(got);
+    };
     return (
       <>
         <DialogHeader>
@@ -337,7 +366,7 @@ function FinishSteps({
             variant="outline"
             className="h-14 flex-1"
             disabled={pending}
-            onClick={() => finishSold(false)}
+            onClick={() => proceed(false)}
           >
             No
           </Button>
@@ -345,11 +374,69 @@ function FinishSteps({
             size="lg"
             className="h-14 flex-1"
             disabled={pending}
-            onClick={() => finishSold(true)}
+            onClick={() => proceed(true)}
           >
             Yes
           </Button>
         </div>
+      </>
+    );
+  }
+
+  if (step === "thankyou") {
+    const pickLang = (lang: MessageLanguage) => {
+      if (!primary) return;
+      setWaLoading(lang);
+      setWaUrl(null);
+      void storeThankYouLink({ orderId: primary.id, language: lang }).then((res) => {
+        setWaLoading(null);
+        if (res.ok && res.data) setWaUrl(res.data.url);
+        else if (!res.ok) toast.error(res.error);
+      });
+    };
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>Send a thank-you?</DialogTitle>
+          <DialogDescription>
+            Pick a language to open WhatsApp with the message and the items
+            {primary?.customer?.name ? ` for ${primary.customer.name}` : ""}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex gap-2">
+          {THANKYOU_LANGS.map((l) => (
+            <Button
+              key={l.code}
+              size="lg"
+              variant="outline"
+              className="h-14 flex-1"
+              disabled={waLoading !== null}
+              onClick={() => pickLang(l.code)}
+            >
+              {waLoading === l.code ? "…" : l.label}
+            </Button>
+          ))}
+        </div>
+        {waUrl && (
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => finishSold(gotContact)}
+            className="bg-emerald-600 hover:bg-emerald-700 flex h-14 items-center justify-center gap-2 rounded-md text-base font-medium text-white"
+          >
+            <Send className="size-5" /> Open WhatsApp &amp; finish
+          </a>
+        )}
+        <Button
+          size="lg"
+          variant="ghost"
+          className="text-muted-foreground h-12"
+          disabled={pending}
+          onClick={() => finishSold(gotContact)}
+        >
+          Skip — just record the sale
+        </Button>
       </>
     );
   }

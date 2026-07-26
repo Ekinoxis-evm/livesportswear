@@ -16,10 +16,15 @@ import { countryFromPhone } from "@/lib/phone-country";
  * "+". A local-format number would silently resolve to the wrong country's
  * subscriber, so anything `countryFromPhone` can't place is refused.
  */
-export function whatsappLink(phone: string | null | undefined): string | null {
+export function whatsappLink(
+  phone: string | null | undefined,
+  text?: string,
+): string | null {
   if (!countryFromPhone(phone)) return null;
   const digits = (phone ?? "").replace(/\D/g, "");
-  return digits ? `https://wa.me/${digits}` : null;
+  if (!digits) return null;
+  const query = text ? `?text=${encodeURIComponent(text)}` : "";
+  return `https://wa.me/${digits}${query}`;
 }
 
 /** A mailto for a plausible address; null when there's nothing to send to. */
