@@ -785,6 +785,38 @@ export type Database = {
         }
         Relationships: []
       }
+      message_templates: {
+        Row: {
+          body: string
+          key: string
+          language: string
+          location_id: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          key?: string
+          language: string
+          location_id: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          key?: string
+          language?: string
+          location_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monthly_sales: {
         Row: {
           amount: number

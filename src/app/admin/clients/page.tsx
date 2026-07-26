@@ -31,6 +31,8 @@ import { ScrollTable } from "@/components/shared/scroll-table";
 import { ServerSortTh } from "@/components/shared/server-sort-head";
 import { ContactButtons } from "@/components/shared/contact-buttons";
 import { RebuildAttributionButton } from "@/components/admin/rebuild-attribution-button";
+import { MessageTemplatesCard } from "@/components/admin/message-templates-card";
+import { listMessageTemplates } from "@/server/message-templates";
 import {
   ClientRepFilter,
   type RepOption,
@@ -124,6 +126,12 @@ export default async function ClientsPage({
       .map((e) => [normalizeStaffId(e.shopify_staff_id as string), e.name]),
   );
   const rep = employees.find((e) => e.id === sp.rep) ?? null;
+
+  const templates = await listMessageTemplates();
+  const messageBodies =
+    templates.ok && templates.data
+      ? templates.data.bodies
+      : { pt: "", en: "", es: "" };
 
   // How the attribution actually landed — shown on the page so the numbers
   // aren't a black box, and so unmapped staff are visible rather than silent.
@@ -359,6 +367,8 @@ export default async function ClientsPage({
           )}
         </AlertDescription>
       </Alert>
+
+      <MessageTemplatesCard initial={messageBodies} />
 
       <div className="flex flex-wrap items-end gap-4">
         <ClientRepFilter reps={repOptions} selected={rep?.id ?? null} total={attributedTotal} />
