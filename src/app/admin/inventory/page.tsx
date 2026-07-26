@@ -3,19 +3,11 @@ import { requireAdmin } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
 import { formatInTimeZone } from "date-fns-tz";
 import { ClipboardCheck, PackagePlus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { SessionsTable } from "@/components/inventory/sessions-table";
 import { StartCountButton } from "@/components/inventory/start-count-button";
 import { StartReceivingButton } from "@/components/inventory/start-receiving-button";
 
@@ -177,83 +169,23 @@ export default async function InventoryPage() {
               No counts yet — start one and begin scanning.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Store</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Started</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">
-                    <span className="hidden sm:inline">Counted / </span>Units
-                  </TableHead>
-                  <TableHead className="hidden text-right sm:table-cell">
-                    Expected
-                  </TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(counts ?? []).map((c) => {
-                  const loc = locOf.get(c.location_id);
-                  const tz = loc?.timezone ?? "UTC";
-                  const restock = c.kind === "restock";
-                  return (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">
-                        {loc?.name ?? "—"}
-                        {c.note && (
-                          <span className="text-muted-foreground ml-2 text-xs">
-                            {c.note}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={
-                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium " +
-                            (restock
-                              ? "border-amber-500/40 text-amber-700 dark:text-amber-400"
-                              : "border-primary/40 text-primary")
-                          }
-                        >
-                          {restock ? (
-                            <PackagePlus className="size-3.5" />
-                          ) : (
-                            <ClipboardCheck className="size-3.5" />
-                          )}
-                          {restock ? "Receiving" : "Counting"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground tabular-nums">
-                        {formatInTimeZone(new Date(c.started_at), tz, "MMM d · HH:mm")}
-                      </TableCell>
-                      <TableCell>
-                        {c.status === "open" ? (
-                          <Badge>{restock ? "receiving" : "counting"}</Badge>
-                        ) : (
-                          <Badge variant="secondary">{restock ? "received" : "final"}</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {c.counted_units ?? "—"}
-                      </TableCell>
-                      <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                        {restock ? "—" : c.expected_units ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link
-                          href={`/admin/inventory/${c.id}`}
-                          className="text-primary text-sm underline-offset-4 hover:underline"
-                        >
-                          {c.status === "open" ? "Continue" : "Report"}
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <SessionsTable
+              rows={(counts ?? []).map((c) => {
+                const loc = locOf.get(c.location_id);
+                const tz = loc?.timezone ?? "UTC";
+                return {
+                  id: c.id,
+                  storeName: loc?.name ?? "—",
+                  note: c.note,
+                  restock: c.kind === "restock",
+                  startedAt: c.started_at,
+                  startedLabel: formatInTimeZone(new Date(c.started_at), tz, "MMM d · HH:mm"),
+                  status: c.status,
+                  countedUnits: c.counted_units,
+                  expectedUnits: c.expected_units,
+                };
+              })}
+            />
           )}
         </CardContent>
       </Card>

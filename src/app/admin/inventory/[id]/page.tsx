@@ -13,13 +13,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  ReceivedLinesTable,
+  VarianceReportTable,
+} from "@/components/inventory/count-report-tables";
 import { CountScreen } from "@/components/inventory/count-screen";
 import { ReceiveScreen, type ReceiveItem } from "@/components/inventory/receive-screen";
 import { receivingRows } from "@/lib/receiving";
@@ -119,36 +115,7 @@ export default async function InventoryCountPage({
         <Card>
           <CardContent className="pt-6">
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Arrived</TableHead>
-                    <TableHead className="text-right">New total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rr.map((r) => (
-                    <TableRow key={r.barcode}>
-                      <TableCell>
-                        <span className="font-medium">{r.product_title}</span>
-                        {r.variant_title && (
-                          <span className="text-muted-foreground ml-2 text-xs">{r.variant_title}</span>
-                        )}
-                        {r.unknown && (
-                          <Badge variant="outline" className="ml-2 text-amber-600">
-                            unmatched · skipped
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{r.qty}</TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
-                        {r.unknown ? "—" : r.newTotal}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ReceivedLinesTable rows={rr} />
             </div>
           </CardContent>
         </Card>
@@ -211,62 +178,7 @@ export default async function InventoryCountPage({
       <Card>
         <CardContent className="pt-6">
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="hidden sm:table-cell">SKU</TableHead>
-                  <TableHead className="text-right">Counted</TableHead>
-                  <TableHead className="text-right">In Shopify</TableHead>
-                  <TableHead className="text-right">Diff</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.map((r) => (
-                  <TableRow key={r.barcode}>
-                    <TableCell>
-                      <span className="font-medium">{r.product_title}</span>
-                      {r.variant_title && (
-                        <span className="text-muted-foreground ml-2 text-xs">
-                          {r.variant_title}
-                        </span>
-                      )}
-                      {r.product_type && (
-                        <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wide">
-                          {r.product_type}
-                        </span>
-                      )}
-                      {r.unknown && (
-                        <Badge variant="outline" className="ml-2 text-amber-600">
-                          unknown barcode
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground hidden tabular-nums sm:table-cell">
-                      {r.sku ?? r.barcode}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{r.qty}</TableCell>
-                    <TableCell className="text-muted-foreground text-right tabular-nums">
-                      {r.expected ?? "—"}
-                    </TableCell>
-                    <TableCell
-                      className={
-                        "text-right font-medium tabular-nums " +
-                        (r.diff == null
-                          ? "text-muted-foreground"
-                          : r.diff < 0
-                            ? "text-destructive"
-                            : r.diff > 0
-                              ? "text-amber-600"
-                              : "text-emerald-600")
-                      }
-                    >
-                      {r.diff == null ? "—" : r.diff > 0 ? `+${r.diff}` : r.diff}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <VarianceReportTable rows={report} />
           </div>
         </CardContent>
       </Card>

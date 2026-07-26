@@ -10,17 +10,9 @@ import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { DownloadCsvButton } from "@/components/inventory/download-csv-button";
 import { BuildPushDraftButton } from "@/components/inventory/build-push-draft-button";
-import { PushItemToggle } from "@/components/inventory/push-item-toggle";
+import { PushItemsTable } from "@/components/inventory/push-items-table";
 import { DiscardDraftDialog } from "@/components/inventory/discard-draft-dialog";
 import { ApplyDraftDialog } from "@/components/inventory/apply-draft-dialog";
 
@@ -238,80 +230,7 @@ export default async function InventoryPushPage({
                 </p>
               ) : (
                 <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead className="hidden sm:table-cell">SKU</TableHead>
-                        <TableHead className="hidden md:table-cell">
-                          Barcode
-                        </TableHead>
-                        <TableHead className="text-right">Book</TableHead>
-                        <TableHead className="text-right">
-                          Shopify on hand
-                        </TableHead>
-                        <TableHead className="text-right">Delta</TableHead>
-                        <TableHead className="text-right">Include</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((r) => (
-                        <TableRow
-                          key={r.id}
-                          className={cn(r.excluded && "opacity-50")}
-                        >
-                          <TableCell>
-                            <span className="font-medium">{r.product_title}</span>
-                            {r.variant_title && (
-                              <span className="text-muted-foreground ml-2 text-xs">
-                                {r.variant_title}
-                              </span>
-                            )}
-                            {r.apply_status === "written" && (
-                              <Badge variant="outline" className="ml-2 text-emerald-600">
-                                written
-                              </Badge>
-                            )}
-                            {r.apply_status === "failed" && (
-                              <Badge variant="outline" className="ml-2 text-red-600">
-                                failed
-                                {r.apply_error ? ` — ${r.apply_error}` : ""}
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground hidden tabular-nums sm:table-cell">
-                            {r.sku ?? "—"}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground hidden tabular-nums md:table-cell">
-                            {r.barcode}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">
-                            {r.book_qty}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-right tabular-nums">
-                            {r.shopify_qty}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              "text-right font-semibold tabular-nums",
-                              r.delta > 0
-                                ? "text-emerald-700 dark:text-emerald-400"
-                                : "text-red-700 dark:text-red-400",
-                            )}
-                          >
-                            {r.delta > 0 ? `+${r.delta}` : r.delta}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <PushItemToggle
-                              itemId={r.id}
-                              excluded={r.excluded}
-                              disabled={r.apply_status === "written"}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <PushItemsTable items={items} />
                 </div>
               )}
             </CardContent>
