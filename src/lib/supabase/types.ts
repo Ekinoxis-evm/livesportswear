@@ -230,34 +230,46 @@ export type Database = {
         Row: {
           country_iso: string | null
           created_at: string
+          customer_name: string | null
           first_order_at: string
           first_order_id: string
           first_order_name: string | null
           location_id: string
+          orders_count: number | null
           shopify_customer_id: string
           staff_id: string | null
+          stats_synced_at: string | null
+          total_spent: number | null
           updated_at: string
         }
         Insert: {
           country_iso?: string | null
           created_at?: string
+          customer_name?: string | null
           first_order_at: string
           first_order_id: string
           first_order_name?: string | null
           location_id: string
+          orders_count?: number | null
           shopify_customer_id: string
           staff_id?: string | null
+          stats_synced_at?: string | null
+          total_spent?: number | null
           updated_at?: string
         }
         Update: {
           country_iso?: string | null
           created_at?: string
+          customer_name?: string | null
           first_order_at?: string
           first_order_id?: string
           first_order_name?: string | null
           location_id?: string
+          orders_count?: number | null
           shopify_customer_id?: string
           staff_id?: string | null
+          stats_synced_at?: string | null
+          total_spent?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -1412,6 +1424,7 @@ export type Database = {
       current_employee_id: { Args: never; Returns: string }
       current_location_id: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      update_customer_stats: { Args: { rows: Json }; Returns: undefined }
       upsert_customer_origin: { Args: { rows: Json }; Returns: undefined }
       client_origin_tallies: {
         Args: never
