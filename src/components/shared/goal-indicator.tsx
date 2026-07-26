@@ -77,15 +77,18 @@ export function GoalIndicator({
               value={format(pace.remaining)}
               big={!compact}
             />
-            {pace.daysLeft > 0 ? (
+            {pace.daysLeft <= 0 ? (
+              <Hero label="Time left" value="Month over" big={!compact} />
+            ) : pace.workBasis && pace.paceDays <= 0 ? (
+              // A person with no shifts left this month — nothing to spread over.
+              <Hero label="Shifts left" value="None" big={!compact} />
+            ) : (
               <Hero
-                label={`Per day · ${pace.daysLeft} day${pace.daysLeft === 1 ? "" : "s"} left`}
+                label={`Per day · ${pace.paceDays} ${pace.workBasis ? "work day" : "day"}${pace.paceDays === 1 ? "" : "s"} left`}
                 value={format(pace.perDay)}
                 tone="primary"
                 big={!compact}
               />
-            ) : (
-              <Hero label="Time left" value="Month over" big={!compact} />
             )}
           </div>
         )}
