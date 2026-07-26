@@ -632,6 +632,7 @@ export type Database = {
           created_at: string
           doc_qty: number | null
           expected: number | null
+          hs_code: string | null
           id: string
           product_title: string
           product_type: string | null
@@ -640,6 +641,7 @@ export type Database = {
           unknown: boolean
           updated_at: string
           variant_title: string | null
+          verified: boolean
         }
         Insert: {
           barcode: string
@@ -647,6 +649,7 @@ export type Database = {
           created_at?: string
           doc_qty?: number | null
           expected?: number | null
+          hs_code?: string | null
           id?: string
           product_title: string
           product_type?: string | null
@@ -655,6 +658,7 @@ export type Database = {
           unknown?: boolean
           updated_at?: string
           variant_title?: string | null
+          verified?: boolean
         }
         Update: {
           barcode?: string
@@ -662,6 +666,7 @@ export type Database = {
           created_at?: string
           doc_qty?: number | null
           expected?: number | null
+          hs_code?: string | null
           id?: string
           product_title?: string
           product_type?: string | null
@@ -670,6 +675,7 @@ export type Database = {
           unknown?: boolean
           updated_at?: string
           variant_title?: string | null
+          verified?: boolean
         }
         Relationships: [
           {

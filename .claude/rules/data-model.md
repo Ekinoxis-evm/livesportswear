@@ -448,8 +448,11 @@ is pure in `src/lib/inventory-count.ts`; Shopify lookups in
   older rows), `variant_title`, `qty`, `expected` (Shopify qty at first
   scan; finalize sweeps the catalog and inserts qty-0 rows for unscanned
   stock), `doc_qty` (0040, restock only — what the arrival document said
-  arrived; `qty` = physically verified arrived), `unknown` (barcode not in
-  catalog). `unique (count_id, barcode)`. The count screen groups by
+  arrived; `qty` = physically verified arrived), `hs_code` (0055, restock only —
+  harmonized-system/customs code as printed on the arrival doc; null for
+  counts), `verified` (0055, restock only — a rep confirmed this line's physical
+  units; false for counts), `unknown` (barcode not in catalog).
+  `unique (count_id, barcode)`. The count screen groups by
   `product_type` (category chips) and paginates 25/page.
 - RLS: admin-only via `admin_can_access_location` (items via join to the
   parent count); no employee/kiosk policies.
@@ -462,12 +465,19 @@ Flow (`src/server/receiving.ts` + `src/lib/receiving.ts`, UI
 line items (CSV/Excel via `papaparse` + `mapCsvRows`; PDF/photo via a Claude
 vision model through the Vercel AI Gateway, `src/lib/receiving-extract.ts`,
 `AI_GATEWAY_API_KEY`/`RECEIVING_MODEL`) → match to Shopify by barcode then SKU
-(`lookupVariantByBarcode`/`lookupVariantBySku`) → physically scan to verify
-(reuses `scanBarcode`/`adjustItem`) → preview table (current · arrived · new) →
-`receiveStock` re-reads *fresh* on-hand, writes `onHand + arrived` via
-`setOnHandQuantities` (gated on `write_inventory`), bumps `store_inventory`, and
-finalizes. Unmatched lines are flagged for manual match (`matchUnknownItem`) or
-skipped. Extraction math is pure/tested (`tests/receiving.spec.ts`).
+(`lookupVariantByBarcode`/`lookupVariantBySku`) → **review as a reference × size
+matrix** (`matrixView` in `receiving.ts`, UI `receive-matrix.tsx`): one row per
+`(reference, color)` reconstructed from the SKU (`reference.SIZE.color`) with the
+HS code, description, a qty cell per size, a row total, and a header stats bar
+(references · document pieces · verified pieces). A rep **ticks each reference
+verified** once physically checked — `setReferenceVerified` accepts the
+document quantities as arrived (`qty = doc_qty`; untick resets to 0). Non-matrix
+lines (plain barcodes / unmatched) fall to an "Other lines" table with a
+per-item verify checkbox + `matchUnknownItem`. Receive is gated on all
+references verified (with an explicit override) → `receiveStock` re-reads
+*fresh* on-hand, writes `onHand + arrived` via `setOnHandQuantities` (gated on
+`write_inventory`), bumps `store_inventory`, and finalizes. HS code and the
+matrix grouping are pure/tested (`tests/receiving.spec.ts`).
 
 ### `store_inventory` (added 0033)
 The store's own inventory book — one row per (location, barcode) holding OUR
