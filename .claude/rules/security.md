@@ -80,6 +80,11 @@
   flow stops writing `customer_email/_phone` — nothing read them, and Shopify owns
   contact (fetched directly, RLS-scoped, by the admin/portal client books). When
   passing customers to client components, pass only what's shown.
+- **Kiosk thank-you WhatsApp (0052) — one deliberate, scoped exception.** To
+  send the thank-you, `storeThankYouLink` resolves the client phone server-side
+  (`fetchOrderById`) and returns a `wa.me` URL; that URL reaches the kiosk browser
+  for this one send only. The phone is never stored, never logged, and never in
+  the general order list. This is the minimal crossing a WhatsApp launch requires.
 
 - **Changing who is an admin** (`setEmployeeAdmin`, 2026-07-25 fix): gated by
   `requireMasterAdmin` (like `inviteAdmin`/`removeAdmin`) — a location-scoped
