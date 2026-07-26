@@ -393,34 +393,28 @@ export default async function StorePerformancePage({
       </TabsContent>
 
       <TabsContent value="attendance" className="flex flex-col gap-5">
-      <AttendanceToday
-        rows={attendanceRows}
-        currency={currency}
-        summary={{
-          attended: t.attended,
-          sold: t.sold,
-          conversion: t.attended > 0 ? formatPct(t.conversion) : "—",
-          contacts: t.contacts,
-        }}
-      />
-
-      {t.returns > 0 && (
-        <Card>
-          <CardContent className="text-muted-foreground py-3 text-sm">
-            Returns today:{" "}
-            <span className="text-foreground font-semibold tabular-nums">{t.returns}</span>
-            {" · "}
-            <span className="text-foreground font-semibold tabular-nums">
-              {t.returnExtraSales}
-            </span>{" "}
-            converted to an extra sale
-          </CardContent>
-        </Card>
-      )}
-
+      {/* Per-employee table first, with the day totals as a strip on its header —
+          the totals ARE the sum of the per-person rows, so they read as one. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Team today</CardTitle>
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+            {(
+              [
+                ["Attended", String(t.attended)],
+                ["Sold", String(t.sold)],
+                ["Conversion", t.attended > 0 ? formatPct(t.conversion) : "—"],
+                ["Contacts", String(t.contacts)],
+              ] as const
+            ).map(([label, value]) => (
+              <span key={label} className="flex items-baseline gap-1.5">
+                <span className="text-xl font-bold tabular-nums">{value}</span>
+                <span className="text-muted-foreground text-xs uppercase tracking-wide">
+                  {label}
+                </span>
+              </span>
+            ))}
+          </div>
         </CardHeader>
         <CardContent>
           {tableRows.length === 0 ? (
@@ -440,6 +434,22 @@ export default async function StorePerformancePage({
           )}
         </CardContent>
       </Card>
+
+      {t.returns > 0 && (
+        <Card>
+          <CardContent className="text-muted-foreground py-3 text-sm">
+            Returns today:{" "}
+            <span className="text-foreground font-semibold tabular-nums">{t.returns}</span>
+            {" · "}
+            <span className="text-foreground font-semibold tabular-nums">
+              {t.returnExtraSales}
+            </span>{" "}
+            converted to an extra sale
+          </CardContent>
+        </Card>
+      )}
+
+      <AttendanceToday rows={attendanceRows} currency={currency} />
       </TabsContent>
 
       <TabsContent value="close" className="flex flex-col gap-4">
