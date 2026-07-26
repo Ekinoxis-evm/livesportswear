@@ -234,6 +234,7 @@ export type Database = {
           first_order_at: string
           first_order_id: string
           first_order_name: string | null
+          in_whatsapp: boolean
           location_id: string
           orders_count: number | null
           shopify_customer_id: string
@@ -249,6 +250,7 @@ export type Database = {
           first_order_at: string
           first_order_id: string
           first_order_name?: string | null
+          in_whatsapp?: boolean
           location_id: string
           orders_count?: number | null
           shopify_customer_id: string
@@ -264,6 +266,7 @@ export type Database = {
           first_order_at?: string
           first_order_id?: string
           first_order_name?: string | null
+          in_whatsapp?: boolean
           location_id?: string
           orders_count?: number | null
           shopify_customer_id?: string

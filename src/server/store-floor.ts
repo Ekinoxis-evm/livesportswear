@@ -31,13 +31,18 @@ import {
   searchProducts,
   fetchRecentOrders,
   fetchOrderById,
+  fetchCustomersDetails,
+  fetchCustomerOrders,
+  searchCustomers,
   type ProductHit,
   type RecentOrder,
+  type ShopifyCustomer,
 } from "@/lib/shopify";
 import { finishSchema, type FinishInput } from "@/lib/finish-schema";
 import { buildMessage } from "@/lib/client-message";
 import { whatsappLink } from "@/lib/contact-links";
-import { MESSAGE_LANGUAGES } from "@/lib/message-languages";
+import { countryFromIso, type Country } from "@/lib/phone-country";
+import { MESSAGE_LANGUAGES, MESSAGE_KEYS } from "@/lib/message-languages";
 import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -669,6 +674,188 @@ export async function storeThankYouLink(
     language: parsed.data.language,
   });
   const url = whatsappLink(order.customer.phone, text);
+  if (!url) {
+    return {
+      ok: false,
+      error: "This client's number has no country code — can't open WhatsApp.",
+    };
+  }
+  return { ok: true, data: { url } };
+}
+
+// ---------------------------------------------------------------------------
+// Store clients page — the floor's own view of the client book (customer_origin
+// for this location), with the "in WhatsApp" flag + WhatsApp sends. Every query
+// is scoped to the JWT location, the kiosk single-writer boundary.
+// ---------------------------------------------------------------------------
+
+export type StoreClient = {
+  customerId: string;
+  name: string;
+  country: Country | null;
+  firstOrderAt: string | null;
+  inWhatsapp: boolean;
+  phone: string | null;
+  orders: number | null;
+  spent: number | null;
+};
+
+const CLIENTS_PAGE = 50;
+const listClientsSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  q: z.string().trim().max(60).optional(),
+});
+
+type OriginRow = {
+  shopify_customer_id: string;
+  first_order_at: string;
+  customer_name: string | null;
+  orders_count: number | null;
+  total_spent: number | null;
+  country_iso: string | null;
+  in_whatsapp: boolean;
+};
+const ORIGIN_COLS =
+  "shopify_customer_id, first_order_at, customer_name, orders_count, total_spent, country_iso, in_whatsapp";
+
+export async function storeListClients(
+  input: unknown,
+): Promise<ActionResult<{ clients: StoreClient[]; total: number; pages: number }>> {
+  const { locationId, service } = await storeCtx();
+  const parsed = listClientsSchema.safeParse(input ?? {});
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { page } = parsed.data;
+  const q = parsed.data.q ?? "";
+
+  let origins: OriginRow[] = [];
+  let total = 0;
+
+  if (q) {
+    // Search Shopify, then annotate with our rows (unmatched customers dropped —
+    // this is the store's own book, so a stranger with no origin row isn't shown).
+    const found = isShopifyConfigured() ? await searchCustomers(q).catch(() => null) : [];
+    if (found && found.length) {
+      const { data } = await service
+        .from("customer_origin")
+        .select(ORIGIN_COLS)
+        .eq("location_id", locationId)
+        .in("shopify_customer_id", found.map((c) => c.id));
+      origins = (data ?? []) as OriginRow[];
+      total = origins.length;
+    }
+  } else {
+    const { data, count } = await service
+      .from("customer_origin")
+      .select(ORIGIN_COLS, { count: "exact" })
+      .eq("location_id", locationId)
+      .order("first_order_at", { ascending: false })
+      .range((page - 1) * CLIENTS_PAGE, page * CLIENTS_PAGE - 1);
+    origins = (data ?? []) as OriginRow[];
+    total = count ?? 0;
+  }
+
+  // Live phone for the visible page only — never stored, for the contact/send.
+  const contact =
+    origins.length > 0 && isShopifyConfigured()
+      ? await fetchCustomersDetails(origins.map((o) => o.shopify_customer_id)).catch(
+          () => null,
+        )
+      : new Map<string, ShopifyCustomer>();
+  const byId = contact ?? new Map<string, ShopifyCustomer>();
+
+  const clients: StoreClient[] = origins.map((o) => ({
+    customerId: o.shopify_customer_id,
+    name: o.customer_name ?? "Customer",
+    country: countryFromIso(o.country_iso),
+    firstOrderAt: o.first_order_at || null,
+    inWhatsapp: o.in_whatsapp,
+    phone: byId.get(o.shopify_customer_id)?.phone ?? null,
+    orders: o.orders_count,
+    spent: o.total_spent,
+  }));
+
+  return {
+    ok: true,
+    data: { clients, total, pages: Math.max(1, Math.ceil(total / CLIENTS_PAGE)) },
+  };
+}
+
+const setWhatsappSchema = z.object({
+  customerId: z.string().min(1).max(30),
+  value: z.boolean(),
+});
+
+/** Mark whether this client's number is saved in the store WhatsApp. */
+export async function storeSetInWhatsapp(input: unknown): Promise<ActionResult> {
+  const { locationId, service } = await storeCtx();
+  const parsed = setWhatsappSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const { error } = await service
+    .from("customer_origin")
+    .update({ in_whatsapp: parsed.data.value })
+    .eq("location_id", locationId)
+    .eq("shopify_customer_id", parsed.data.customerId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/store/clients");
+  return { ok: true };
+}
+
+const messageLinkSchema = z.object({
+  customerId: z.string().min(1).max(30),
+  key: z.enum(MESSAGE_KEYS),
+  language: z.enum(MESSAGE_LANGUAGES),
+});
+
+/**
+ * Build the WhatsApp link to message a client from the clients page. Reads the
+ * template, resolves the client's phone + last purchase server-side, and returns
+ * a `wa.me` URL. The thank-you appends the last order's items; the hello fills
+ * `{last_product}`.
+ */
+export async function storeMessageLink(
+  input: unknown,
+): Promise<ActionResult<{ url: string }>> {
+  const { locationId, service } = await storeCtx();
+  const parsed = messageLinkSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  if (!isShopifyConfigured()) {
+    return { ok: false, error: "Shopify is unavailable right now." };
+  }
+
+  const { data: template } = await service
+    .from("message_templates")
+    .select("body")
+    .eq("location_id", locationId)
+    .eq("key", parsed.data.key)
+    .eq("language", parsed.data.language)
+    .maybeSingle();
+  if (!template?.body) {
+    return { ok: false, error: "No message set for that language yet." };
+  }
+
+  let orders;
+  let cust: ShopifyCustomer | null;
+  try {
+    [orders, cust] = await Promise.all([
+      fetchCustomerOrders(parsed.data.customerId, 5),
+      fetchCustomersDetails([parsed.data.customerId]).then(
+        (m) => m.get(parsed.data.customerId) ?? null,
+      ),
+    ]);
+  } catch {
+    return { ok: false, error: "Couldn't reach Shopify — try again." };
+  }
+  const last = orders[0];
+
+  const text = buildMessage({
+    body: template.body,
+    name: cust?.name,
+    language: parsed.data.language,
+    lastProduct: last?.items[0]?.title ?? null,
+    appendItems: parsed.data.key === "thank_you" ? last?.items : undefined,
+  });
+  const url = whatsappLink(cust?.phone, text);
   if (!url) {
     return {
       ok: false,

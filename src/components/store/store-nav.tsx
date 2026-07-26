@@ -2,17 +2,26 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { Hand, UserCheck, CalendarDays, ChartColumn, Trophy, Loader2 } from "lucide-react";
+import {
+  Hand,
+  UserCheck,
+  CalendarDays,
+  ChartColumn,
+  Trophy,
+  Users,
+  Loader2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Sales sits in the middle as the raised primary button — it's the screen the
-// floor lives on; the other four are regular tabs around it.
+// floor lives on; the other tabs are regular ones around it.
 const LEFT = [
   { href: "/store/checkin", label: "Check-in", icon: UserCheck },
   { href: "/store/schedule", label: "Schedule", icon: CalendarDays },
 ];
 const RIGHT = [
   { href: "/store/performance", label: "Performance", icon: ChartColumn },
+  { href: "/store/clients", label: "Clients", icon: Users },
   { href: "/store/rewards", label: "Rewards", icon: Trophy },
 ];
 
