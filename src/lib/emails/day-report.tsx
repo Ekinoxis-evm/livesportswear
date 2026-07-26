@@ -306,6 +306,9 @@ export function DayReportEmail({
           )}
 
           <Hr style={{ borderColor: border, margin: "24px 0 12px" }} />
+          <Text style={{ fontSize: "13px", color: text, margin: "0 0 4px" }}>
+            Sent by {closedByName}
+          </Text>
           <Text style={{ fontSize: "12px", color: muted, margin: 0 }}>
             Full detail — per-employee sales, every client and check-in — is attached as an
             Excel workbook (.xlsx). A CSV and PDF are attached too.

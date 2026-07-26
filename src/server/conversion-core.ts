@@ -24,6 +24,7 @@ import { formatMoney, formatMoneyExact } from "@/lib/commission";
 import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
 import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
+import { joinNames } from "@/lib/format-list";
 import type { ActionResult } from "@/server/shared";
 
 /**
@@ -420,6 +421,7 @@ export async function reportDraftFor(
 export async function closeDayFor(
   closer: { id: string; name: string; location_id: string },
   onlyRecipients?: string[],
+  signatories?: string[],
 ): Promise<ActionResult> {
   const service = createServiceClient();
 
@@ -478,7 +480,10 @@ export async function closeDayFor(
     return { ok: false, error: upErr.message };
   }
 
-  const send = await sendDayReport(d, closer.name);
+  // The email is signed by everyone the closer picked as on-floor senders;
+  // `closed_by` above stays the single recorded closer.
+  const signature = joinNames(signatories?.length ? signatories : [closer.name]);
+  const send = await sendDayReport(d, signature);
   // The day is already closed; report delivery is best-effort with no resend
   // path, so a silent failure (e.g. an unverified Resend sender) must at least
   // be logged. Recipients are already masked by sendSafe; firstError carries no PII.
@@ -499,13 +504,15 @@ export async function closeDayFor(
 export async function sendTestReportFor(
   locationId: string,
   onlyRecipients?: string[],
+  signatories?: string[],
 ): Promise<ActionResult<{ sentTo: number }>> {
   const base = await buildDayReportData(locationId);
   const d = { ...base, recipients: resolveRecipients(base.recipients, onlyRecipients) };
   if (d.recipients.length === 0)
     return { ok: false, error: "No recipients configured — add an email first." };
 
-  const { sent, failed, firstError } = await sendDayReport(d, "Test", { test: true });
+  const signature = signatories?.length ? joinNames(signatories) : "Test";
+  const { sent, failed, firstError } = await sendDayReport(d, signature, { test: true });
   if (sent === 0) return { ok: false, error: firstError ?? "The report could not be sent." };
   if (failed > 0)
     return { ok: false, error: `Sent to ${sent}, but ${failed} failed: ${firstError ?? "unknown error"}` };
