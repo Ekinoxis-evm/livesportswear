@@ -194,6 +194,10 @@ create a new PII surface.
   (cycles the book in ~2h); admin "Rebuild attribution" does a full sweep.
   **These LAG Shopify between syncs and are NOT the source of truth.** Email/phone
   are still NOT stored — fetched live per page for the contact buttons only.
+- `in_whatsapp boolean not null default false` (0054) — a store-set flag: the rep
+  saved this client's number in the store WhatsApp. Kiosk-editable
+  (`storeSetInWhatsapp`, location-scoped service action) on `/store/clients`; a
+  non-PII boolean, so it stays inside the aggregate/derived rule.
 - index `(location_id, first_order_at desc)`, `(staff_id)`, `(location_id, country_iso)`,
   and (0051) `(location_id, total_spent desc)`, `(location_id, orders_count desc)`,
   `(location_id, lower(customer_name))` for the sort paths
@@ -262,9 +266,11 @@ emails the current list with a `[TEST]` subject and writes no close row).
   selection means everyone, and a selection matching nothing falls back to
   everyone: a report reaching no one is worse than one reaching the full list.
 
-### `message_templates` (added 0052)
-Admin-editable client messages, per location + language. Today only the
-`thank_you` message (the WhatsApp the kiosk sends after a sale), in `pt`/`en`/`es`.
+### `message_templates` (added 0052; `hello` seeded 0053)
+Admin-editable client messages, per location + language. Two kinds: `thank_you`
+(sent after a sale — appends the bought items) and `hello` (a greeting — uses the
+`{last_product}` token), each in `pt`/`en`/`es`. Pure builder shared by both:
+`src/lib/client-message.ts` `buildMessage`.
 - `location_id uuid fk (on delete cascade)`, `key text default 'thank_you'`,
   `language text check in ('pt','en','es')`, `body text`, `updated_at`
 - `primary key (location_id, key, language)`
