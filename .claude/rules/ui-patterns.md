@@ -80,9 +80,15 @@ hand-rolled tables use `<SortableTh sortKey sort onSort>`
 `sortKey`/`sort`/`onSort` to `<TableHead>`. Give each column a **comparable**
 accessor (the raw number/string, not the formatted `"$118.40"`). A server-page
 table becomes a small `"use client"` wrapper fed serializable rows. **Client
-sort only suits fully-loaded tables** — server-paginated lists (admin/portal
-clients, inventory book) need server-side sort (a `?sort=` param in the query),
-or client sort would silently reorder just the current page.
+sort only suits fully-loaded tables.**
+
+For **server-paginated** tables (inventory book, admin/portal clients), sort
+must run in the DB — client sort would only reorder the current page. Use
+`ServerSortHead` (shadcn `<Table>`) or `ServerSortTh` (hand-rolled `<table>`)
+from `src/components/shared/server-sort-head.tsx`: the header is a `<Link>` that
+toggles `?sort=&dir=`, the page whitelists the sort key → `.order()`. The client
+lists sort by cached Shopify stats on `customer_origin` (see data-model.md,
+0051) since those columns can't be sorted while hydrated per-page.
 
 Both give: **both-axis scroll** capped by `maxHeight` (long lists scroll in place
 instead of pushing the page), a **sticky `<thead>`**, a **pinned first column**
