@@ -12,7 +12,6 @@ import { sprintRange } from "@/lib/scheduling/payroll";
 import { shiftDurationMinutes } from "@/lib/scheduling/conflicts";
 import { validateSchedule, biweeklyHourWarnings } from "@/lib/scheduling/rules";
 import {
-  buildShiftGrid,
   accumulatedShiftCounts,
   weekdayShiftGrid,
 } from "@/lib/scheduling/shift-grid";
@@ -357,10 +356,9 @@ export default async function SchedulesPage({
 
       {shiftRows.length > 0 && (
         <ShiftCountGrid
-          grid={buildShiftGrid(
+          rows={accumulatedShiftCounts(
             shiftRows,
             empList.map((e) => ({ id: e.id, name: e.name })),
-            days,
           )}
         />
       )}
