@@ -1,8 +1,14 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { fetchStaffSales } from "@/lib/shopify";
+import { fetchStaffSales, fetchStaffSalesByDay } from "@/lib/shopify";
 import { weekRangeInTz, dayRangeInTz } from "@/lib/shopify-range";
-import type { SalesBreakdown } from "@/lib/sales-breakdown";
+import { weekDays } from "@/lib/scheduling/week";
+import {
+  addBreakdown,
+  roundBreakdown,
+  zeroBreakdown,
+  type SalesBreakdown,
+} from "@/lib/sales-breakdown";
 
 /**
  * Week-sales cache for the public share page. One Shopify read per
@@ -16,8 +22,15 @@ export function weekSalesTag(locationId: string, monday: string): string {
   return `share-week-sales:${locationId}:${monday}`;
 }
 
+export type ShareDaySales = {
+  date: string; // store-local YYYY-MM-DD
+  total: SalesBreakdown; // all orders that day (store money line)
+  staff: [staffId: string, sales: SalesBreakdown][]; // POS-attributed only
+};
+
 export type ShareWeekSales = {
-  entries: [staffId: string, sales: SalesBreakdown][];
+  entries: [staffId: string, sales: SalesBreakdown][]; // week per-staff totals (ranking)
+  days: ShareDaySales[]; // the 7 days Mon–Sun, zeros filled (the chart)
   fetchedAt: number;
 };
 
@@ -32,8 +45,28 @@ export function getShareWeekSales(
   return unstable_cache(
     async () => {
       const range = weekRangeInTz(monday, tz);
-      const { totals } = await fetchStaffSales(range.start, range.endExclusive);
-      return { entries: [...totals.entries()], fetchedAt: Date.now() };
+      // One read → per-day breakdown; the week ranking is derived from it so
+      // the chart and the table can never disagree.
+      const byDay = await fetchStaffSalesByDay(range.start, range.endExclusive, tz);
+
+      const days: ShareDaySales[] = weekDays(monday).map((date) => {
+        const bucket = byDay.get(date);
+        return {
+          date,
+          total: bucket?.total ?? zeroBreakdown(),
+          staff: bucket ? [...bucket.byStaff.entries()] : [],
+        };
+      });
+
+      const weekByStaff = new Map<string, SalesBreakdown>();
+      for (const d of days) {
+        for (const [staffId, b] of d.staff) {
+          weekByStaff.set(staffId, addBreakdown(weekByStaff.get(staffId) ?? zeroBreakdown(), b));
+        }
+      }
+      for (const [id, b] of weekByStaff) weekByStaff.set(id, roundBreakdown(b));
+
+      return { entries: [...weekByStaff.entries()], days, fetchedAt: Date.now() };
     },
     ["share-week-sales", locationId, monday],
     { revalidate: 600, tags: [weekSalesTag(locationId, monday)] },
@@ -58,7 +91,8 @@ export function getShareDaySales(
     async () => {
       const range = dayRangeInTz(date, tz);
       const { totals } = await fetchStaffSales(range.start, range.endExclusive);
-      return { entries: [...totals.entries()], fetchedAt: Date.now() };
+      // The Today pill only reads `entries`; days stays empty (no chart here).
+      return { entries: [...totals.entries()], days: [], fetchedAt: Date.now() };
     },
     ["share-day-sales", locationId, date],
     { revalidate: 600, tags: [daySalesTag(locationId, date)] },

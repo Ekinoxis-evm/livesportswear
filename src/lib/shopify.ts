@@ -1,4 +1,5 @@
 import "server-only";
+import { formatInTimeZone } from "date-fns-tz";
 import {
   SHOPIFY_STORE_DOMAIN,
   SHOPIFY_CLIENT_ID,
@@ -137,6 +138,61 @@ export async function fetchStaffSales(
   }
   for (const [staffId, b] of totals) totals.set(staffId, roundBreakdown(b));
   return { totals, sampleOrder };
+}
+
+export type DayStaffSales = {
+  total: SalesBreakdown; // every non-cancelled/non-test order that day (store money line)
+  byStaff: Map<string, SalesBreakdown>; // only orders carrying a POS user_id
+};
+
+/**
+ * Per-store-local-DAY sales for [start, endExclusive), split into the day's
+ * total (all orders) and the per-staff breakdown (POS-attributed orders only).
+ * One paginated read — the caller buckets by business date via `tz`. Used by
+ * the public week-share chart: bar height = day total, coloured stack = staff.
+ */
+export async function fetchStaffSalesByDay(
+  start: string,
+  endExclusive: string,
+  tz: string,
+): Promise<Map<string, DayStaffSales>> {
+  const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
+  const fields = `${ORDER_FIELDS},created_at`;
+  const byDay = new Map<string, DayStaffSales>();
+
+  let path: string | null =
+    `/orders.json?status=any&limit=250&fields=${fields}` +
+    `&created_at_min=${encodeURIComponent(start)}&created_at_max=${encodeURIComponent(max)}`;
+  while (path) {
+    const { body, nextPageInfo }: {
+      body: { orders: (RestOrder & { created_at: string })[] };
+      nextPageInfo: string | null;
+    } = await shopifyRest(path);
+    for (const o of body.orders) {
+      if (o.cancelled_at || o.test || !o.created_at) continue;
+      const day = formatInTimeZone(new Date(o.created_at), tz, "yyyy-MM-dd");
+      let bucket = byDay.get(day);
+      if (!bucket) {
+        bucket = { total: zeroBreakdown(), byStaff: new Map() };
+        byDay.set(day, bucket);
+      }
+      const b = orderBreakdown(o);
+      bucket.total = addBreakdown(bucket.total, b);
+      if (o.user_id) {
+        const staffId = String(o.user_id);
+        bucket.byStaff.set(staffId, addBreakdown(bucket.byStaff.get(staffId) ?? zeroBreakdown(), b));
+      }
+    }
+    path = nextPageInfo
+      ? `/orders.json?limit=250&fields=${fields}&page_info=${nextPageInfo}`
+      : null;
+  }
+
+  for (const bucket of byDay.values()) {
+    bucket.total = roundBreakdown(bucket.total);
+    for (const [id, b] of bucket.byStaff) bucket.byStaff.set(id, roundBreakdown(b));
+  }
+  return byDay;
 }
 
 export type DaySales = SalesBreakdown & {

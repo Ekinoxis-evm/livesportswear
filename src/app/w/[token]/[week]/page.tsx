@@ -11,6 +11,9 @@ import { ShiftChip } from "@/components/schedule/shift-chip";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { getShareDaySales, getShareWeekSales } from "@/lib/share-sales-cache";
 import { staffRowsFromEntries, type SalesRankRow } from "@/lib/sales-period";
+import { normalizeStaffId } from "@/lib/shopify-range";
+import { buildWeekChart, type StaffMeta, type WeekChart } from "@/lib/week-sales-chart";
+import { WeekSalesChart } from "@/components/schedule/week-sales-chart";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { formatMoney } from "@/lib/commission";
@@ -104,23 +107,38 @@ export default async function StoreWeekPage({
   // public page. Every mapped, active employee appears, $0 included (a quiet
   // period must not make anyone vanish from the list).
   const salesMode: "week" | "today" = sp.period === "today" ? "today" : "week";
+  const OTHER_COLOR = "var(--muted-foreground)";
   let rankRows: SalesRankRow[] = [];
+  let weekChart: WeekChart | null = null;
   if (schedule && isShopifyConfigured()) {
     try {
-      const entriesPromise =
+      // Always pull the week (the chart is inherently weekly); the Today pill
+      // additionally pulls the single day for the ranking.
+      const [weekData, dayData, { data: emps }] = await Promise.all([
+        getShareWeekSales(loc.id, monday, loc.timezone),
         salesMode === "today"
-          ? getShareDaySales(loc.id, today, loc.timezone).then((r) => r.entries)
-          : getShareWeekSales(loc.id, monday, loc.timezone).then((r) => r.entries);
-      const [entries, { data: emps }] = await Promise.all([
-        entriesPromise,
+          ? getShareDaySales(loc.id, today, loc.timezone)
+          : Promise.resolve(null),
         supabase
           .from("employees")
-          .select("name, shopify_staff_id")
+          .select("name, shopify_staff_id, avatar_color")
           .eq("location_id", loc.id)
           .eq("active", true)
           .not("shopify_staff_id", "is", null),
       ]);
-      rankRows = staffRowsFromEntries(entries, emps ?? []);
+      const roster = emps ?? [];
+      const entries = salesMode === "today" ? (dayData?.entries ?? []) : weekData.entries;
+      rankRows = staffRowsFromEntries(entries, roster);
+
+      const staffMeta = new Map<string, StaffMeta>(
+        roster
+          .filter((e) => e.shopify_staff_id)
+          .map((e) => [
+            normalizeStaffId(e.shopify_staff_id as string),
+            { name: e.name, color: e.avatar_color ?? OTHER_COLOR },
+          ]),
+      );
+      weekChart = buildWeekChart(weekData.days, staffMeta, OTHER_COLOR);
     } catch {
       // section hidden when Shopify is unreachable
     }
@@ -286,6 +304,20 @@ export default async function StoreWeekPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {weekChart?.hasSales && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 pt-6">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">Daily sales this week</span>
+              <span className="text-muted-foreground text-sm tabular-nums">
+                {formatMoney(weekChart.weekTotal)} net
+              </span>
+            </div>
+            <WeekSalesChart chart={weekChart} currency="USD" today={today} />
+          </CardContent>
+        </Card>
       )}
 
       {rankRows.length > 0 && (
