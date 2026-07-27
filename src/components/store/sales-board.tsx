@@ -260,7 +260,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 {openTotal > 1 ? `With ${openTotal} clients` : "With a client"}
                 {r.returns > 0 && ` · ${r.returns} return`}
               </span>
-              <span className="text-sm font-semibold tabular-nums text-amber-600">
+              <span className="text-foreground text-sm font-semibold tabular-nums">
                 {r.attendingStartedAt ? (
                   <ClientTimer startedAt={r.attendingStartedAt} />
                 ) : (
