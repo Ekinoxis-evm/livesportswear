@@ -5,6 +5,7 @@ import { weekStart, weekDays, addDays } from "@/lib/scheduling/week";
 import { businessDate } from "@/lib/business-date";
 import { employeeStats, type StatShift } from "@/lib/scheduling/stats";
 import { monthLabel } from "@/lib/format-date";
+import { formatDuration } from "@/lib/conversion";
 import {
   commissionFor,
   formatMoney,
@@ -52,6 +53,7 @@ export default async function PortalOverviewPage() {
     { data: storeGoal },
     { data: myMonths },
     { data: personalGoal },
+    { data: monthEvents },
   ] = await Promise.all([
     // Hours (published shifts around now).
     supabase
@@ -84,7 +86,21 @@ export default async function PortalOverviewPage() {
       .eq("year", year)
       .eq("month", monthNum)
       .maybeSingle(),
+    // This rep's timed clients this month (RLS: client_events_self_read).
+    supabase
+      .from("client_events")
+      .select("served_seconds")
+      .eq("employee_id", employee.id)
+      .gte("business_date", `${month}-01`)
+      .lte("business_date", monthEnd),
   ]);
+
+  const timedMonth = (monthEvents ?? []).filter((e) => e.served_seconds != null);
+  const avgClientSeconds = timedMonth.length
+    ? Math.round(
+        timedMonth.reduce((s, e) => s + (e.served_seconds ?? 0), 0) / timedMonth.length,
+      )
+    : null;
 
   const shifts = (shiftData ?? []) as StatShift[];
   const weekStats = employeeStats(
@@ -156,9 +172,10 @@ export default async function PortalOverviewPage() {
             <CardTitle className="text-base">This month</CardTitle>
             <CardDescription>{monthLabel(month)}</CardDescription>
           </CardHeader>
-          <CardContent className="flex gap-8">
+          <CardContent className="flex flex-wrap gap-8">
             <Stat label="Hours" value={`${monthStats.totalHours.toFixed(1)}h`} />
             <Stat label="Shifts" value={String(monthStats.shiftCount)} />
+            <Stat label="Avg time / client" value={formatDuration(avgClientSeconds)} />
           </CardContent>
         </Card>
       </div>
