@@ -131,6 +131,7 @@ export type Database = {
           products: Json | null
           reasons: string[] | null
           return_type: string | null
+          served_seconds: number | null
           shopify_customer_id: string | null
           shopify_order_id: string | null
           shopify_order_name: string | null
@@ -154,6 +155,7 @@ export type Database = {
           products?: Json | null
           reasons?: string[] | null
           return_type?: string | null
+          served_seconds?: number | null
           shopify_customer_id?: string | null
           shopify_order_id?: string | null
           shopify_order_name?: string | null
@@ -177,6 +179,7 @@ export type Database = {
           products?: Json | null
           reasons?: string[] | null
           return_type?: string | null
+          served_seconds?: number | null
           shopify_customer_id?: string | null
           shopify_order_id?: string | null
           shopify_order_name?: string | null
@@ -502,6 +505,7 @@ export type Database = {
           arrived_at: string
           attending_count: number
           attending_return_count: number
+          attending_started_at: Json | null
           available_since: string | null
           bumped_at: string | null
           business_date: string
@@ -527,6 +531,7 @@ export type Database = {
           arrived_at?: string
           attending_count?: number
           attending_return_count?: number
+          attending_started_at?: Json | null
           available_since?: string | null
           bumped_at?: string | null
           business_date: string
@@ -552,6 +557,7 @@ export type Database = {
           arrived_at?: string
           attending_count?: number
           attending_return_count?: number
+          attending_started_at?: Json | null
           available_since?: string | null
           bumped_at?: string | null
           business_date?: string

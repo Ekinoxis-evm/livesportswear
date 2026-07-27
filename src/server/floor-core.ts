@@ -12,6 +12,13 @@ import {
 import type { TablesUpdate } from "@/types/db";
 import type { ActionResult } from "@/server/shared";
 import { mergeLinkedOrders, type LinkedOrder } from "@/lib/linked-orders";
+import {
+  asQueue,
+  pushOpen,
+  popOldest,
+  popNewest,
+  servedSeconds,
+} from "@/lib/attend-timer";
 
 /**
  * Bodies for the floor-queue writes, driven exclusively by the store kiosk
@@ -193,7 +200,7 @@ async function readCounts(
 ) {
   const { data } = await service
     .from("floor_checkins")
-    .select("rotation_count, attending_count, attending_return_count, status")
+    .select("rotation_count, attending_count, attending_return_count, status, attending_started_at")
     .eq("location_id", locationId)
     .eq("business_date", bd)
     .eq("employee_id", employeeId)
@@ -203,6 +210,7 @@ async function readCounts(
     walkins: data?.attending_count ?? 0,
     returns: data?.attending_return_count ?? 0,
     status: (data?.status ?? "available") as FloorStatus,
+    queue: asQueue(data?.attending_started_at),
   };
 }
 
@@ -225,6 +233,9 @@ export async function doTakeClient(
     status: statusAfter(next),
     attending_count: next.walkins,
     attending_return_count: next.returns,
+    // Stamp this client's start time onto the open-clients queue — the timer
+    // runs from here until they're finished.
+    attending_started_at: pushOpen(cur.queue, kind, new Date().toISOString()),
     // Only a walk-in leaves the line — a return must not cost the member
     // their bump or dragged position (the "returns don't burn a turn" rule).
     ...(kind === "walkin" ? { bumped_at: null, manual_pos: null } : {}),
@@ -253,6 +264,8 @@ export async function doUndoTake(
     status: statusAfter(next),
     attending_count: next.walkins,
     attending_return_count: next.returns,
+    // Undo the last take of this kind — drop its start stamp, record nothing.
+    attending_started_at: popNewest(cur.queue, kind),
   });
 }
 
@@ -271,6 +284,7 @@ export async function doClearAttending(
     status: "available",
     attending_count: 0,
     attending_return_count: 0,
+    attending_started_at: [], // dropped everyone — no open timers
     bumped_at: null,
     manual_pos: null,
   });
@@ -309,6 +323,12 @@ export async function doFinishCustomer(
     return { ok: false, error: "No open client to finish." };
   }
 
+  // Pop this client's start stamp (oldest of the kind — first taken, first
+  // finished) so we can record how long they were attended.
+  const finishedAt = new Date().toISOString();
+  const popped = popOldest(cur.queue, result.kind);
+  const served = popped.entry ? servedSeconds(popped.entry.at, finishedAt) : null;
+
   // Counters FIRST, conditioned on the exact values just read: a double-tap
   // or a retry after a partial failure matches zero rows here and stops —
   // the same sale can never be recorded twice. (Insert-then-patch could.)
@@ -321,12 +341,13 @@ export async function doFinishCustomer(
         attending_count: next.walkins,
         attending_return_count: next.returns,
         rotation_count: rotationAfterFinish(cur.rotation, result.kind),
+        attending_started_at: popped.queue,
         // Only a walk-in leaves the line: it restamps available_since (back of
         // the queue) and clears the bump. A return keeps the member's spot AND
         // their bump/dragged position — the "returns don't burn a turn" rule,
         // matching doTakeClient's asymmetry.
         ...(result.kind === "walkin"
-          ? { available_since: new Date().toISOString(), bumped_at: null }
+          ? { available_since: finishedAt, bumped_at: null }
           : {}),
       },
       { count: "exact" },
@@ -351,6 +372,7 @@ export async function doFinishCustomer(
     business_date: bd,
     kind: result.kind,
     return_type: result.return_type ?? null,
+    served_seconds: served,
     sold: result.sold,
     got_contact: result.got_contact,
     reasons: result.reasons ?? null,

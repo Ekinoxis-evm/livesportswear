@@ -33,6 +33,7 @@ import { QueueLine } from "@/components/store/queue-line";
 import { RetakeDialog } from "@/components/store/retake-dialog";
 import { EmployeeAvatar } from "@/components/shared/employee-avatar";
 import { BreakTimer } from "@/components/store/break-timer";
+import { ClientTimer } from "@/components/store/client-timer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -55,6 +56,7 @@ export type SalesRow = {
   sinceLabel: string; // when they (re)joined the line — the FIFO position
   walkins: number; // open walk-in customers
   returns: number; // open returns/exchanges
+  attendingStartedAt: string | null; // oldest open client's take-time (live clock)
   breakStartedAt: string | null; // open break, if any
   breakPriorMinutes: number; // closed breaks earlier today
 };
@@ -258,8 +260,12 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 {openTotal > 1 ? `With ${openTotal} clients` : "With a client"}
                 {r.returns > 0 && ` · ${r.returns} return`}
               </span>
-              <span className="text-muted-foreground text-xs tabular-nums">
-                arrived {r.arrivedLabel}
+              <span className="text-sm font-semibold tabular-nums text-amber-600">
+                {r.attendingStartedAt ? (
+                  <ClientTimer startedAt={r.attendingStartedAt} />
+                ) : (
+                  <span className="text-muted-foreground text-xs">arrived {r.arrivedLabel}</span>
+                )}
               </span>
             </div>
             <p className="text-2xl font-bold">{r.name}</p>
