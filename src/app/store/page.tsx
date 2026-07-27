@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { orderFloor, type FloorMember } from "@/lib/floor-queue";
 import { openBreak, breakMinutes, type BreakRow } from "@/lib/breaks";
+import { asQueue, oldestAt } from "@/lib/attend-timer";
 import { SalesBoard, type SalesRow } from "@/components/store/sales-board";
 
 type CheckinRow = {
@@ -17,6 +18,7 @@ type CheckinRow = {
   manual_pos: number | null;
   attending_count: number;
   attending_return_count: number;
+  attending_started_at: unknown;
 };
 
 export default async function StoreSalesPage() {
@@ -42,7 +44,7 @@ export default async function StoreSalesPage() {
       service
         .from("floor_checkins")
         .select(
-          "employee_id, arrived_at, available_since, left_at, status, rotation_count, bumped_at, manual_pos, attending_count, attending_return_count",
+          "employee_id, arrived_at, available_since, left_at, status, rotation_count, bumped_at, manual_pos, attending_count, attending_return_count, attending_started_at",
         )
         .eq("location_id", locationId)
         .eq("business_date", bd),
@@ -74,6 +76,9 @@ export default async function StoreSalesPage() {
   const nowIso = new Date().toISOString();
 
   const checkins = (checkinRows ?? []) as CheckinRow[];
+  const attendingSinceOf = new Map(
+    checkins.map((c) => [c.employee_id, oldestAt(asQueue(c.attending_started_at))]),
+  );
   const members: FloorMember[] = checkins.map((c) => ({
     employeeId: c.employee_id,
     name: nameOf.get(c.employee_id) ?? "—",
@@ -103,6 +108,7 @@ export default async function StoreSalesPage() {
       sinceLabel: formatInTimeZone(new Date(r.availableSince), tz, "HH:mm"),
       walkins: r.attendingCount ?? 0,
       returns: r.returnCount ?? 0,
+      attendingStartedAt: attendingSinceOf.get(r.employeeId) ?? null,
       breakStartedAt: open?.startedAt ?? null,
       // closed breaks only — the open one is clocked live by the timer
       breakPriorMinutes: breakMinutes(

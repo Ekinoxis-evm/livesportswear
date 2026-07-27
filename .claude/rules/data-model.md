@@ -134,6 +134,12 @@ layer (counts), not money.
   (`src/lib/conversion.ts`), which stays `walkin`|`return`. `both` implies
   `sold=true` (returned + bought more); `return`/`exchange` imply `sold=false`.
 - `got_contact boolean not null default false`
+- `served_seconds int` (added 0056) — how long the client was attended (taken →
+  finished). Captured from the per-client start stamp popped off
+  `floor_checkins.attending_started_at` at finish; null for pre-0056 rows and
+  for re-take/undo paths that record no duration. Averaged for the "avg time /
+  client" metric on the attendance views + the daily report. Pure queue math in
+  `src/lib/attend-timer.ts`.
 - **Re-take** (`storeRetake`, `src/lib/retake.ts`): a client already attended
   today comes back and buys, and the sale is added to the row she ALREADY
   logged — one attended, one sold, so conversion stays honest. `order_total`
@@ -338,6 +344,12 @@ is display-only ("N turns today"). See `src/lib/floor-queue.ts`
 - `rotation_count int not null default 0` — display-only since 0036
 - `available_since timestamptz` (added 0036) — the FIFO ordering key; null
   on pre-0036 rows (readers fall back to `arrived_at`)
+- `attending_started_at jsonb` (added 0056) — a QUEUE of the rep's currently-open
+  clients (`[{kind, at}]`), for the per-client timer. Pushed on take, popped
+  (oldest of the kind, FIFO) on finish → `client_events.served_seconds`, popped
+  (newest) on undo, cleared on back-to-line. Kiosk single-writer, so the
+  read-modify-write is safe. Pure helpers in `src/lib/attend-timer.ts`; the
+  `/store` board clocks the oldest open `at` live (`ClientTimer`)
 - `bumped_at timestamptz` (added 0014) — manual "make up next" override by a
   lead; non-null puts the member at the front of the line (latest bump wins),
   cleared when they take a customer or re-check-in
