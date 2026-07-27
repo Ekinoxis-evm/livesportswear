@@ -11,22 +11,49 @@ import {
 import { formatMoney } from "@/lib/commission";
 import { cn } from "@/lib/utils";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { ServerSortTh } from "@/components/shared/server-sort-head";
 import { CountryCell } from "@/components/shared/country-cell";
 import { ClientMessageDialog, type MessageTarget } from "@/components/shared/client-message-dialog";
 import { Button } from "@/components/ui/button";
 
-export function StoreClientsTable({ rows }: { rows: StoreClient[] }) {
+export function StoreClientsTable({
+  rows,
+  sort,
+  dir,
+  q,
+  rep,
+}: {
+  rows: StoreClient[];
+  sort: string;
+  dir: "asc" | "desc";
+  q: string;
+  rep: string | null;
+}) {
   const [sendFor, setSendFor] = useState<MessageTarget | null>(null);
+
+  // Server-side sort links — sorting must run in the DB (this list is paginated),
+  // so the header toggles ?sort=&dir= and the page re-queries. Preserve q/rep,
+  // reset to page 1.
+  const hrefFor = (nextSort: string, nextDir: "asc" | "desc") => {
+    const p = new URLSearchParams();
+    if (q) p.set("q", q);
+    if (rep) p.set("rep", rep);
+    if (nextSort !== "recent") p.set("sort", nextSort);
+    if (nextDir !== "desc") p.set("dir", nextDir);
+    const s = p.toString();
+    return s ? `/store/clients?${s}` : "/store/clients";
+  };
+
   return (
     <>
       <ScrollTable density="comfortable" maxHeight="60vh">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-muted-foreground text-left">
-              <th className="py-2 font-medium">Client</th>
-              <th className="hidden py-2 font-medium sm:table-cell">Country</th>
+              <ServerSortTh sortKey="name" sort={sort} dir={dir} hrefFor={hrefFor} className="py-2 font-medium">Client</ServerSortTh>
+              <ServerSortTh sortKey="country" sort={sort} dir={dir} hrefFor={hrefFor} className="hidden py-2 font-medium sm:table-cell">Country</ServerSortTh>
               <th className="hidden py-2 font-medium sm:table-cell">Brought in by</th>
-              <th className="py-2 text-right font-medium">Value</th>
+              <ServerSortTh sortKey="value" sort={sort} dir={dir} hrefFor={hrefFor} className="py-2 text-right font-medium">Value</ServerSortTh>
               <th className="py-2 text-center font-medium">In WhatsApp</th>
               <th className="py-2 text-right font-medium">Message</th>
             </tr>
