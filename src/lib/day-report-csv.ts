@@ -66,6 +66,7 @@ export type DayReportTotals = {
   conversionPct: string;
   contacts: number;
   returns: number;
+  avgTimeLabel: string; // avg time per client, m:ss (or "—")
 };
 
 export function buildDayReportCsv({

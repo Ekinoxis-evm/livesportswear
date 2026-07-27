@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createServerClient } from "@/lib/supabase/server";
 import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
-import { totals, byPerson, formatPct } from "@/lib/conversion";
+import { totals, byPerson, formatPct, formatDuration } from "@/lib/conversion";
 import { stampStatus, workedHours, type AttendanceStamp } from "@/lib/attendance";
 import { PerformancePeopleTable } from "@/components/admin/performance-people-table";
 import { breakMinutes, overBreakBudget, type BreakRow } from "@/lib/breaks";
@@ -39,6 +39,7 @@ type EventRow = {
   employee_id: string;
   sold: boolean;
   got_contact: boolean;
+  served_seconds: number | null;
   employees: { name: string } | null;
 };
 
@@ -97,7 +98,7 @@ export default async function PerformancePage({
     await Promise.all([
       supabase
         .from("client_events")
-        .select("employee_id, sold, got_contact, employees(name)")
+        .select("employee_id, sold, got_contact, served_seconds, employees(name)")
         .eq("location_id", location.id)
         .eq("business_date", date),
       supabase
@@ -273,6 +274,14 @@ export default async function PerformancePage({
             <CardDescription>Conversion</CardDescription>
             <CardTitle className="text-2xl tabular-nums">
               {store.attended > 0 ? formatPct(store.conversion) : "—"}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Avg time / client</CardDescription>
+            <CardTitle className="text-2xl tabular-nums">
+              {formatDuration(store.avgServedSeconds)}
             </CardTitle>
           </CardHeader>
         </Card>

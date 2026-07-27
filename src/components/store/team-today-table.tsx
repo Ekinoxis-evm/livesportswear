@@ -3,7 +3,7 @@
 import { ScrollTable } from "@/components/shared/scroll-table";
 import { SortableTh } from "@/components/shared/sortable-header";
 import { useTableSort } from "@/lib/use-table-sort";
-import { formatPct } from "@/lib/conversion";
+import { formatPct, formatDuration } from "@/lib/conversion";
 
 export type TeamTodayRow = {
   employeeId: string;
@@ -12,6 +12,7 @@ export type TeamTodayRow = {
   sold: number;
   conversion: number;
   returns: number;
+  avgSeconds: number | null;
   hours: number | null;
 };
 
@@ -23,6 +24,7 @@ export function TeamTodayTable({ rows: input }: { rows: TeamTodayRow[] }) {
     sold: (r) => r.sold,
     conversion: (r) => (r.attended > 0 ? r.conversion : null),
     returns: (r) => r.returns,
+    avg: (r) => r.avgSeconds,
     hours: (r) => r.hours,
   });
   return (
@@ -35,6 +37,7 @@ export function TeamTodayTable({ rows: input }: { rows: TeamTodayRow[] }) {
             <SortableTh sortKey="sold" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Sold</SortableTh>
             <SortableTh sortKey="conversion" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Conversion</SortableTh>
             <SortableTh sortKey="returns" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Returns</SortableTh>
+            <SortableTh sortKey="avg" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Avg time</SortableTh>
             <SortableTh sortKey="hours" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Hours</SortableTh>
           </tr>
         </thead>
@@ -50,6 +53,7 @@ export function TeamTodayTable({ rows: input }: { rows: TeamTodayRow[] }) {
               <td className="py-2 text-right tabular-nums">
                 {p.returns > 0 ? p.returns : "—"}
               </td>
+              <td className="py-2 text-right tabular-nums">{formatDuration(p.avgSeconds)}</td>
               <td className="py-2 text-right tabular-nums">{p.hours ?? "—"}</td>
             </tr>
           ))}

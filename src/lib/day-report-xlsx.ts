@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { formatInTimeZone } from "date-fns-tz";
 import { workedHours, stampStatus } from "@/lib/attendance";
+import { formatDuration } from "@/lib/conversion";
 import {
   productLabel,
   type ReportEvent,
@@ -19,6 +20,7 @@ export type ReportEmployee = {
   sold: number;
   conversion: number; // 0..1
   contacts: number;
+  avgSeconds: number | null; // avg attend time
   hours: number;
 };
 
@@ -76,6 +78,7 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
   s.addRow(["Conversion", t.conversionPct]);
   s.addRow(["Contacts", t.contacts]);
   s.addRow(["Returns", t.returns]);
+  s.addRow(["Avg time / client", t.avgTimeLabel]);
   s.addRow([`Currency: ${d.currency}`]);
 
   // 2 — Employees
@@ -90,6 +93,7 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
     { width: 8 },
     { width: 12 },
     { width: 10 },
+    { width: 10 },
     { width: 8 },
   ];
   headerRow(e, [
@@ -102,6 +106,7 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
     "Sold",
     "Conversion",
     "Contacts",
+    "Avg time",
     "Hours",
   ]);
   for (const p of d.employees) {
@@ -115,6 +120,7 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
       p.sold,
       p.conversion,
       p.contacts,
+      formatDuration(p.avgSeconds),
       p.hours,
     ]);
     row.getCell(2).numFmt = MONEY;

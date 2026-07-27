@@ -2,7 +2,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
-import { totals, byPerson, formatPct } from "@/lib/conversion";
+import { totals, byPerson, formatPct, formatDuration } from "@/lib/conversion";
 import { workedHours } from "@/lib/attendance";
 import { normalizeStaffId } from "@/lib/shopify-range";
 import { buildOrdersView } from "@/lib/orders-today";
@@ -82,7 +82,7 @@ export default async function StorePerformancePage({
     service
       .from("client_events")
       .select(
-        "id, employee_id, attended_at, kind, return_type, sold, got_contact, order_total, shopify_order_name, linked_orders, customer_name",
+        "id, employee_id, attended_at, kind, return_type, sold, got_contact, served_seconds, order_total, shopify_order_name, linked_orders, customer_name",
       )
       .eq("location_id", locationId)
       .eq("business_date", bd),
@@ -156,6 +156,7 @@ export default async function StorePerformancePage({
       contactRate: 0,
       returns: 0,
       returnExtraSales: 0,
+      avgServedSeconds: null,
     }));
   const tableRows = [...perPerson, ...zeroRows];
 
@@ -208,6 +209,7 @@ export default async function StorePerformancePage({
       returnType: e.return_type,
       sold: e.sold,
       gotContact: e.got_contact,
+      servedSeconds: e.served_seconds,
       orderName: e.shopify_order_name,
       orderTotal: e.order_total,
       orderCount: Array.isArray(e.linked_orders)
@@ -430,6 +432,7 @@ export default async function StorePerformancePage({
                 ["Sold", String(t.sold)],
                 ["Conversion", t.attended > 0 ? formatPct(t.conversion) : "—"],
                 ["Contacts", String(t.contacts)],
+                ["Avg time", formatDuration(t.avgServedSeconds)],
               ] as const
             ).map(([label, value]) => (
               <span key={label} className="flex items-baseline gap-1.5">
@@ -453,6 +456,7 @@ export default async function StorePerformancePage({
                 sold: p.sold,
                 conversion: p.conversion,
                 returns: p.returns,
+                avgSeconds: p.avgServedSeconds,
                 hours: hoursOf.get(p.employeeId) ?? null,
               }))}
             />

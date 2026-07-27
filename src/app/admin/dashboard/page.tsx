@@ -24,7 +24,7 @@ import {
   type CommissionTier,
 } from "@/lib/commission";
 import type { SalesBreakdown } from "@/lib/sales-breakdown";
-import { formatPct } from "@/lib/conversion";
+import { formatPct, formatDuration } from "@/lib/conversion";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import { fetchDaySales, type DaySales } from "@/lib/shopify";
 import { monthRangeInTz, dayRangeInTz, customRangeInTz } from "@/lib/shopify-range";
@@ -176,7 +176,7 @@ export default async function DashboardPage({
       .select("id, name, location_id, avatar_color, active, shopify_staff_id, locations(name)"),
     supabase
       .from("client_events")
-      .select("sold")
+      .select("sold, served_seconds")
       .gte("business_date", monthStart)
       .lt("business_date", nextMonthStart),
     supabase
@@ -321,6 +321,10 @@ export default async function DashboardPage({
 
   const evs = eventsRes.data ?? [];
   const convMTD = evs.length === 0 ? null : evs.filter((e) => e.sold).length / evs.length;
+  const timedEvs = evs.filter((e) => e.served_seconds != null);
+  const avgTimeMTD = timedEvs.length
+    ? Math.round(timedEvs.reduce((s, e) => s + (e.served_seconds ?? 0), 0) / timedEvs.length)
+    : null;
   const spend = (adsRes.data ?? []).reduce((a, r) => a + Number(r.spend), 0);
   const revenue = (adsRes.data ?? []).reduce((a, r) => a + Number(r.revenue), 0);
   const roas = spend > 0 ? revenue / spend : null;
@@ -455,7 +459,7 @@ export default async function DashboardPage({
             </CardTitle>
             <CardDescription>
               {convMTD != null
-                ? `${evs.length} clients attended`
+                ? `${evs.length} clients attended${avgTimeMTD != null ? ` · ${formatDuration(avgTimeMTD)} avg` : ""}`
                 : "No clients logged yet"}
             </CardDescription>
           </CardHeader>

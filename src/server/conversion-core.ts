@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
 import { resolveRecipients } from "@/lib/report-recipients";
-import { totals, byPerson, formatPct, type ConversionTotals } from "@/lib/conversion";
+import { totals, byPerson, formatPct, formatDuration, type ConversionTotals } from "@/lib/conversion";
 import { breakMinutes, type BreakRow } from "@/lib/breaks";
 import { workedHours } from "@/lib/attendance";
 import { getDaySalesCached, getDayOrdersCached } from "@/lib/shopify-day-cache";
@@ -127,7 +127,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     service
       .from("client_events")
       .select(
-        "employee_id, attended_at, kind, return_type, sold, got_contact, reasons, note, products, shopify_order_name, order_total, linked_orders, customer_name, employees(name)",
+        "employee_id, attended_at, kind, return_type, sold, got_contact, served_seconds, reasons, note, products, shopify_order_name, order_total, linked_orders, customer_name, employees(name)",
       )
       .eq("location_id", locationId)
       .eq("business_date", bd)
@@ -226,6 +226,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
         sold: conv?.sold ?? 0,
         conversion: conv?.conversion ?? 0,
         contacts: conv?.contacts ?? 0,
+        avgSeconds: conv?.avgServedSeconds ?? null,
         hours: round2(hoursByEmp.get(id) ?? 0),
       };
     })
@@ -290,6 +291,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     conversionPct: formatPct(t.conversion),
     contacts: t.contacts,
     returns: t.returns,
+    avgTimeLabel: formatDuration(t.avgServedSeconds),
   };
 
   const csv = buildDayReportCsv({
@@ -580,6 +582,7 @@ export async function sendDayReport(
         sold: d.t.sold,
         contacts: d.t.contacts,
         conversionPct: formatPct(d.t.conversion),
+        avgTimeLabel: formatDuration(d.t.avgServedSeconds),
         returns: d.t.returns,
         returnExtraSales: d.t.returnExtraSales,
         shopifySales:
