@@ -717,10 +717,23 @@ export type StoreClient = {
 export type StoreClientRep = { id: string; name: string };
 
 const CLIENTS_PAGE = 50;
+// Sortable columns → the cached customer_origin columns they map to (client
+// lists sort on the cached Shopify stats — see data-model.md 0051). Parity with
+// the admin/portal client lists.
+const CLIENT_SORT_COLS = {
+  recent: "first_order_at",
+  name: "customer_name",
+  country: "country_iso",
+  value: "total_spent",
+  orders: "orders_count",
+} as const;
+type ClientSort = keyof typeof CLIENT_SORT_COLS;
 const listClientsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   q: z.string().trim().max(60).optional(),
   rep: z.string().uuid().optional(),
+  sort: z.enum(Object.keys(CLIENT_SORT_COLS) as [ClientSort, ...ClientSort[]]).default("recent"),
+  dir: z.enum(["asc", "desc"]).default("desc"),
 });
 
 type OriginRow = {
@@ -761,7 +774,7 @@ export async function storeListClients(
   const { locationId, service } = await storeCtx();
   const parsed = listClientsSchema.safeParse(input ?? {});
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  const { page, rep } = parsed.data;
+  const { page, rep, sort, dir } = parsed.data;
   const q = parsed.data.q ?? "";
 
   const { rows: staff, nameByStaff } = await locationStaff(service, locationId);
@@ -798,7 +811,7 @@ export async function storeListClients(
       .eq("location_id", locationId);
     if (repStaffId) query = query.eq("staff_id", repStaffId);
     const { data, count } = await query
-      .order("first_order_at", { ascending: false })
+      .order(CLIENT_SORT_COLS[sort], { ascending: dir === "asc", nullsFirst: false })
       .range((page - 1) * CLIENTS_PAGE, page * CLIENTS_PAGE - 1);
     origins = (data ?? []) as OriginRow[];
     total = count ?? 0;

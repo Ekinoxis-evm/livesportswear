@@ -10,15 +10,18 @@ import { Card, CardContent } from "@/components/ui/card";
 export default async function StoreClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; rep?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; rep?: string; sort?: string; dir?: string }>;
 }) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const q = (sp.q ?? "").trim();
   const rep = sp.rep?.trim() || undefined;
+  const SORT_KEYS = ["recent", "name", "country", "value", "orders"];
+  const sort = sp.sort && SORT_KEYS.includes(sp.sort) ? sp.sort : "recent";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
 
   const [res, repsRes] = await Promise.all([
-    storeListClients({ page, q, rep }),
+    storeListClients({ page, q, rep, sort, dir }),
     storeClientReps(),
   ]);
   const clients = res.ok && res.data ? res.data.clients : [];
@@ -30,6 +33,8 @@ export default async function StoreClientsPage({
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (rep) params.set("rep", rep);
+    if (sort !== "recent") params.set("sort", sort);
+    if (dir !== "desc") params.set("dir", dir);
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
     return s ? `/store/clients?${s}` : "/store/clients";
@@ -76,7 +81,7 @@ export default async function StoreClientsPage({
               {q ? "No clients match that search." : "No clients yet."}
             </p>
           ) : (
-            <StoreClientsTable rows={clients} />
+            <StoreClientsTable rows={clients} sort={sort} dir={dir} q={q} rep={rep ?? null} />
           )}
         </CardContent>
       </Card>
