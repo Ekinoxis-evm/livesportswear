@@ -22,6 +22,8 @@ import {
 import { Stat, StatGrid } from "@/components/portal/stats";
 import { GoalIndicator } from "@/components/shared/goal-indicator";
 import { TierLadder } from "@/components/shared/tier-ladder";
+import { SyncSalesButton } from "@/components/shared/sync-sales-button";
+import { portalSyncSales } from "@/server/clients";
 import { tierGaps } from "@/lib/tier-gaps";
 import { goalPace } from "@/lib/goal-pace";
 import { remainingWorkdays } from "@/lib/scheduling/workdays";
@@ -163,8 +165,13 @@ export default async function PortalOverviewPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Sales &amp; commission</CardTitle>
-          <CardDescription>{monthLabel(month)}</CardDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Sales &amp; commission</CardTitle>
+              <CardDescription>{monthLabel(month)}</CardDescription>
+            </div>
+            <SyncSalesButton action={portalSyncSales} />
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <StatGrid>

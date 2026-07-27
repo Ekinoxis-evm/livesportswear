@@ -19,6 +19,8 @@ import { ScrollTable } from "@/components/shared/scroll-table";
 import { ServerSortTh } from "@/components/shared/server-sort-head";
 import { ContactButtons } from "@/components/shared/contact-buttons";
 import { PortalMessageButton } from "@/components/portal/portal-message-button";
+import { RefreshClientsButton } from "@/components/shared/refresh-clients-button";
+import { portalRefreshClients } from "@/server/clients";
 import { Stat, StatGrid } from "@/components/portal/stats";
 
 const PAGE_SIZE = 50;
@@ -117,12 +119,15 @@ export default async function PortalClientsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold">Clients</h1>
-        <p className="text-muted-foreground text-sm">
-          Everyone you brought into the store — the clients whose first in-store
-          order was yours.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Clients</h1>
+          <p className="text-muted-foreground text-sm">
+            Everyone you brought into the store — the clients whose first in-store
+            order was yours.
+          </p>
+        </div>
+        {myStaffId !== null && <RefreshClientsButton action={portalRefreshClients} />}
       </div>
 
       {myStaffId === null ? (

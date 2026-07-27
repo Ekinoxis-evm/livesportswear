@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { requireEmployee } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isShopifyConfigured } from "@/lib/shopify-config";
@@ -13,6 +14,11 @@ import { normalizeStaffId } from "@/lib/shopify-range";
 import { buildMessage } from "@/lib/client-message";
 import { whatsappLink } from "@/lib/contact-links";
 import { MESSAGE_LANGUAGES, MESSAGE_KEYS } from "@/lib/message-languages";
+import { businessDate } from "@/lib/business-date";
+import { primaryTimezone } from "@/lib/business-tz";
+import { runShopifySync, type SyncResult } from "@/lib/shopify-sync";
+import { runAttributionSync, runCustomerStatsSync } from "@/lib/customer-origin-sync";
+import { cooldown } from "@/lib/action-cooldown";
 import { firstError, type ActionResult } from "@/server/shared";
 
 const messageLinkSchema = z.object({
@@ -96,4 +102,27 @@ export async function portalMessageLink(
     };
   }
   return { ok: true, data: { url } };
+}
+
+/** Portal "sync sales" — pull this month's Shopify sales into monthly_sales now. */
+export async function portalSyncSales(): Promise<SyncResult> {
+  await requireEmployee();
+  const wait = cooldown("monthly-sales-sync", 30_000);
+  if (wait > 0) return { ok: false, error: `Just synced — try again in ${wait}s.` };
+  const month = businessDate(await primaryTimezone()).slice(0, 7);
+  const res = await runShopifySync(month);
+  if (res.ok) revalidatePath("/portal", "layout");
+  return res;
+}
+
+/** Portal "refresh clients" — pull recently-created Shopify customers into the book. */
+export async function portalRefreshClients(): Promise<ActionResult<{ customers: number }>> {
+  await requireEmployee();
+  const wait = cooldown("attribution-sync", 300_000);
+  if (wait > 0) return { ok: false, error: `Just refreshed — try again in ${wait}s.` };
+  const attr = await runAttributionSync(new Date(Date.now() - 7 * 864e5).toISOString());
+  if (!attr.ok) return { ok: false, error: attr.error };
+  await runCustomerStatsSync(attr.customerIds);
+  revalidatePath("/portal/clients");
+  return { ok: true, data: { customers: attr.customers } };
 }

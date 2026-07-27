@@ -44,6 +44,9 @@ import { whatsappLink } from "@/lib/contact-links";
 import { countryFromIso, type Country } from "@/lib/phone-country";
 import { MESSAGE_LANGUAGES, MESSAGE_KEYS } from "@/lib/message-languages";
 import { normalizeStaffId } from "@/lib/shopify-range";
+import { runShopifySync, type SyncResult } from "@/lib/shopify-sync";
+import { runAttributionSync, runCustomerStatsSync } from "@/lib/customer-origin-sync";
+import { cooldown } from "@/lib/action-cooldown";
 import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -839,6 +842,28 @@ export async function storeClientReps(): Promise<ActionResult<{ reps: StoreClien
     .filter((e) => e.shopify_staff_id)
     .map((e) => ({ id: e.id, name: e.name }));
   return { ok: true, data: { reps } };
+}
+
+/** Kiosk "sync sales" — pull this month's Shopify sales into monthly_sales now. */
+export async function storeSyncSales(): Promise<SyncResult> {
+  const { bd } = await storeCtx();
+  const wait = cooldown("monthly-sales-sync", 30_000);
+  if (wait > 0) return { ok: false, error: `Just synced — try again in ${wait}s.` };
+  const res = await runShopifySync(bd.slice(0, 7));
+  if (res.ok) revalidatePath("/store", "layout");
+  return res;
+}
+
+/** Kiosk "refresh clients" — pull recently-created Shopify customers into the book. */
+export async function storeRefreshClients(): Promise<ActionResult<{ customers: number }>> {
+  await storeCtx();
+  const wait = cooldown("attribution-sync", 300_000);
+  if (wait > 0) return { ok: false, error: `Just refreshed — try again in ${wait}s.` };
+  const attr = await runAttributionSync(new Date(Date.now() - 7 * 864e5).toISOString());
+  if (!attr.ok) return { ok: false, error: attr.error };
+  await runCustomerStatsSync(attr.customerIds);
+  revalidatePath("/store/clients");
+  return { ok: true, data: { customers: attr.customers } };
 }
 
 const setWhatsappSchema = z.object({

@@ -41,6 +41,8 @@ import {
 } from "@/components/ui/card";
 import { ReportActions, type CloserEntry } from "@/components/store/report-actions";
 import { NextTierList } from "@/components/store/next-tier-list";
+import { SyncSalesButton } from "@/components/shared/sync-sales-button";
+import { storeSyncSales } from "@/server/store-floor";
 import { resolveTiers, asTiers } from "@/lib/commission";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -288,7 +290,10 @@ export default async function StorePerformancePage({
       {/* One sales table, switchable period (the standard module) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Sales</CardTitle>
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle className="text-base">Sales</CardTitle>
+            <SyncSalesButton action={storeSyncSales} />
+          </div>
           <CardDescription>
             {mode === "month"
               ? "Net sales (synced from Shopify)"
