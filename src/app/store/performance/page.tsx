@@ -40,6 +40,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ReportActions, type CloserEntry } from "@/components/store/report-actions";
+import { NextTierList } from "@/components/store/next-tier-list";
+import { resolveTiers, asTiers } from "@/lib/commission";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default async function StorePerformancePage({
@@ -73,6 +75,7 @@ export default async function StorePerformancePage({
     { data: monthSalesRows },
     { data: goalRow },
     { data: personalGoalRows },
+    { data: commissionCfg },
   ] = await Promise.all([
     service
       .from("client_events")
@@ -113,7 +116,7 @@ export default async function StorePerformancePage({
       .eq("employees.location_id", locationId),
     service
       .from("store_goals")
-      .select("goal_amount, currency")
+      .select("goal_amount, currency, tiers")
       .eq("location_id", locationId)
       .eq("year", year)
       .eq("month", monthNum)
@@ -124,6 +127,7 @@ export default async function StorePerformancePage({
       .eq("year", year)
       .eq("month", monthNum)
       .eq("employees.location_id", locationId),
+    service.from("commission_config").select("tiers").eq("id", 1).maybeSingle(),
   ]);
 
   const roster = employees ?? [];
@@ -214,6 +218,8 @@ export default async function StorePerformancePage({
   // Month numbers from the synced monthly_sales table (DB-only).
   const monthTotal = (monthSalesRows ?? []).reduce((a, r) => a + Number(r.amount), 0);
   const monthGoal = goalRow ? Number(goalRow.goal_amount) : 0;
+  // Commission tiers for the month (store override, else the global config).
+  const tiers = resolveTiers(goalRow?.tiers, asTiers(commissionCfg?.tiers));
   const personalGoalOf = new Map(
     (personalGoalRows ?? []).map((r) => [r.employee_id, Number(r.goal_amount)]),
   );
@@ -370,6 +376,19 @@ export default async function StorePerformancePage({
               showGoal={mode === "month"}
               density="comfortable"
             />
+          )}
+
+          {mode === "month" && rows.length > 0 && tiers.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                To the next commission tier
+              </span>
+              <NextTierList
+                rows={rows.map((r) => ({ name: r.name, net: r.net }))}
+                tiers={tiers}
+                currency={currency}
+              />
+            </div>
           )}
 
           {mode !== "month" && unmappedCount > 0 && (
