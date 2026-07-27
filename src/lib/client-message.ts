@@ -37,7 +37,8 @@ export function buildMessage({
   language: MessageLanguage;
   appendItems?: MessageItem[];
   lastProduct?: string | null;
-  /** Rep the client is attributed to; appended as a sign-off when present. */
+  /** Rep to sign as. Fills a `{signature}` token in place; if the template has
+   *  no token, it's appended as a sign-off. Dropped cleanly when absent. */
   signature?: string | null;
 }): string {
   const fn = firstName(name);
@@ -51,7 +52,18 @@ export function buildMessage({
   text = lp
     ? text.replace(/\{last_product\}/g, lp)
     : text.replace(/\{last_product\}/g, "").replace(/ {2,}/g, " ");
-  text = text.trim();
+
+  // {signature} token: fill with the rep's name IN PLACE (where the template
+  // wants the sign-off). When there's no signature, drop the token with any
+  // bold wrapper (*{signature}*) and its blank line so nothing dangles.
+  const sig = (signature ?? "").trim();
+  const hadSigToken = /\{signature\}/.test(body);
+  if (hadSigToken) {
+    text = sig
+      ? text.replace(/\{signature\}/g, sig)
+      : text.replace(/[ \t]*\*?\{signature\}\*?[ \t]*\n?/g, "");
+  }
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   if (appendItems && appendItems.length > 0) {
     const byTitle = new Map<string, number>();
@@ -66,7 +78,8 @@ export function buildMessage({
     }
   }
 
-  const sig = (signature ?? "").trim();
-  if (sig) text += `\n\n${sig}`;
+  // Backward-compat: a template WITHOUT a {signature} token still gets the
+  // rep's name appended at the end (the token, when present, owns placement).
+  if (sig && !hadSigToken) text += `\n\n${sig}`;
   return text;
 }

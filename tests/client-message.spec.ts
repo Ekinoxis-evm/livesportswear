@@ -75,7 +75,7 @@ describe("buildMessage — appended item list (thank-you)", () => {
 });
 
 describe("buildMessage — signature (attributed rep)", () => {
-  it("appends the rep sign-off after everything else", () => {
+  it("appends the rep sign-off after everything else (no token)", () => {
     expect(
       buildMessage({
         body: "Thanks!",
@@ -90,5 +90,34 @@ describe("buildMessage — signature (attributed rep)", () => {
   it("does nothing when the signature is empty or blank", () => {
     expect(buildMessage({ body: "Hi!", name: null, language: "en", signature: "  " })).toBe("Hi!");
     expect(buildMessage({ body: "Hi!", name: null, language: "en" })).toBe("Hi!");
+  });
+});
+
+describe("buildMessage — {signature} token", () => {
+  const tpl = "Have a great day!\n\n*{signature}*\n *LIVE!* : store.com";
+
+  it("fills the token in place with the rep name (not appended at the end)", () => {
+    expect(buildMessage({ body: tpl, name: null, language: "en", signature: "Ana Gómez" })).toBe(
+      "Have a great day!\n\n*Ana Gómez*\n *LIVE!* : store.com",
+    );
+  });
+
+  it("does NOT also append when the token is present", () => {
+    const out = buildMessage({ body: tpl, name: null, language: "en", signature: "Ana" });
+    expect(out.match(/Ana/g)).toHaveLength(1);
+  });
+
+  it("drops the token line (and its bold wrapper) cleanly when there's no signature", () => {
+    expect(buildMessage({ body: tpl, name: null, language: "en" })).toBe(
+      "Have a great day!\n\n *LIVE!* : store.com",
+    );
+  });
+
+  it("still appends the products under the filled template", () => {
+    expect(
+      buildMessage({ body: tpl, name: null, language: "en", signature: "Ana", appendItems: items }),
+    ).toBe(
+      "Have a great day!\n\n*Ana*\n *LIVE!* : store.com\n\nYour order:\n• Runner shorts\n• Everyday jog pants",
+    );
   });
 });
