@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Search, Users } from "lucide-react";
-import { storeListClients, storeClientReps } from "@/server/store-floor";
+import { storeListClients, storeClientReps, storeRefreshClients } from "@/server/store-floor";
 import { StoreClientsTable } from "@/components/store/store-clients-table";
 import { StoreRepFilter } from "@/components/store/store-rep-filter";
+import { RefreshClientsButton } from "@/components/shared/refresh-clients-button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -44,6 +45,9 @@ export default async function StoreClientsPage({
             {total.toLocaleString()}
           </span>
         )}
+        <div className="ml-auto">
+          <RefreshClientsButton action={storeRefreshClients} />
+        </div>
       </div>
       <p className="text-muted-foreground text-sm">
         Your store&apos;s clients. Tick who&apos;s saved in the store WhatsApp, and

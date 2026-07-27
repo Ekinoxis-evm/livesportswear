@@ -28,6 +28,8 @@ import {
   type SalesRankRow,
 } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
+import { SyncSalesButton } from "@/components/shared/sync-sales-button";
+import { syncMonthlySales } from "@/server/shopify";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { GoalIndicator } from "@/components/shared/goal-indicator";
 import { goalPace } from "@/lib/goal-pace";
@@ -204,12 +206,15 @@ export default async function SalesTabPage({
   return (
     <div className="flex flex-col gap-6">
       {/* The standard sales-period module */}
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wide">Sales</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Net sales attributed per employee — Today, Week, Month, or custom
-          dates. Long custom ranges may take a few seconds.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide">Sales</h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Net sales attributed per employee — Today, Week, Month, or custom
+            dates. Long custom ranges may take a few seconds.
+          </p>
+        </div>
+        <SyncSalesButton action={syncMonthlySales} />
       </div>
 
       <div className="flex flex-wrap gap-2">
