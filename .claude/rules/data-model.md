@@ -140,6 +140,10 @@ layer (counts), not money.
   for re-take/undo paths that record no duration. Averaged for the "avg time /
   client" metric on the attendance views + the daily report. Pure queue math in
   `src/lib/attend-timer.ts`.
+- `attend_started_at timestamptz` (added 0057) — the raw turn-START (when the
+  client was taken); the finish is `attended_at`, the elapsed is `served_seconds`.
+  An audit field; the metrics read `served_seconds`, not this. Null on the same
+  no-duration paths.
 - **Re-take** (`storeRetake`, `src/lib/retake.ts`): a client already attended
   today comes back and buys, and the sale is added to the row she ALREADY
   logged — one attended, one sold, so conversion stays honest. `order_total`

@@ -114,6 +114,7 @@ export type Database = {
       }
       client_events: {
         Row: {
+          attend_started_at: string | null
           attended_at: string
           business_date: string
           created_at: string
@@ -138,6 +139,7 @@ export type Database = {
           sold: boolean
         }
         Insert: {
+          attend_started_at?: string | null
           attended_at?: string
           business_date: string
           created_at?: string
@@ -162,6 +164,7 @@ export type Database = {
           sold?: boolean
         }
         Update: {
+          attend_started_at?: string | null
           attended_at?: string
           business_date?: string
           created_at?: string

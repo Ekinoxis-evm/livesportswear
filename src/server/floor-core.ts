@@ -373,6 +373,7 @@ export async function doFinishCustomer(
     kind: result.kind,
     return_type: result.return_type ?? null,
     served_seconds: served,
+    attend_started_at: popped.entry?.at ?? null,
     sold: result.sold,
     got_contact: result.got_contact,
     reasons: result.reasons ?? null,
