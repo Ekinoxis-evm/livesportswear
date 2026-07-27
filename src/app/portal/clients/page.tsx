@@ -18,6 +18,7 @@ import {
 import { ScrollTable } from "@/components/shared/scroll-table";
 import { ServerSortTh } from "@/components/shared/server-sort-head";
 import { ContactButtons } from "@/components/shared/contact-buttons";
+import { PortalMessageButton } from "@/components/portal/portal-message-button";
 import { Stat, StatGrid } from "@/components/portal/stats";
 
 const PAGE_SIZE = 50;
@@ -174,7 +175,10 @@ export default async function PortalClientsPage({
                         {fullDate(r.firstOrderAt.slice(0, 10))}
                       </span>
                     </Link>
-                    <ContactButtons phone={r.phone} email={r.email} size="sm" />
+                    <div className="flex items-center gap-2">
+                      <PortalMessageButton customerId={r.id} name={r.name} phone={r.phone} />
+                      <ContactButtons phone={r.phone} email={r.email} size="sm" />
+                    </div>
                   </div>
                 ))}
               </CardContent>
@@ -223,7 +227,10 @@ export default async function PortalClientsPage({
                           )}
                         </td>
                         <td className="py-2">
-                          <ContactButtons phone={r.phone} email={r.email} size="sm" />
+                          <div className="flex items-center gap-2">
+                            <PortalMessageButton customerId={r.id} name={r.name} phone={r.phone} />
+                            <ContactButtons phone={r.phone} email={r.email} size="sm" />
+                          </div>
                         </td>
                         <td className="text-muted-foreground py-2 tabular-nums">
                           {fullDate(r.firstOrderAt.slice(0, 10))}
