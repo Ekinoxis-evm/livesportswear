@@ -16,7 +16,8 @@ import {
   EmployeeGoalsForm,
   type EmployeeGoalsByKey,
 } from "@/components/commission/employee-goals-form";
-import { SyncSalesButton } from "@/components/commission/sync-sales-button";
+import { SyncSalesButton } from "@/components/shared/sync-sales-button";
+import { syncMonthlySales } from "@/server/shopify";
 
 export default async function CommissionPage() {
   const supabase = await createServerClient();
@@ -91,7 +92,7 @@ export default async function CommissionPage() {
             .
           </p>
         </div>
-        <SyncSalesButton />
+        <SyncSalesButton action={syncMonthlySales} label="Sync sales now" />
       </div>
 
       <Card>
