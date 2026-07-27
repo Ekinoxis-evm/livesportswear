@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/card";
 import { Stat, StatGrid } from "@/components/portal/stats";
 import { GoalIndicator } from "@/components/shared/goal-indicator";
+import { TierLadder } from "@/components/shared/tier-ladder";
+import { tierGaps } from "@/lib/tier-gaps";
 import { goalPace } from "@/lib/goal-pace";
 import { remainingWorkdays } from "@/lib/scheduling/workdays";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
@@ -94,6 +96,13 @@ export default async function PortalOverviewPage() {
 
   const currency = cfg?.currency ?? "USD";
   const tiers = resolveTiers(storeGoal?.tiers, asTiers(cfg?.tiers));
+  const workDaysLeft = remainingWorkdays(
+    shifts,
+    employee.id,
+    today,
+    monthEnd,
+    employee.max_days_per_week,
+  );
 
   const months = (myMonths ?? []).map((m) => ({
     month: m.month as string,
@@ -173,27 +182,21 @@ export default async function PortalOverviewPage() {
           </StatGrid>
 
           <GoalIndicator
-            pace={goalPace(
-              goalAmount,
-              mySales,
-              today,
-              month,
-              remainingWorkdays(shifts, employee.id, today, monthEnd, employee.max_days_per_week),
-            )}
+            pace={goalPace(goalAmount, mySales, today, month, workDaysLeft)}
             format={(n) => formatMoney(n, currency)}
           />
 
-          {tiers.length > 0 &&
-            (commission.nextTier ? (
-              <p className="text-muted-foreground text-sm">
-                {formatMoney(commission.nextTier.remaining, currency)} more in sales to
-                reach {(commission.nextTier.rate * 100).toFixed(1)}%.
-              </p>
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                You&apos;re at the top tier — great work.
-              </p>
-            ))}
+          {tiers.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Commission tiers — how much more to each
+              </span>
+              <TierLadder
+                gaps={tierGaps(mySales, tiers, { workDaysLeft })}
+                currency={currency}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
