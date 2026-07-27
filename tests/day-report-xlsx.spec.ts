@@ -22,9 +22,10 @@ const input: DayReportXlsxInput = {
     conversionPct: "60%",
     contacts: 2,
     returns: 1,
+    avgTimeLabel: "3:20",
   },
   employees: [
-    { name: "Ana", gross: 120, net: 100, orders: 2, avgTicket: 50, attended: 3, sold: 2, conversion: 0.66, contacts: 1, hours: 7.5 },
+    { name: "Ana", gross: 120, net: 100, orders: 2, avgTicket: 50, attended: 3, sold: 2, conversion: 0.66, contacts: 1, avgSeconds: 200, hours: 7.5 },
   ],
   events: [
     {

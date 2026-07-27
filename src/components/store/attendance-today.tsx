@@ -6,6 +6,7 @@ import { SortableTh } from "@/components/shared/sortable-header";
 import { useTableSort } from "@/lib/use-table-sort";
 import { Check, X } from "lucide-react";
 import { formatMoney } from "@/lib/commission";
+import { formatDuration } from "@/lib/conversion";
 import {
   Card,
   CardContent,
@@ -23,6 +24,8 @@ export type AttendanceRow = {
   returnType: string | null; // 'return' | 'exchange' | 'both'
   sold: boolean;
   gotContact: boolean;
+  servedSeconds: number | null; // how long attended
+
   orderName: string | null;
   orderTotal: number | null;
   orderCount: number; // linked orders (>1 = split across receipts)
@@ -47,6 +50,7 @@ export function AttendanceToday({
     time: (r) => r.time,
     rep: (r) => r.rep,
     result: (r) => (r.sold ? 1 : 0),
+    duration: (r) => r.servedSeconds,
     customer: (r) => r.customer,
     order: (r) => r.orderTotal,
   });
@@ -96,6 +100,7 @@ export function AttendanceToday({
                   <SortableTh sortKey="time" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Time</SortableTh>
                   <SortableTh sortKey="rep" sort={sort} onSort={onSort} className="py-2 font-medium">Salesperson</SortableTh>
                   <SortableTh sortKey="result" sort={sort} onSort={onSort} className="py-2 font-medium">Result</SortableTh>
+                  <SortableTh sortKey="duration" sort={sort} onSort={onSort} className="hidden py-2 text-right font-medium sm:table-cell">Time</SortableTh>
                   <SortableTh sortKey="customer" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Customer</SortableTh>
                   <SortableTh sortKey="order" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Order</SortableTh>
                 </tr>
@@ -127,6 +132,9 @@ export function AttendanceToday({
                         )}
                         {r.gotContact && <Badge variant="secondary">contact</Badge>}
                       </div>
+                    </td>
+                    <td className="text-muted-foreground hidden py-2 text-right tabular-nums sm:table-cell">
+                      {formatDuration(r.servedSeconds)}
                     </td>
                     <td className="text-muted-foreground hidden py-2 sm:table-cell">
                       {r.customer ?? "—"}

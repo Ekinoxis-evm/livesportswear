@@ -4,6 +4,7 @@ import {
   totals,
   byPerson,
   formatPct,
+  formatDuration,
   type ConversionInput,
 } from "@/lib/conversion";
 import { businessDate } from "@/lib/business-date";
@@ -35,6 +36,7 @@ describe("totals", () => {
       contactRate: 0.5,
       returns: 0,
       returnExtraSales: 0,
+      avgServedSeconds: null,
     });
   });
 
@@ -47,6 +49,7 @@ describe("totals", () => {
       contactRate: 0,
       returns: 0,
       returnExtraSales: 0,
+      avgServedSeconds: null,
     });
   });
 
@@ -68,6 +71,29 @@ describe("totals", () => {
     const t = totals([ev("a", true), { ...ev("a", true), kind: null }]);
     expect(t.attended).toBe(2);
     expect(t.returns).toBe(0);
+  });
+
+  it("averages served time over timed events only (walk-ins + returns)", () => {
+    const t = totals([
+      { employee_id: "a", sold: true, got_contact: false, served_seconds: 120 },
+      { employee_id: "a", sold: false, got_contact: false, served_seconds: 240 },
+      { employee_id: "a", sold: false, got_contact: false, kind: "return", served_seconds: 60 },
+      { employee_id: "a", sold: false, got_contact: false }, // untimed — excluded
+    ]);
+    expect(t.avgServedSeconds).toBe(140); // (120+240+60)/3
+  });
+
+  it("avgServedSeconds is null when nothing is timed", () => {
+    expect(totals([ev("a", true)]).avgServedSeconds).toBeNull();
+  });
+});
+
+describe("formatDuration", () => {
+  it("formats m:ss and h:mm:ss, dash for null", () => {
+    expect(formatDuration(0)).toBe("0:00");
+    expect(formatDuration(252)).toBe("4:12");
+    expect(formatDuration(3661)).toBe("1:01:01");
+    expect(formatDuration(null)).toBe("—");
   });
 });
 

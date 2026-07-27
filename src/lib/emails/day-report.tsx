@@ -34,6 +34,7 @@ export type DayReportEmailProps = {
   sold: number;
   contacts: number;
   conversionPct: string;
+  avgTimeLabel?: string; // avg time per client (m:ss)
   returns?: number;
   returnExtraSales?: number;
   shopifySales?: string | null; // formatted NET sales, when POS keys are connected
@@ -126,6 +127,7 @@ export function DayReportEmail({
   sold,
   contacts,
   conversionPct,
+  avgTimeLabel,
   returns,
   returnExtraSales,
   shopifySales,
@@ -190,6 +192,9 @@ export function DayReportEmail({
               <KPI label="Sold" value={String(sold)} />
               <KPI label="Conversion" value={conversionPct} />
               <KPI label="Contacts" value={String(contacts)} />
+              {avgTimeLabel && avgTimeLabel !== "—" && (
+                <KPI label="Avg time" value={avgTimeLabel} />
+              )}
             </Row>
           </Section>
 

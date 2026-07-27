@@ -13,6 +13,7 @@ export type ConversionInput = {
   sold: boolean;
   got_contact: boolean;
   kind?: "walkin" | "return" | string | null; // absent/null = walkin
+  served_seconds?: number | null; // time attended (0056); null = not timed
 };
 
 export type ConversionTotals = {
@@ -23,6 +24,7 @@ export type ConversionTotals = {
   contactRate: number; // contacts / sold, 0..1
   returns: number;
   returnExtraSales: number; // returns where the customer bought more
+  avgServedSeconds: number | null; // mean attend time over timed events; null if none
 };
 
 export type PersonConversion = ConversionTotals & { employeeId: string };
@@ -39,6 +41,8 @@ export function totals(events: ConversionInput[]): ConversionTotals {
   const attended = walkins.length;
   const sold = walkins.filter((e) => e.sold).length;
   const contacts = walkins.filter((e) => e.got_contact).length;
+  // Averaged over every timed client (walk-ins + returns).
+  const timed = events.filter((e) => e.served_seconds != null);
   return {
     attended,
     sold,
@@ -47,7 +51,21 @@ export function totals(events: ConversionInput[]): ConversionTotals {
     contactRate: sold === 0 ? 0 : contacts / sold,
     returns: returnEvents.length,
     returnExtraSales: returnEvents.filter((e) => e.sold).length,
+    avgServedSeconds: timed.length
+      ? Math.round(timed.reduce((s, e) => s + (e.served_seconds ?? 0), 0) / timed.length)
+      : null,
   };
+}
+
+/** A duration as m:ss (or h:mm:ss past an hour); em dash when unknown. */
+export function formatDuration(seconds: number | null): string {
+  if (seconds == null) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 /** Per-employee breakdown, ordered by sold desc then attended desc. */
