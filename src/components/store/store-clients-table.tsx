@@ -40,6 +40,7 @@ export function StoreClientsTable({ rows }: { rows: StoreClient[] }) {
           <thead>
             <tr className="text-muted-foreground text-left">
               <th className="py-2 font-medium">Client</th>
+              <th className="hidden py-2 font-medium sm:table-cell">Brought in by</th>
               <th className="py-2 text-center font-medium">In WhatsApp</th>
               <th className="py-2 text-right font-medium">Message</th>
             </tr>
@@ -82,6 +83,9 @@ function Row({ c, onSend }: { c: StoreClient; onSend: () => void }) {
             {c.spent != null ? ` · ${formatMoney(c.spent)}` : ""}
           </span>
         </span>
+      </td>
+      <td className="text-muted-foreground hidden py-3 text-sm sm:table-cell">
+        {c.broughtInBy ?? "—"}
       </td>
       <td className="py-3 text-center">
         <button

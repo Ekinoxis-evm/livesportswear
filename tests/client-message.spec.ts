@@ -73,3 +73,22 @@ describe("buildMessage — appended item list (thank-you)", () => {
     expect(buildMessage({ body: "Thanks!", name: "Ana", language: "en" })).toBe("Thanks!");
   });
 });
+
+describe("buildMessage — signature (attributed rep)", () => {
+  it("appends the rep sign-off after everything else", () => {
+    expect(
+      buildMessage({
+        body: "Thanks!",
+        name: null,
+        language: "en",
+        appendItems: items,
+        signature: "Ana",
+      }),
+    ).toBe("Thanks!\n\nYour order:\n• Runner shorts\n• Everyday jog pants\n\nAna");
+  });
+
+  it("does nothing when the signature is empty or blank", () => {
+    expect(buildMessage({ body: "Hi!", name: null, language: "en", signature: "  " })).toBe("Hi!");
+    expect(buildMessage({ body: "Hi!", name: null, language: "en" })).toBe("Hi!");
+  });
+});

@@ -30,12 +30,15 @@ export function buildMessage({
   language,
   appendItems,
   lastProduct,
+  signature,
 }: {
   body: string;
   name?: string | null;
   language: MessageLanguage;
   appendItems?: MessageItem[];
   lastProduct?: string | null;
+  /** Rep the client is attributed to; appended as a sign-off when present. */
+  signature?: string | null;
 }): string {
   const fn = firstName(name);
   // With a name, substitute; without one, drop the token AND a leading ", " so
@@ -62,5 +65,8 @@ export function buildMessage({
       text += `\n\n${ORDER_HEADER[language]}\n${lines.join("\n")}`;
     }
   }
+
+  const sig = (signature ?? "").trim();
+  if (sig) text += `\n\n${sig}`;
   return text;
 }

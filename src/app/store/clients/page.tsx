@@ -1,27 +1,34 @@
 import Link from "next/link";
 import { Search, Users } from "lucide-react";
-import { storeListClients } from "@/server/store-floor";
+import { storeListClients, storeClientReps } from "@/server/store-floor";
 import { StoreClientsTable } from "@/components/store/store-clients-table";
+import { StoreRepFilter } from "@/components/store/store-rep-filter";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default async function StoreClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; rep?: string }>;
 }) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const q = (sp.q ?? "").trim();
+  const rep = sp.rep?.trim() || undefined;
 
-  const res = await storeListClients({ page, q });
+  const [res, repsRes] = await Promise.all([
+    storeListClients({ page, q, rep }),
+    storeClientReps(),
+  ]);
   const clients = res.ok && res.data ? res.data.clients : [];
   const total = res.ok && res.data ? res.data.total : 0;
   const pages = res.ok && res.data ? res.data.pages : 1;
+  const reps = repsRes.ok && repsRes.data ? repsRes.data.reps : [];
 
   const href = (p: number) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
+    if (rep) params.set("rep", rep);
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
     return s ? `/store/clients?${s}` : "/store/clients";
@@ -51,7 +58,12 @@ export default async function StoreClientsPage({
           className="h-11 pl-9"
           placeholder="Search a client by name…"
         />
+        {rep && <input type="hidden" name="rep" value={rep} />}
       </form>
+
+      {reps.length > 0 && (
+        <StoreRepFilter reps={reps} selected={rep ?? null} q={q} />
+      )}
 
       <Card>
         <CardContent className="pt-6">
