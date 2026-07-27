@@ -184,13 +184,14 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
   for (const e of roster) {
     if (e.shopify_staff_id) staffIdToEmpId.set(normalizeStaffId(e.shopify_staff_id), e.id);
   }
-  const salesByEmp = new Map<string, { net: number; orders: number }>();
+  const salesByEmp = new Map<string, { gross: number; net: number; orders: number }>();
   for (const o of dayOrders ?? []) {
     if (o.sourceName !== "pos") continue; // real POS sales only (skip drafts)
     if (!o.staffId) continue;
     const empId = staffIdToEmpId.get(o.staffId);
     if (!empId) continue;
-    const acc = salesByEmp.get(empId) ?? { net: 0, orders: 0 };
+    const acc = salesByEmp.get(empId) ?? { gross: 0, net: 0, orders: 0 };
+    acc.gross += o.gross;
     acc.net += o.net;
     acc.orders += 1;
     salesByEmp.set(empId, acc);
@@ -213,12 +214,14 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
       const conv = convByEmp.get(id);
       const sales = salesByEmp.get(id);
       const orders = sales?.orders ?? 0;
+      const gross = round2(sales?.gross ?? 0);
       const net = round2(sales?.net ?? 0);
       return {
         name: nameFor(id),
+        gross,
         net,
         orders,
-        avgTicket: orders ? round2(net / orders) : 0,
+        avgTicket: orders ? round2(gross / orders) : 0,
         attended: conv?.attended ?? 0,
         sold: conv?.sold ?? 0,
         conversion: conv?.conversion ?? 0,
@@ -226,7 +229,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
         hours: round2(hoursByEmp.get(id) ?? 0),
       };
     })
-    .sort((a, b) => b.net - a.net || b.sold - a.sold || a.name.localeCompare(b.name));
+    .sort((a, b) => b.gross - a.gross || b.sold - a.sold || a.name.localeCompare(b.name));
 
   const perPerson: DayReportRow[] = perEmployee.map((p) => ({
     name: p.name,
@@ -235,6 +238,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     conversionPct: p.attended > 0 ? formatPct(p.conversion) : "—",
     contacts: p.contacts,
     orders: p.orders,
+    gross: formatMoneyExact(p.gross, currency),
     net: formatMoneyExact(p.net, currency),
     avgTicket: formatMoneyExact(p.avgTicket, currency),
     hours: p.hours,

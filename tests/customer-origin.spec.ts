@@ -11,6 +11,7 @@ const order = (o: Partial<DayOrder> = {}): DayOrder => ({
   name: "#1001",
   createdAt: "2026-07-20T15:00:00Z",
   net: 100,
+  gross: 120,
   currency: "USD",
   sourceName: "pos",
   staffId: "77",

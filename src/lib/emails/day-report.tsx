@@ -20,8 +20,9 @@ export type DayReportRow = {
   conversionPct: string;
   contacts: number;
   orders: number;
+  gross: string; // formatted currency (full-price sales value — the headline)
   net: string; // formatted currency (net sales attributed to this rep)
-  avgTicket: string; // formatted currency (net / orders)
+  avgTicket: string; // formatted currency (gross / orders)
   hours: number;
 };
 
@@ -258,7 +259,7 @@ export function DayReportEmail({
                   Team member
                 </Column>
                 <Column style={{ fontSize: "12px", color: muted, textAlign: "right" }}>
-                  Net
+                  Sales
                 </Column>
                 <Column style={{ fontSize: "12px", color: muted, textAlign: "right" }}>
                   Avg ticket
@@ -278,7 +279,10 @@ export function DayReportEmail({
                       fontVariantNumeric: "tabular-nums",
                     }}
                   >
-                    {p.net}
+                    {p.gross}
+                    <span style={{ display: "block", fontSize: "11px", color: muted }}>
+                      {p.net} net
+                    </span>
                   </Column>
                   <Column
                     style={{
