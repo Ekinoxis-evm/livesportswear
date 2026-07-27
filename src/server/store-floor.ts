@@ -43,6 +43,7 @@ import { buildMessage } from "@/lib/client-message";
 import { whatsappLink } from "@/lib/contact-links";
 import { countryFromIso, type Country } from "@/lib/phone-country";
 import { MESSAGE_LANGUAGES, MESSAGE_KEYS } from "@/lib/message-languages";
+import { normalizeStaffId } from "@/lib/shopify-range";
 import { firstError, type ActionResult } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -707,12 +708,16 @@ export type StoreClient = {
   phone: string | null;
   orders: number | null;
   spent: number | null;
+  broughtInBy: string | null; // rep attributed with this client's first order
 };
+
+export type StoreClientRep = { id: string; name: string };
 
 const CLIENTS_PAGE = 50;
 const listClientsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   q: z.string().trim().max(60).optional(),
+  rep: z.string().uuid().optional(),
 });
 
 type OriginRow = {
@@ -722,10 +727,30 @@ type OriginRow = {
   orders_count: number | null;
   total_spent: number | null;
   country_iso: string | null;
+  staff_id: string | null;
   in_whatsapp: boolean;
 };
 const ORIGIN_COLS =
-  "shopify_customer_id, first_order_at, customer_name, orders_count, total_spent, country_iso, in_whatsapp";
+  "shopify_customer_id, first_order_at, customer_name, orders_count, total_spent, country_iso, staff_id, in_whatsapp";
+
+/** The location's active reps, keyed by their normalized Shopify staff id. */
+async function locationStaff(
+  service: ReturnType<typeof createServiceClient>,
+  locationId: string,
+) {
+  const { data } = await service
+    .from("employees")
+    .select("id, name, shopify_staff_id")
+    .eq("location_id", locationId)
+    .eq("active", true)
+    .order("name");
+  const rows = data ?? [];
+  const nameByStaff = new Map<string, string>();
+  for (const e of rows) {
+    if (e.shopify_staff_id) nameByStaff.set(normalizeStaffId(e.shopify_staff_id), e.name);
+  }
+  return { rows, nameByStaff };
+}
 
 export async function storeListClients(
   input: unknown,
@@ -733,8 +758,17 @@ export async function storeListClients(
   const { locationId, service } = await storeCtx();
   const parsed = listClientsSchema.safeParse(input ?? {});
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  const { page } = parsed.data;
+  const { page, rep } = parsed.data;
   const q = parsed.data.q ?? "";
+
+  const { rows: staff, nameByStaff } = await locationStaff(service, locationId);
+  // Filter by the chosen rep's Shopify staff id (unmapped rep → shows nothing).
+  const repStaffId = rep
+    ? (() => {
+        const s = staff.find((e) => e.id === rep)?.shopify_staff_id;
+        return s ? normalizeStaffId(s) : " none";
+      })()
+    : null;
 
   let origins: OriginRow[] = [];
   let total = 0;
@@ -744,19 +778,23 @@ export async function storeListClients(
     // this is the store's own book, so a stranger with no origin row isn't shown).
     const found = isShopifyConfigured() ? await searchCustomers(q).catch(() => null) : [];
     if (found && found.length) {
-      const { data } = await service
+      let query = service
         .from("customer_origin")
         .select(ORIGIN_COLS)
         .eq("location_id", locationId)
         .in("shopify_customer_id", found.map((c) => c.id));
+      if (repStaffId) query = query.eq("staff_id", repStaffId);
+      const { data } = await query;
       origins = (data ?? []) as OriginRow[];
       total = origins.length;
     }
   } else {
-    const { data, count } = await service
+    let query = service
       .from("customer_origin")
       .select(ORIGIN_COLS, { count: "exact" })
-      .eq("location_id", locationId)
+      .eq("location_id", locationId);
+    if (repStaffId) query = query.eq("staff_id", repStaffId);
+    const { data, count } = await query
       .order("first_order_at", { ascending: false })
       .range((page - 1) * CLIENTS_PAGE, page * CLIENTS_PAGE - 1);
     origins = (data ?? []) as OriginRow[];
@@ -781,12 +819,26 @@ export async function storeListClients(
     phone: byId.get(o.shopify_customer_id)?.phone ?? null,
     orders: o.orders_count,
     spent: o.total_spent,
+    broughtInBy: o.staff_id
+      ? (nameByStaff.get(normalizeStaffId(o.staff_id)) ?? "former staff")
+      : null,
   }));
 
   return {
     ok: true,
     data: { clients, total, pages: Math.max(1, Math.ceil(total / CLIENTS_PAGE)) },
   };
+}
+
+/** The location's reps who can own clients (mapped to a Shopify staff id), for
+ *  the clients-page "brought in by" filter. Kiosk parity with admin. */
+export async function storeClientReps(): Promise<ActionResult<{ reps: StoreClientRep[] }>> {
+  const { locationId, service } = await storeCtx();
+  const { rows } = await locationStaff(service, locationId);
+  const reps = rows
+    .filter((e) => e.shopify_staff_id)
+    .map((e) => ({ id: e.id, name: e.name }));
+  return { ok: true, data: { reps } };
 }
 
 const setWhatsappSchema = z.object({
@@ -832,16 +884,31 @@ export async function storeMessageLink(
     return { ok: false, error: "Shopify is unavailable right now." };
   }
 
-  const { data: template } = await service
-    .from("message_templates")
-    .select("body")
-    .eq("location_id", locationId)
-    .eq("key", parsed.data.key)
-    .eq("language", parsed.data.language)
-    .maybeSingle();
+  const [{ data: template }, { data: origin }] = await Promise.all([
+    service
+      .from("message_templates")
+      .select("body")
+      .eq("location_id", locationId)
+      .eq("key", parsed.data.key)
+      .eq("language", parsed.data.language)
+      .maybeSingle(),
+    service
+      .from("customer_origin")
+      .select("staff_id")
+      .eq("location_id", locationId)
+      .eq("shopify_customer_id", parsed.data.customerId)
+      .maybeSingle(),
+  ]);
   if (!template?.body) {
     return { ok: false, error: "No message set for that language yet." };
   }
+
+  // Sign with the rep this client was attributed to (their first-order staff),
+  // not whoever is at the kiosk — the message speaks for the client's own rep.
+  const { nameByStaff } = await locationStaff(service, locationId);
+  const signature = origin?.staff_id
+    ? (nameByStaff.get(normalizeStaffId(origin.staff_id)) ?? null)
+    : null;
 
   let orders;
   let cust: ShopifyCustomer | null;
@@ -863,6 +930,7 @@ export async function storeMessageLink(
     language: parsed.data.language,
     lastProduct: last?.items[0]?.title ?? null,
     appendItems: parsed.data.key === "thank_you" ? last?.items : undefined,
+    signature,
   });
   const url = whatsappLink(cust?.phone, text);
   if (!url) {
