@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { listShopifyStaff, setShopifyStaffId } from "@/server/shopify";
 import { Button } from "@/components/ui/button";
-import { SyncSalesButton } from "@/components/commission/sync-sales-button";
+import { SyncSalesButton } from "@/components/shared/sync-sales-button";
+import { syncMonthlySales } from "@/server/shopify";
 import {
   Select,
   SelectContent,
@@ -77,7 +78,7 @@ export function ShopifyPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-2">
-        <SyncSalesButton label="Sync this month" />
+        <SyncSalesButton action={syncMonthlySales} label="Sync this month" />
         <Button
           size="sm"
           variant="outline"

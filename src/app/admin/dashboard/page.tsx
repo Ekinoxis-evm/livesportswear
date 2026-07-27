@@ -39,7 +39,8 @@ import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { shortDate, shortDateRange, monthLabel } from "@/lib/format-date";
 import { storeMonthlyData } from "@/lib/monthly-series";
-import { SyncSalesButton } from "@/components/commission/sync-sales-button";
+import { SyncSalesButton } from "@/components/shared/sync-sales-button";
+import { syncMonthlySales } from "@/server/shopify";
 import { SalesBreakdownSubline } from "@/components/shared/sales-breakdown-view";
 import { StoreSalesChart } from "@/components/dashboard/sales-charts";
 
@@ -351,7 +352,7 @@ export default async function DashboardPage({
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <SyncSalesButton />
+        <SyncSalesButton action={syncMonthlySales} label="Sync sales now" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
