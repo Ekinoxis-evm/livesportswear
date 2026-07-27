@@ -18,6 +18,7 @@ export type OrderListRow = {
   name: string;
   time: string;
   seller: string | null;
+  gross: number;
   net: number;
 };
 
@@ -27,7 +28,7 @@ export function OrdersToday({
   rows,
   currency,
 }: {
-  total: { orders: number; net: number };
+  total: { orders: number; gross: number; net: number };
   perPerson: PersonRow[];
   rows: OrderListRow[];
   currency: string;
@@ -38,7 +39,8 @@ export function OrdersToday({
         <CardTitle className="text-base">Orders today</CardTitle>
         <CardDescription>
           In-store POS sales — {total.orders} order{total.orders === 1 ? "" : "s"} ·{" "}
-          <span className="text-foreground font-semibold">{formatMoney(total.net, currency)}</span>
+          <span className="text-foreground font-semibold">{formatMoney(total.gross, currency)}</span>{" "}
+          value · {formatMoney(total.net, currency)} net
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -74,6 +76,7 @@ function PerPersonTable({
   const { rows, sort, onSort } = useTableSort(perPerson, {
     name: (p) => p.name,
     orders: (p) => p.orders,
+    gross: (p) => p.gross,
     net: (p) => p.net,
     avg: (p) => p.avgTicket,
   });
@@ -84,6 +87,7 @@ function PerPersonTable({
           <tr className="text-muted-foreground text-left">
             <SortableTh sortKey="name" sort={sort} onSort={onSort} className="py-2 font-medium">Salesperson</SortableTh>
             <SortableTh sortKey="orders" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Orders</SortableTh>
+            <SortableTh sortKey="gross" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Sales</SortableTh>
             <SortableTh sortKey="net" sort={sort} onSort={onSort} className="hidden py-2 text-right font-medium sm:table-cell">Net</SortableTh>
             <SortableTh sortKey="avg" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Avg ticket</SortableTh>
           </tr>
@@ -93,10 +97,13 @@ function PerPersonTable({
             <tr key={p.staffId} className="border-b last:border-0">
               <td className="py-2 font-medium">{p.name}</td>
               <td className="py-2 text-right tabular-nums">{p.orders}</td>
-              <td className="hidden py-2 text-right tabular-nums sm:table-cell">
+              <td className="py-2 text-right font-semibold tabular-nums">
+                {formatMoney(p.gross, currency)}
+              </td>
+              <td className="text-muted-foreground hidden py-2 text-right tabular-nums sm:table-cell">
                 {formatMoney(p.net, currency)}
               </td>
-              <td className="py-2 text-right font-semibold tabular-nums">
+              <td className="py-2 text-right tabular-nums">
                 {formatMoney(p.avgTicket, currency)}
               </td>
             </tr>
@@ -118,7 +125,7 @@ function OrderListTable({
     name: (o) => o.name,
     time: (o) => o.time,
     seller: (o) => o.seller,
-    net: (o) => o.net,
+    value: (o) => o.gross,
   });
   return (
     <ScrollTable density="comfortable">
@@ -128,7 +135,7 @@ function OrderListTable({
             <SortableTh sortKey="name" sort={sort} onSort={onSort} className="py-2 font-medium">Order</SortableTh>
             <SortableTh sortKey="time" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Time</SortableTh>
             <SortableTh sortKey="seller" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Seller</SortableTh>
-            <SortableTh sortKey="net" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Net</SortableTh>
+            <SortableTh sortKey="value" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Value</SortableTh>
           </tr>
         </thead>
         <tbody>
@@ -141,7 +148,7 @@ function OrderListTable({
               <td className="text-muted-foreground hidden py-2 sm:table-cell">
                 {o.seller ?? "—"}
               </td>
-              <td className="py-2 text-right tabular-nums">{formatMoney(o.net, currency)}</td>
+              <td className="py-2 text-right tabular-nums">{formatMoney(o.gross, currency)}</td>
             </tr>
           ))}
         </tbody>

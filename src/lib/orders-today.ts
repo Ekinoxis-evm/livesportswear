@@ -20,14 +20,15 @@ export type PersonRow = {
   staffId: string;
   name: string;
   orders: number;
+  gross: number; // full-price value (the headline sales figure)
   net: number;
-  avgTicket: number;
+  avgTicket: number; // gross / orders
 };
 
 export type OrdersView = {
   rows: OrderRow[]; // POS orders, newest first
-  total: { orders: number; net: number };
-  perPerson: PersonRow[]; // net desc
+  total: { orders: number; gross: number; net: number };
+  perPerson: PersonRow[]; // gross desc
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -37,15 +38,18 @@ export function buildOrdersView(
   staffToName: Map<string, string>,
 ): OrdersView {
   const pos = orders.filter(isPosOrder);
-  const byStaff = new Map<string, { net: number; orders: number }>();
+  const byStaff = new Map<string, { gross: number; net: number; orders: number }>();
+  let gross = 0;
   let net = 0;
 
   const rows: OrderRow[] = pos.map((o) => {
+    gross += o.gross;
     net += o.net;
     let sellerName: string | null = null;
     if (o.staffId) {
       sellerName = staffToName.get(o.staffId) ?? `Staff #${o.staffId}`;
-      const acc = byStaff.get(o.staffId) ?? { net: 0, orders: 0 };
+      const acc = byStaff.get(o.staffId) ?? { gross: 0, net: 0, orders: 0 };
+      acc.gross += o.gross;
       acc.net += o.net;
       acc.orders += 1;
       byStaff.set(o.staffId, acc);
@@ -60,10 +64,15 @@ export function buildOrdersView(
       staffId,
       name: staffToName.get(staffId) ?? `Staff #${staffId}`,
       orders: v.orders,
+      gross: round2(v.gross),
       net: round2(v.net),
-      avgTicket: v.orders ? round2(v.net / v.orders) : 0,
+      avgTicket: v.orders ? round2(v.gross / v.orders) : 0,
     }))
-    .sort((a, b) => b.net - a.net || a.name.localeCompare(b.name));
+    .sort((a, b) => b.gross - a.gross || a.name.localeCompare(b.name));
 
-  return { rows, total: { orders: pos.length, net: round2(net) }, perPerson };
+  return {
+    rows,
+    total: { orders: pos.length, gross: round2(gross), net: round2(net) },
+    perPerson,
+  };
 }

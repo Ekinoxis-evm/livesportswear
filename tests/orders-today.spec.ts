@@ -7,6 +7,7 @@ const order = (o: Partial<DayOrder> = {}): DayOrder => ({
   name: "#1001",
   createdAt: "2026-07-20T15:00:00Z",
   net: 100,
+  gross: 120,
   currency: "USD",
   sourceName: "pos",
   staffId: "77",
@@ -24,25 +25,25 @@ describe("isPosOrder", () => {
 });
 
 describe("buildOrdersView", () => {
-  it("totals only POS orders — drafts are excluded from count and net", () => {
+  it("totals only POS orders — drafts are excluded from count, gross and net", () => {
     const { total } = buildOrdersView(
       [
-        order({ id: "1", sourceName: "pos", net: 100 }),
-        order({ id: "2", sourceName: "pos", net: 50 }),
-        order({ id: "3", sourceName: "shopify_draft_order", net: 0, staffId: "88" }),
+        order({ id: "1", sourceName: "pos", gross: 120, net: 100 }),
+        order({ id: "2", sourceName: "pos", gross: 60, net: 50 }),
+        order({ id: "3", sourceName: "shopify_draft_order", gross: 0, net: 0, staffId: "88" }),
       ],
       new Map(),
     );
-    expect(total).toEqual({ orders: 2, net: 150 });
+    expect(total).toEqual({ orders: 2, gross: 180, net: 150 });
   });
 
-  it("gives each seller net · orders · avg ticket (POS only)", () => {
+  it("gives each seller gross · net · orders · avg ticket (gross/orders, POS only)", () => {
     const { perPerson } = buildOrdersView(
       [
-        order({ id: "1", staffId: "77", net: 100 }),
-        order({ id: "2", staffId: "77", net: 40 }),
-        order({ id: "3", staffId: "88", net: 90 }),
-        order({ id: "4", staffId: "88", sourceName: "shopify_draft_order", net: 0 }), // ignored
+        order({ id: "1", staffId: "77", gross: 120, net: 100 }),
+        order({ id: "2", staffId: "77", gross: 60, net: 40 }),
+        order({ id: "3", staffId: "88", gross: 100, net: 90 }),
+        order({ id: "4", staffId: "88", sourceName: "shopify_draft_order", gross: 0, net: 0 }), // ignored
       ],
       new Map([
         ["77", "Ana"],
@@ -50,8 +51,8 @@ describe("buildOrdersView", () => {
       ]),
     );
     expect(perPerson).toEqual([
-      { staffId: "77", name: "Ana", orders: 2, net: 140, avgTicket: 70 },
-      { staffId: "88", name: "Beto", orders: 1, net: 90, avgTicket: 90 },
+      { staffId: "77", name: "Ana", orders: 2, gross: 180, net: 140, avgTicket: 90 },
+      { staffId: "88", name: "Beto", orders: 1, gross: 100, net: 90, avgTicket: 100 },
     ]);
   });
 

@@ -193,6 +193,7 @@ export default async function StorePerformancePage({
     name: r.name,
     time: formatInTimeZone(new Date(r.createdAt), tz, "HH:mm"),
     seller: r.sellerName,
+    gross: r.gross,
     net: r.net,
   }));
 

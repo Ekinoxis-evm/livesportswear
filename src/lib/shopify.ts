@@ -242,6 +242,7 @@ export type DayOrder = {
   name: string; // Shopify order name, e.g. "#1234"
   createdAt: string;
   net: number; // current_subtotal_price (the metric)
+  gross: number; // total_line_items_price (full-price value, the bigger number)
   currency: string | null;
   sourceName: string | null; // "pos" = in-store POS; "web"/checkout = online
   staffId: string | null; // REST user_id; present on POS orders, null online
@@ -261,7 +262,7 @@ type RestDayOrder = RestOrder & {
 };
 
 const ORDER_LIST_FIELDS =
-  "id,name,created_at,user_id,source_name,cancelled_at,test,current_subtotal_price,currency,customer";
+  "id,name,created_at,user_id,source_name,cancelled_at,test,current_subtotal_price,total_line_items_price,currency,customer";
 
 /**
  * Every non-cancelled/non-test order for [start, endExclusive) as individual
@@ -289,6 +290,7 @@ export async function fetchDayOrders(
         name: o.name ?? `#${o.id}`,
         createdAt: o.created_at,
         net: Number(o.current_subtotal_price ?? 0),
+        gross: Number(o.total_line_items_price ?? 0),
         currency: o.currency ?? null,
         sourceName: o.source_name ?? null,
         staffId: o.user_id != null ? String(o.user_id) : null,
@@ -393,6 +395,7 @@ export async function* streamOrdersForAttribution(
         name: o.name ?? `#${o.id}`,
         createdAt: o.created_at,
         net: Number(o.current_subtotal_price ?? 0),
+        gross: Number(o.total_line_items_price ?? 0),
         currency: o.currency ?? null,
         sourceName: o.source_name ?? null,
         staffId: o.user_id != null ? String(o.user_id) : null,

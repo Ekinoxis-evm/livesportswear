@@ -24,7 +24,7 @@ const input: DayReportXlsxInput = {
     returns: 1,
   },
   employees: [
-    { name: "Ana", net: 100, orders: 2, avgTicket: 50, attended: 3, sold: 2, conversion: 0.66, contacts: 1, hours: 7.5 },
+    { name: "Ana", gross: 120, net: 100, orders: 2, avgTicket: 50, attended: 3, sold: 2, conversion: 0.66, contacts: 1, hours: 7.5 },
   ],
   events: [
     {
@@ -66,7 +66,8 @@ describe("buildDayReportXlsx", () => {
 
     const emp = wb.getWorksheet("Employees")!;
     expect(emp.getRow(2).getCell(1).value).toBe("Ana");
-    expect(emp.getRow(2).getCell(2).value).toBe(100); // net is a real number
+    expect(emp.getRow(2).getCell(2).value).toBe(120); // gross (Sales), a real number
+    expect(emp.getRow(2).getCell(3).value).toBe(100); // net is a real number
 
     const events = wb.getWorksheet("Client events")!;
     expect(events.getRow(2).getCell(4).value).toBe("exchange"); // return type surfaced

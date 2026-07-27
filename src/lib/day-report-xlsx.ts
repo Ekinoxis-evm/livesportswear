@@ -11,6 +11,7 @@ import {
 /** One salesperson's day, numeric — feeds both the email table and this sheet. */
 export type ReportEmployee = {
   name: string;
+  gross: number; // full-price sales value (the headline)
   net: number;
   orders: number;
   avgTicket: number;
@@ -82,6 +83,7 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
   e.columns = [
     { width: 22 },
     { width: 12 },
+    { width: 12 },
     { width: 9 },
     { width: 12 },
     { width: 10 },
@@ -92,6 +94,7 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
   ];
   headerRow(e, [
     "Employee",
+    "Sales",
     "Net sales",
     "Orders",
     "Avg ticket",
@@ -104,6 +107,7 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
   for (const p of d.employees) {
     const row = e.addRow([
       p.name,
+      p.gross,
       p.net,
       p.orders,
       p.avgTicket,
@@ -114,8 +118,9 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
       p.hours,
     ]);
     row.getCell(2).numFmt = MONEY;
-    row.getCell(4).numFmt = MONEY;
-    row.getCell(7).numFmt = PCT;
+    row.getCell(3).numFmt = MONEY;
+    row.getCell(5).numFmt = MONEY;
+    row.getCell(8).numFmt = PCT;
   }
 
   // 3 — Client events
