@@ -38,7 +38,9 @@ const NO_SALE_REASONS = [
   "No color",
   "No design available",
   "Price too expensive",
+  "Didn't fit well",
   "Just browsing",
+  "Other reason",
   "No reason",
 ];
 
