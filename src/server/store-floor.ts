@@ -914,7 +914,7 @@ const messageLinkSchema = z.object({
  */
 export async function storeMessageLink(
   input: unknown,
-): Promise<ActionResult<{ url: string }>> {
+): Promise<ActionResult<{ url: string; text: string }>> {
   const { locationId, service } = await storeCtx();
   const parsed = messageLinkSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -977,7 +977,7 @@ export async function storeMessageLink(
       error: "This client's number has no country code — can't open WhatsApp.",
     };
   }
-  return { ok: true, data: { url } };
+  return { ok: true, data: { url, text } };
 }
 
 /**
