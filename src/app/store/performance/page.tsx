@@ -26,6 +26,8 @@ import {
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
 import { GoalIndicator } from "@/components/shared/goal-indicator";
+import { GoalLevelsBar } from "@/components/shared/goal-levels-bar";
+import { storeGoalLevels } from "@/lib/goal-levels";
 import { goalPace } from "@/lib/goal-pace";
 import {
   SalesBreakdownBlock,
@@ -228,6 +230,13 @@ export default async function StorePerformancePage({
   const personalGoalOf = new Map(
     (personalGoalRows ?? []).map((r) => [r.employee_id, Number(r.goal_amount)]),
   );
+  // Store-goal LEVELS from the commission tiers × the active team.
+  const goalLevels = storeGoalLevels({
+    tiers,
+    activeReps: roster.length,
+    storeGoal: monthGoal,
+    personalGoalSum: [...personalGoalOf.values()].reduce((a, g) => a + g, 0),
+  }).levels;
 
   // Per-rep rows for the active period. Today and custom pull attributed live
   // Shopify sales; the 60s range cache absorbs the kiosk's 45s auto-refresh
@@ -370,6 +379,15 @@ export default async function StorePerformancePage({
               pace={goalPace(monthGoal, monthTotal, bd, month)}
               format={(n) => formatMoney(n, currency)}
             />
+          )}
+
+          {mode === "month" && goalLevels.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border p-3">
+              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                Team levels — the store target rises with the commission rate
+              </span>
+              <GoalLevelsBar levels={goalLevels} current={monthTotal} currency={currency} />
+            </div>
           )}
 
           {mode !== "month" &&
