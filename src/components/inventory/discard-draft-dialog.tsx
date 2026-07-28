@@ -45,7 +45,7 @@ export function DiscardDraftDialog({ draftId }: { draftId: string }) {
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Discard this draft?</DialogTitle>
           <DialogDescription>

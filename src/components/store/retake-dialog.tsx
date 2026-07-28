@@ -332,7 +332,7 @@ export function RetakeDialog({
         }
       }}
     >
-      <DialogContent className={cn("max-w-md", "flex max-h-[85vh] flex-col")}>
+      <DialogContent className={cn("max-w-lg", "flex max-h-[85vh] flex-col")}>
         <DialogHeader>
           <DialogTitle>Re-take a client</DialogTitle>
           <DialogDescription>

@@ -79,7 +79,7 @@ export function EmployeeAccessActions({
         Invite to portal
       </Button>
       <Dialog open={Boolean(issued)} onOpenChange={(o) => !o && setIssued(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Portal access created</DialogTitle>
             <DialogDescription>

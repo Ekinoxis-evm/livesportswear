@@ -72,7 +72,7 @@ export function FinishDialog({
         if (!o && !pending) onClose();
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         {target && (
           <FinishSteps
             key={`${target.employeeId}-${target.kind}`}

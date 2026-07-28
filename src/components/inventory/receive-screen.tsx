@@ -411,7 +411,7 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
       </div>
 
       <Dialog open={confirming} onOpenChange={(o) => !pending && setConfirming(o)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Receive into Shopify?</DialogTitle>
             <DialogDescription>

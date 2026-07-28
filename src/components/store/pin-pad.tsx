@@ -51,7 +51,7 @@ export function PinPad({
         }
       }}
     >
-      <DialogContent className="max-w-xs">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {subtitle && <DialogDescription>{subtitle}</DialogDescription>}

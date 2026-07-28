@@ -323,7 +323,7 @@ export function CheckinBoard({
           if (!o && !pending) setFlow(null);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogTitle className="sr-only">Face photo</DialogTitle>
           {flow && flow.pin !== null && (
             <CameraCapture

@@ -46,7 +46,7 @@ export function StartCountButton({ locations }: { locations: LocationOption[] })
         <ScanBarcode className="mr-1.5 size-4" /> Start a count
       </Button>
       <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Start an inventory count</DialogTitle>
             <DialogDescription>

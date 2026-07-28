@@ -61,7 +61,7 @@ export function ApplyDraftDialog({
             </Button>
           }
         />
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Write {rows} corrections to Shopify?</DialogTitle>
             <DialogDescription>

@@ -67,7 +67,7 @@ export function RequestDayOff() {
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Request days off</DialogTitle>
           <DialogDescription>
