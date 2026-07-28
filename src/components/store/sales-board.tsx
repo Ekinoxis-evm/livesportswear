@@ -459,24 +459,24 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
             Returns &amp; re-takes
           </p>
-          <Button
-            size="lg"
-            variant="outline"
-            className="h-14 w-full border-2 border-amber-500/70 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30"
-            disabled={pending}
-            onClick={() => setReturnPicker(true)}
-          >
-            <Undo2 className="mr-2 size-5" /> Return / Exchange
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="h-14 w-full border-2 border-violet-500/70 text-violet-700 hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/30"
-            disabled={pending}
-            onClick={() => setRetakeOpen(true)}
-          >
-            <RefreshCw className="mr-2 size-5" /> Re-take client
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              size="lg"
+              className="h-14 w-full border border-amber-500/60 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200 dark:hover:bg-amber-500/25"
+              disabled={pending}
+              onClick={() => setReturnPicker(true)}
+            >
+              <Undo2 className="mr-2 size-5" /> Return / Exchange
+            </Button>
+            <Button
+              size="lg"
+              className="h-14 w-full border border-violet-500/60 bg-violet-500/15 text-violet-800 hover:bg-violet-500/25 dark:text-violet-200 dark:hover:bg-violet-500/25"
+              disabled={pending}
+              onClick={() => setRetakeOpen(true)}
+            >
+              <RefreshCw className="mr-2 size-5" /> Re-take client
+            </Button>
+          </div>
         </div>
       )}
 

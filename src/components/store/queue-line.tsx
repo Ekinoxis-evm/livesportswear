@@ -58,7 +58,8 @@ function LineRow({
       className={cn(
         "bg-background flex items-center justify-between gap-2 py-2.5",
         isUp && "bg-primary/5 -mx-2 rounded-lg px-2",
-        entry.onReturn && "ring-1 ring-amber-500/40 bg-amber-500/5 -mx-2 rounded-lg px-2",
+        entry.onReturn &&
+          "ring-2 ring-amber-500/60 bg-amber-500/10 -mx-2 rounded-lg px-2",
         isDragging && "relative z-10 opacity-80",
       )}
     >
@@ -77,7 +78,9 @@ function LineRow({
             "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
             isUp
               ? "bg-primary text-primary-foreground ring-primary/30 ring-2"
-              : "text-muted-foreground border",
+              : entry.onReturn
+                ? "border-2 border-amber-500/60 text-amber-700 dark:text-amber-400"
+                : "text-muted-foreground border",
           )}
         >
           {index + 1}
