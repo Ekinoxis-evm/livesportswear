@@ -423,6 +423,9 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
               onFinishReturn={(id, name) =>
                 setFinishTarget({ employeeId: id, name, kind: "return" })
               }
+              onTakeClient={(id, name) =>
+                run(storeTakeClient(id), `${name} is with a client.`, id)
+              }
             />
             {attending.map((r) => (
               <div
