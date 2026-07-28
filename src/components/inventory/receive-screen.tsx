@@ -3,13 +3,15 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Loader2, PackagePlus, Trash2, UploadCloud } from "lucide-react";
+import { Check, Loader2, PackagePlus, RotateCcw, Send, Trash2, UploadCloud } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   uploadReceivingDoc,
   extractDocument,
   commitExtraction,
   matchUnknownItem,
-  setReferenceVerified,
+  sendToKioskCounting,
+  reopenReceiving,
   receiveStock,
 } from "@/server/receiving";
 import { removeItem } from "@/server/inventory";
@@ -17,10 +19,9 @@ import {
   matrixView,
   extractMatrix,
   type ExtractedLine,
-  type MatrixRow,
+  type MatrixView,
   type ReceivingItem,
 } from "@/lib/receiving";
-import { ReceiveMatrix } from "@/components/inventory/receive-matrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -56,18 +57,27 @@ export type ReceiveItem = {
   unknown: boolean;
 };
 
+export type ReceiveStatus = "open" | "counting" | "ready";
+
 export function ReceiveScreen({
   countId,
   items,
+  status,
 }: {
   countId: string;
   items: ReceiveItem[];
+  status: ReceiveStatus;
 }) {
-  // Phase A (upload + extract + review) until the session has matched items.
-  if (items.length === 0) {
+  // open: admin uploads → matches → hands to the kiosk. counting: the kiosk is
+  // entering physical counts (admin watches, read-only). ready: kiosk done,
+  // admin reviews + pushes.
+  if (status === "open" && items.length === 0) {
     return <ExtractPhase countId={countId} />;
   }
-  return <VerifyPhase countId={countId} items={items} />;
+  if (status === "open") {
+    return <ReviewPhase countId={countId} items={items} />;
+  }
+  return <AdminCountPhase countId={countId} items={items} status={status} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,51 +283,87 @@ function ExtractPhase({ countId }: { countId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase B — physically verify arrivals, preview the merge, receive
+// A read-only reference × size grid for the admin views. Shows the document
+// quantity per size and, once the kiosk is counting, the counted quantity + a
+// per-reference counted tick. The admin never edits counts here.
 // ---------------------------------------------------------------------------
-function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[] }) {
+function AdminMatrix({ view, showCounted }: { view: MatrixView; showCounted: boolean }) {
+  const { sizes, rows } = view;
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Reference</TableHead>
+            <TableHead>HS</TableHead>
+            {sizes.map((s) => (
+              <TableHead key={s} className="text-right tabular-nums">{s}</TableHead>
+            ))}
+            <TableHead className="text-right">Doc</TableHead>
+            {showCounted && <TableHead className="text-right">Counted</TableHead>}
+            {showCounted && <TableHead className="text-center">✓</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => {
+            const bySize = new Map(row.cells.map((c) => [c.size, c]));
+            return (
+              <TableRow key={`${row.reference}-${row.color}`}>
+                <TableCell className="font-mono text-xs font-medium">
+                  {row.reference}
+                  <span className="text-muted-foreground ml-1.5">{row.color}</span>
+                </TableCell>
+                <TableCell className="text-muted-foreground font-mono text-xs tabular-nums">
+                  {row.hsCode ?? "—"}
+                </TableCell>
+                {sizes.map((s) => {
+                  const cell = bySize.get(s);
+                  const qty = showCounted ? cell?.arrivedQty : cell?.docQty;
+                  return (
+                    <TableCell key={s} className="text-right tabular-nums">
+                      {cell ? qty : <span className="text-muted-foreground/30">·</span>}
+                    </TableCell>
+                  );
+                })}
+                <TableCell className="text-muted-foreground text-right tabular-nums">{row.docTotal}</TableCell>
+                {showCounted && (
+                  <TableCell
+                    className={cn(
+                      "text-right font-semibold tabular-nums",
+                      row.arrivedTotal !== row.docTotal && "text-amber-600",
+                    )}
+                  >
+                    {row.arrivedTotal}
+                  </TableCell>
+                )}
+                {showCounted && (
+                  <TableCell className="text-center">
+                    {row.verified ? (
+                      <Check className="text-primary mx-auto size-4" />
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </TableCell>
+                )}
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase B (open) — the admin reviews the match, resolves any unmatched lines,
+// then hands the arrival to the kiosk to physically count.
+// ---------------------------------------------------------------------------
+function ReviewPhase({ countId, items }: { countId: string; items: ReceiveItem[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [confirming, setConfirming] = useState(false);
-  const [override, setOverride] = useState(false);
-
   const view = useMemo(() => matrixView(items as ReceivingItem[]), [items]);
-  const matchedOther = view.other.filter((i) => !i.unknown);
-
-  const arrivedTotal =
-    view.summary.arrivedPieces + view.other.reduce((s, i) => s + i.qty, 0);
-  const totalRefs = view.summary.references + matchedOther.length;
-  const verifiedRefs =
-    view.summary.verifiedReferences + matchedOther.filter((i) => i.verified).length;
-  const allVerified = totalRefs > 0 && verifiedRefs === totalRefs;
-  const canReceive = arrivedTotal > 0 && (allVerified || override);
-
-  function toggleRow(row: MatrixRow) {
-    if (row.itemIds.length === 0) return;
-    start(async () => {
-      const res = await setReferenceVerified({
-        countId,
-        itemIds: row.itemIds,
-        verified: !row.verified,
-      });
-      if (!res.ok) toast.error(res.error);
-      else router.refresh();
-    });
-  }
-
-  function toggleItem(item: ReceivingItem) {
-    if (!item.id) return;
-    const id = item.id;
-    start(async () => {
-      const res = await setReferenceVerified({
-        countId,
-        itemIds: [id],
-        verified: !item.verified,
-      });
-      if (!res.ok) toast.error(res.error);
-      else router.refresh();
-    });
-  }
+  const unmatched = view.other.filter((i) => i.unknown);
+  const matchedRefs = view.summary.references + view.other.filter((i) => !i.unknown).length;
 
   function drop(item: ReceivingItem) {
     if (!item.id) return;
@@ -343,15 +389,14 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
     });
   }
 
-  function receive() {
+  function send() {
     start(async () => {
-      const res = await receiveStock(countId);
-      setConfirming(false);
+      const res = await sendToKioskCounting(countId);
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Received ${res.data?.received ?? 0} item(s) into Shopify.`);
+      toast.success("Sent to the kiosk to count.");
       router.refresh();
     });
   }
@@ -362,13 +407,13 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
         <Card>
           <CardContent className="flex flex-col gap-3 pt-6">
             <div>
-              <h2 className="font-medium">Review the arrival, then verify each reference</h2>
+              <h2 className="font-medium">Review the match, then send to the kiosk</h2>
               <p className="text-muted-foreground text-sm">
-                Tick a reference once you&apos;ve physically checked its units — that accepts
-                the document quantities as arrived. Untick to reset it to zero.
+                Confirm the references matched Shopify and resolve any unmatched lines below.
+                The store will count the physical arrival on the kiosk.
               </p>
             </div>
-            <ReceiveMatrix view={view} pending={pending} onToggle={toggleRow} />
+            <AdminMatrix view={view} showCounted={false} />
           </CardContent>
         </Card>
       )}
@@ -378,7 +423,7 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
           <CardContent className="flex flex-col gap-2 pt-6">
             <h2 className="font-medium">Other lines</h2>
             <p className="text-muted-foreground text-sm">
-              Lines without a size-matrix SKU. Match any unmatched barcodes, then verify.
+              Lines without a size-matrix SKU. Match any unmatched barcodes, or drop junk rows.
             </p>
             <div className="overflow-x-auto">
               <Table>
@@ -386,7 +431,6 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
                   <TableRow>
                     <TableHead>Product</TableHead>
                     <TableHead className="text-right">Document</TableHead>
-                    <TableHead className="text-center">Verified</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
@@ -412,28 +456,6 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
                       <TableCell className="text-muted-foreground text-right tabular-nums">
                         {item.doc_qty ?? "—"}
                       </TableCell>
-                      <TableCell className="text-center">
-                        {item.unknown ? (
-                          <span className="text-muted-foreground/40">—</span>
-                        ) : (
-                          <button
-                            type="button"
-                            role="checkbox"
-                            aria-checked={item.verified}
-                            aria-label={`Verify ${item.product_title}`}
-                            disabled={pending}
-                            onClick={() => toggleItem(item)}
-                            className={
-                              "inline-flex size-6 items-center justify-center rounded-md border " +
-                              (item.verified
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-input hover:bg-muted")
-                            }
-                          >
-                            {item.verified && <Check className="size-4" />}
-                          </button>
-                        )}
-                      </TableCell>
                       <TableCell className="text-right">
                         <button
                           type="button"
@@ -455,30 +477,102 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        {!allVerified && arrivedTotal > 0 && (
-          <label className="text-muted-foreground flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={override}
-              onChange={(e) => setOverride(e.target.checked)}
-            />
-            Receive without verifying all references
-          </label>
-        )}
         <span className="text-muted-foreground text-sm tabular-nums">
-          {verifiedRefs}/{totalRefs} verified · {arrivedTotal} units
+          {matchedRefs} reference(s) matched
+          {unmatched.length > 0 && ` · ${unmatched.length} unmatched`}
         </span>
-        <Button disabled={pending || !canReceive} onClick={() => setConfirming(true)}>
-          <PackagePlus className="size-4" /> Receive stock
+        <Button disabled={pending || matchedRefs === 0} onClick={send}>
+          <Send className="size-4" /> Send to kiosk for counting
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Phase C (counting / ready) — the kiosk owns the physical count. The admin
+// watches (read-only), can reopen for edits, and pushes once it's ready.
+// ---------------------------------------------------------------------------
+function AdminCountPhase({
+  countId,
+  items,
+  status,
+}: {
+  countId: string;
+  items: ReceiveItem[];
+  status: "counting" | "ready";
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [confirming, setConfirming] = useState(false);
+  const view = useMemo(() => matrixView(items as ReceivingItem[]), [items]);
+  const isReady = status === "ready";
+  const arrivedTotal =
+    view.summary.arrivedPieces + view.other.filter((i) => !i.unknown).reduce((s, i) => s + i.qty, 0);
+
+  function reopen() {
+    start(async () => {
+      const res = await reopenReceiving(countId);
+      if (!res.ok) toast.error(res.error);
+      else {
+        toast.success("Reopened for edits.");
+        router.refresh();
+      }
+    });
+  }
+
+  function receive() {
+    start(async () => {
+      const res = await receiveStock(countId);
+      setConfirming(false);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Received ${res.data?.received ?? 0} item(s) into Shopify.`);
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardContent className="flex flex-col gap-3 pt-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-medium">
+                {isReady ? "Counted — review and push" : "The store is counting this arrival"}
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                {isReady
+                  ? "The kiosk finished counting. Review the counted quantities, then push the arrival onto Shopify stock."
+                  : "Employees are entering the physical counts on the kiosk. You can push once they mark it ready."}
+              </p>
+            </div>
+            <Badge variant={isReady ? "default" : "secondary"}>{isReady ? "ready" : "counting"}</Badge>
+          </div>
+          <AdminMatrix view={view} showCounted />
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button variant="outline" disabled={pending} onClick={reopen}>
+          <RotateCcw className="size-4" /> Reopen for edits
+        </Button>
+        <span className="text-muted-foreground text-sm tabular-nums">{arrivedTotal} counted</span>
+        {isReady && (
+          <Button disabled={pending || arrivedTotal === 0} onClick={() => setConfirming(true)}>
+            <PackagePlus className="size-4" /> Push to Shopify
+          </Button>
+        )}
       </div>
 
       <Dialog open={confirming} onOpenChange={(o) => !pending && setConfirming(o)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Receive into Shopify?</DialogTitle>
+            <DialogTitle>Push onto Shopify stock?</DialogTitle>
             <DialogDescription>
-              This adds the arrived quantities on top of current Shopify stock
+              This adds the counted quantities on top of current Shopify stock
               (matched lines only) and closes this session. It can&apos;t be undone.
             </DialogDescription>
           </DialogHeader>
@@ -488,7 +582,7 @@ function VerifyPhase({ countId, items }: { countId: string; items: ReceiveItem[]
             </Button>
             <Button disabled={pending} onClick={receive}>
               {pending && <Loader2 className="size-4 animate-spin" />}
-              Receive {arrivedTotal} units
+              Push {arrivedTotal} units
             </Button>
           </DialogFooter>
         </DialogContent>

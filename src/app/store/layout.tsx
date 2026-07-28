@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { PackagePlus } from "lucide-react";
 import { requireStore } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { signOut } from "@/server/auth";
@@ -25,6 +27,18 @@ export default async function StoreLayout({
   const bd = businessDate(loc?.timezone ?? "UTC");
   const served =
     process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? "dev";
+
+  // A new-stock arrival waiting to be counted surfaces as a banner (there's no
+  // room for a 6th nav tab) — the "Receiving/Count" area only exists while a
+  // delivery is being counted.
+  const { data: arrival } = await service
+    .from("inventory_counts")
+    .select("id")
+    .eq("location_id", locationId)
+    .eq("kind", "restock")
+    .eq("status", "counting")
+    .limit(1)
+    .maybeSingle();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -54,6 +68,14 @@ export default async function StoreLayout({
           </div>
         </div>
       </header>
+      {arrival && (
+        <Link
+          href="/store/receiving"
+          className="bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200 flex items-center justify-center gap-2 border-b border-amber-500/40 px-6 py-2.5 text-sm font-semibold"
+        >
+          <PackagePlus className="size-4" /> New arrival to count — tap to start
+        </Link>
+      )}
       <div className="mx-auto w-full max-w-3xl flex-1 p-4 pb-24 sm:p-6 sm:pb-24">
         {children}
       </div>

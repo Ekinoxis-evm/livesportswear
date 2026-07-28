@@ -377,45 +377,62 @@ export async function matchUnknownItem(input: unknown): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
-// 5b. Verify a reference: tick/untick the matrix checkbox. Verifying ACCEPTS
-//     the document quantities as physically arrived (qty = doc_qty); unticking
-//     resets those lines to 0. One action for the whole (reference, color) row.
+// 5c. Hand the matched session to the kiosk for physical counting, or pull it
+//     back to keep editing. The kiosk counts arrived units per size; the admin
+//     resolves matches (open) and pushes (ready) — those stay admin-only.
 // ---------------------------------------------------------------------------
-const verifySchema = z.object({
-  countId: z.string().uuid(),
-  itemIds: z.array(z.string().uuid()).min(1).max(200),
-  verified: z.boolean(),
-});
-
-export async function setReferenceVerified(input: unknown): Promise<ActionResult> {
+export async function sendToKioskCounting(countId: string): Promise<ActionResult> {
   await requireAdmin();
-  const parsed = verifySchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-  const { countId, itemIds, verified } = parsed.data;
+  if (!z.string().uuid().safeParse(countId).success) return { ok: false, error: "Invalid session." };
 
   const { supabase, count } = await loadOpenRestock(countId);
   if (!count || count.kind !== "restock") return { ok: false, error: "Session not found." };
-  if (count.status !== "open") return { ok: false, error: "This session is already received." };
+  if (count.status !== "open") return { ok: false, error: "This session isn't open for editing." };
 
-  // Scope the write to THIS session's rows — never let a crafted id verify a
-  // line in another store's count.
-  const { data: rows } = await supabase
+  const { count: matched } = await supabase
     .from("inventory_count_items")
-    .select("id, doc_qty, unknown")
+    .select("id", { count: "exact", head: true })
     .eq("count_id", countId)
-    .in("id", itemIds);
-  const targets = (rows ?? []).filter((r) => !r.unknown);
-  if (targets.length === 0) return { ok: false, error: "Nothing to verify on this reference." };
+    .eq("unknown", false);
+  if (!matched) return { ok: false, error: "Match at least one line to Shopify before counting." };
 
-  for (const row of targets) {
-    const { error } = await supabase
-      .from("inventory_count_items")
-      .update({ verified, qty: verified ? (row.doc_qty ?? 0) : 0 })
-      .eq("id", row.id)
-      .eq("count_id", countId);
-    if (error) return { ok: false, error: dbError(error) };
-  }
+  // Reset counted state so the kiosk starts from zero (a prior admin tick or a
+  // reopened count must not pre-fill arrived quantities).
+  const { error: reset } = await supabase
+    .from("inventory_count_items")
+    .update({ qty: 0, verified: false })
+    .eq("count_id", countId);
+  if (reset) return { ok: false, error: dbError(reset) };
+
+  const { error } = await supabase
+    .from("inventory_counts")
+    .update({ status: "counting" })
+    .eq("id", countId)
+    .eq("status", "open");
+  if (error) return { ok: false, error: dbError(error) };
   revalidatePath(`/admin/inventory/${countId}`);
+  revalidatePath("/store/receiving");
+  return { ok: true };
+}
+
+export async function reopenReceiving(countId: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!z.string().uuid().safeParse(countId).success) return { ok: false, error: "Invalid session." };
+
+  const { supabase, count } = await loadOpenRestock(countId);
+  if (!count || count.kind !== "restock") return { ok: false, error: "Session not found." };
+  if (count.status !== "counting" && count.status !== "ready") {
+    return { ok: false, error: "Only a counting session can be reopened." };
+  }
+
+  const { error } = await supabase
+    .from("inventory_counts")
+    .update({ status: "open" })
+    .eq("id", countId)
+    .in("status", ["counting", "ready"]);
+  if (error) return { ok: false, error: dbError(error) };
+  revalidatePath(`/admin/inventory/${countId}`);
+  revalidatePath("/store/receiving");
   return { ok: true };
 }
 
@@ -431,7 +448,9 @@ export async function receiveStock(countId: string): Promise<ActionResult<{ rece
 
   const { supabase, count } = await loadOpenRestock(countId);
   if (!count || count.kind !== "restock") return { ok: false, error: "Session not found." };
-  if (count.status !== "open") return { ok: false, error: "This session is already received." };
+  if (count.status !== "ready") {
+    return { ok: false, error: "The kiosk hasn't finished counting this arrival yet." };
+  }
 
   let shopifyLocations;
   try {
@@ -493,7 +512,7 @@ export async function receiveStock(countId: string): Promise<ActionResult<{ rece
     .from("inventory_counts")
     .update({ status: "final", finalized_at: now, counted_units: receivedUnits })
     .eq("id", countId)
-    .eq("status", "open")
+    .eq("status", "ready")
     .select("id");
   if (!claimed?.length) return { ok: false, error: "This session is already received." };
 
@@ -516,10 +535,11 @@ export async function receiveStock(countId: string): Promise<ActionResult<{ rece
     }
     if (!result.ok) {
       if (i === 0) {
-        // Nothing landed — reopen so the receive can be retried cleanly.
+        // Nothing landed — return to 'ready' so the receive can be retried
+        // cleanly (the kiosk's count is intact; only the push failed).
         await supabase
           .from("inventory_counts")
-          .update({ status: "open", finalized_at: null })
+          .update({ status: "ready", finalized_at: null })
           .eq("id", countId);
         return { ok: false, error: result.message };
       }

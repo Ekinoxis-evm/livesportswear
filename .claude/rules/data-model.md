@@ -457,26 +457,33 @@ restores instant +1 for fast rack scanning. UI label for Shopify's stock is
 "In Shopify" (column `expected` internally). Math
 is pure in `src/lib/inventory-count.ts`; Shopify lookups in
 `lookupVariantByBarcode` / `fetchAllTrackedVariants` (`src/lib/shopify.ts`).
-- `inventory_counts`: `id`, `location_id fk`, `status ('open'|'final')`,
-  `kind ('count'|'restock')` (0040, default `'count'`), `note`, `started_by`
-  (admin user), `started_at`, `finalized_at`, `expected_units`,
+- `inventory_counts`: `id`, `location_id fk`,
+  `status ('open'|'counting'|'ready'|'final')` (0058 added `counting`/`ready` for
+  the receiving kiosk-counting lifecycle — see below; a plain Counting only ever
+  uses `open`→`final`), `kind ('count'|'restock')` (0040, default `'count'`),
+  `note`, `started_by` (admin user), `started_at`, `finalized_at`, `expected_units`,
   `counted_units` (snapshotted at finalize), `document_path` (0040, restock
   only — the uploaded arrival doc in the private `receiving-docs` bucket).
-  Partial unique index: ONE open session per **(location, kind)** (0040 — so a
-  Counting and a New Stock session can be open at once).
+  Partial unique index: ONE **active** session per **(location, kind)** — 0040
+  scoped it to `where status='open'`; **0058 widened it to `where status <> 'final'`**
+  so a session in `counting`/`ready` still blocks a new upload.
 - `inventory_count_items`: `count_id fk cascade`, `barcode`, `sku`,
   `product_title`, `product_type` (Shopify productType, added 0035; null on
   older rows), `variant_title`, `qty`, `expected` (Shopify qty at first
   scan; finalize sweeps the catalog and inserts qty-0 rows for unscanned
   stock), `doc_qty` (0040, restock only — what the arrival document said
-  arrived; `qty` = physically verified arrived), `hs_code` (0055, restock only —
-  harmonized-system/customs code as printed on the arrival doc; null for
-  counts), `verified` (0055, restock only — a rep confirmed this line's physical
-  units; false for counts), `unknown` (barcode not in catalog).
+  arrived; `qty` = physically verified/**kiosk-counted** arrived), `hs_code`
+  (0055, restock only — harmonized-system/customs code as printed on the arrival
+  doc; null for counts), `verified` (0055, restock only — **since 0058: this
+  reference was counted on the kiosk**; false for counts), `unknown` (barcode not
+  in catalog).
   `unique (count_id, barcode)`. The count screen groups by
   `product_type` (category chips) and paginates 25/page.
 - RLS: admin-only via `admin_can_access_location` (items via join to the
-  parent count); no employee/kiosk policies.
+  parent count); no employee/kiosk policies. The kiosk counting flow (0058)
+  writes through **service-client store actions scoped by the JWT location**
+  (`src/server/store-receiving.ts`), never a store-JWT policy — the same
+  single-writer posture as the rest of the kiosk.
 
 **New Stock / receiving mode (0040)** — `kind='restock'`. The opposite of a
 blind Counting: a shipment *arrives* with a supplier document and is **added**
@@ -486,19 +493,32 @@ Flow (`src/server/receiving.ts` + `src/lib/receiving.ts`, UI
 line items (CSV/Excel via `papaparse` + `mapCsvRows`; PDF/photo via a Claude
 vision model through the Vercel AI Gateway, `src/lib/receiving-extract.ts`,
 `AI_GATEWAY_API_KEY`/`RECEIVING_MODEL`) → match to Shopify by barcode then SKU
-(`lookupVariantByBarcode`/`lookupVariantBySku`) → **review as a reference × size
-matrix** (`matrixView` in `receiving.ts`, UI `receive-matrix.tsx`): one row per
-`(reference, color)` reconstructed from the SKU (`reference.SIZE.color`) with the
-HS code, description, a qty cell per size, a row total, and a header stats bar
-(references · document pieces · verified pieces). A rep **ticks each reference
-verified** once physically checked — `setReferenceVerified` accepts the
-document quantities as arrived (`qty = doc_qty`; untick resets to 0). Non-matrix
-lines (plain barcodes / unmatched) fall to an "Other lines" table with a
-per-item verify checkbox + `matchUnknownItem`. Receive is gated on all
-references verified (with an explicit override) → `receiveStock` re-reads
-*fresh* on-hand, writes `onHand + arrived` via `setOnHandQuantities` (gated on
-`write_inventory`), bumps `store_inventory`, and finalizes. HS code and the
-matrix grouping are pure/tested (`tests/receiving.spec.ts`).
+→ **reading step shows the reference × size matrix** (`extractMatrix` in
+`receiving.ts`, pure) — per-size cells, a row total, and a grand total of all
+pieces — so the admin reviews the doc as written. Matching is **by reference**
+(0058-era `buildReferenceIndex`/`matchByReference`): Shopify SKUs are
+`reference.SIZE.color`, but the doc's color text rarely equals Shopify's color
+code, so the exact-SKU lookup missed constantly. Now it tries exact barcode/SKU,
+then falls back to reference + size (color-lenient; color only disambiguates a
+reference with several colors). A miss carries a hint ("In Shopify as BLACK,
+NAVY — pick the colour" vs "not found"); unmatched lines route to the reviewable
+"Other lines" table (`matchUnknownItem`).
+
+**Kiosk counting lifecycle (0058).** Receiving used to be admin-only end to end
+(admin ticked each reference to accept the document quantities, then pushed).
+Now the physical count is done on the store iPad and split by role:
+`open` (admin uploads + matches, `commitExtraction`) → **admin `sendToKioskCounting`**
+(`status → counting`, resets `qty`/`verified`) → **kiosk** counts the arrival at
+`/store/receiving` (per-size `qty` inputs + a per-reference "counted" tick, via
+`storeSetCountedQty`/`storeToggleCounted` in `src/server/store-receiving.ts`,
+service-client scoped to the JWT location + a `counting` restock session) →
+**kiosk `storeMarkReadyToPush`** (`status → ready`, gated on every matched
+reference counted) → **admin `receiveStock`** re-reads *fresh* on-hand, writes
+`onHand + qty` via `setOnHandQuantities` (gated on `write_inventory`, admin-only),
+bumps `store_inventory`, finalizes. `reopenReceiving` pulls a `counting`/`ready`
+session back to `open`. The kiosk surfaces the active arrival as a banner in
+`store/layout.tsx` (no 6th nav tab). Matrix grouping / reference matching are
+pure + tested (`tests/receiving.spec.ts`).
 
 ### `store_inventory` (added 0033)
 The store's own inventory book — one row per (location, barcode) holding OUR
