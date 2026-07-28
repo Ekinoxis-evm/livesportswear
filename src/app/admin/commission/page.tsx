@@ -2,7 +2,9 @@ import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
-import { asTiers, type CommissionTier } from "@/lib/commission";
+import { asTiers, resolveTiers, type CommissionTier } from "@/lib/commission";
+import { storeGoalLevels } from "@/lib/goal-levels";
+import { monthLabel } from "@/lib/format-date";
 import {
   Card,
   CardContent,
@@ -17,6 +19,7 @@ import {
   type EmployeeGoalsByKey,
 } from "@/components/commission/employee-goals-form";
 import { SyncSalesButton } from "@/components/shared/sync-sales-button";
+import { GoalsOverview } from "@/components/commission/goals-overview";
 import { syncMonthlySales } from "@/server/shopify";
 
 export default async function CommissionPage() {
@@ -70,6 +73,25 @@ export default async function CommissionPage() {
     );
   }
 
+  // Team-levels read-out for the current month (single store → all active reps).
+  const monthKey = `${year}-${monthNum}`;
+  const overview = locations[0]
+    ? (() => {
+        const loc = locations[0];
+        const personalGoals = employees.map(
+          (e) => goalsByEmployee[e.id]?.[monthKey] ?? 0,
+        );
+        const positiveGoals = personalGoals.filter((g) => g > 0);
+        return storeGoalLevels({
+          tiers: resolveTiers(tiersByKey[`${loc.id}-${monthKey}`], globalTiers),
+          activeReps: employees.length,
+          storeGoal: goalsByLocation[loc.id]?.[monthKey] ?? 0,
+          personalGoalSum: personalGoals.reduce((a, g) => a + g, 0),
+          basePersonalGoal: positiveGoals.length ? Math.min(...positiveGoals) : 0,
+        });
+      })()
+    : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
@@ -94,6 +116,25 @@ export default async function CommissionPage() {
         </div>
         <SyncSalesButton action={syncMonthlySales} label="Sync sales now" />
       </div>
+
+      {overview && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Goals &amp; commission — team levels</CardTitle>
+            <CardDescription>
+              Each commission tier is a per-rep target; × the team it&apos;s a store
+              level. Line the store goal + personal goals up with the first level.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <GoalsOverview
+              data={overview}
+              currency={currency}
+              monthLabel={monthLabel(`${year}-${String(monthNum).padStart(2, "0")}`)}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
