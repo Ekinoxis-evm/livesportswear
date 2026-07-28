@@ -316,21 +316,29 @@ export default async function StorePerformancePage({
 
           {mode === "month" && (
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-2xl font-bold tabular-nums">
-                  {formatMoney(monthTotal, currency)}
+              <div className="flex items-end justify-between gap-3">
+                <span className="flex flex-col">
+                  <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                    Sales so far
+                  </span>
+                  <span className="text-2xl font-bold tabular-nums">
+                    {formatMoney(monthTotal, currency)}
+                  </span>
                 </span>
                 {monthGoal > 0 ? (
-                  <span className="text-muted-foreground text-sm tabular-nums">
-                    goal {formatMoney(monthGoal, currency)} ·{" "}
-                    <span
-                      className={
-                        monthTotal >= monthGoal
-                          ? "font-semibold text-emerald-600"
-                          : "text-foreground font-semibold"
-                      }
-                    >
-                      {Math.round((monthTotal / monthGoal) * 100)}%
+                  <span className="flex flex-col items-end">
+                    <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
+                      Goal ·{" "}
+                      <span
+                        className={
+                          monthTotal >= monthGoal ? "text-emerald-600" : "text-foreground"
+                        }
+                      >
+                        {Math.round((monthTotal / monthGoal) * 100)}%
+                      </span>
+                    </span>
+                    <span className="text-primary text-3xl font-bold tabular-nums">
+                      {formatMoney(monthGoal, currency)}
                     </span>
                   </span>
                 ) : (
