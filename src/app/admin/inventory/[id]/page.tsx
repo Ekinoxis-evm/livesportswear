@@ -17,7 +17,11 @@ import {
   VarianceReportTable,
 } from "@/components/inventory/count-report-tables";
 import { CountScreen } from "@/components/inventory/count-screen";
-import { ReceiveScreen, type ReceiveItem } from "@/components/inventory/receive-screen";
+import {
+  ReceiveScreen,
+  type ReceiveItem,
+  type ReceiveStatus,
+} from "@/components/inventory/receive-screen";
 import { receivingRows } from "@/lib/receiving";
 import { InventoryFunnel } from "@/components/inventory/inventory-funnel";
 import { DownloadCsvButton } from "@/components/inventory/download-csv-button";
@@ -107,12 +111,17 @@ export default async function InventoryCountPage({
       unknown: r.unknown,
     }));
 
-    if (count.status === "open") {
+    if (count.status !== "final") {
+      // open (admin ingests) · counting (kiosk) · ready (admin pushes)
       return (
         <div className="flex flex-col gap-6">
           {header}
           {funnel}
-          <ReceiveScreen countId={count.id} items={receiveItems} />
+          <ReceiveScreen
+            countId={count.id}
+            items={receiveItems}
+            status={count.status as ReceiveStatus}
+          />
         </div>
       );
     }
