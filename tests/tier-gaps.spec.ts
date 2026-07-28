@@ -35,9 +35,9 @@ describe("tierGaps", () => {
     expect(g.tiers.map((t) => t.min_sales)).toEqual([5000, 10000, 18000]);
   });
 
-  it("reports the band-aware current rate", () => {
-    expect(tierGaps(3000, tiers).currentRate).toBe(0.04);
-    expect(tierGaps(7660, tiers).currentRate).toBe(0.06);
+  it("reports the current rate — the highest tier reached, 0 below the first", () => {
+    expect(tierGaps(3000, tiers).currentRate).toBe(0); // below $5k, no base tier
+    expect(tierGaps(7660, tiers).currentRate).toBe(0.04); // reached $5k, not $10k
   });
 
   it("is empty with no tiers", () => {
