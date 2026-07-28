@@ -107,6 +107,13 @@
   provider. That's inherent to the feature; keep it to arrival docs only. `ANTHROPIC_API_KEY`
   is server-only (`import "server-only"`), never exposed to the client. The `receiving-docs`
   storage bucket is private, read/written only via the service client in the receiving actions.
+- **Kiosk counting (0058)**: employees count a New Stock arrival on the store iPad through
+  `src/server/store-receiving.ts` — service-client actions gated by `requireStore()` and
+  **re-scoped on every write** to the JWT's location AND a restock session that is actually in
+  `status='counting'`. The kiosk can only write counted quantities / the counted tick and flip
+  `counting → ready`; **matching to Shopify and the final additive push stay admin-only**
+  (`requireAdmin`). Same single-writer posture as the floor: no store-JWT RLS policy on
+  `inventory_counts`/`inventory_count_items`.
 
 ## Client data (0042–0048)
 - `customer_origin` is **attribution only** — no name, email or phone. Shopify
