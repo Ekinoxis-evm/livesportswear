@@ -485,7 +485,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           if (!o && !pending) setReturnPicker(false);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Who takes the return?</DialogTitle>
             <DialogDescription>

@@ -51,7 +51,7 @@ export function SetPasswordButton({ id, name }: { id: string; name: string }) {
           </Button>
         }
       />
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Set {name}&apos;s password</DialogTitle>
           <DialogDescription>

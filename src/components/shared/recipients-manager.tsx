@@ -175,7 +175,7 @@ export function RecipientsManager({
       </CardContent>
 
       <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
+        <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
           <DialogHeader>
             <DialogTitle>Send a test report</DialogTitle>
             <DialogDescription>

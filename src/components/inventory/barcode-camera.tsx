@@ -236,7 +236,7 @@ export function BarcodeCamera({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Scan with the camera</DialogTitle>
           <DialogDescription>Fit the barcode inside the box.</DialogDescription>

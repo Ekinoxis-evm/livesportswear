@@ -108,7 +108,7 @@ export function AdminsPanel({
       </div>
 
       <Dialog open={Boolean(issued)} onOpenChange={(o) => !o && setIssued(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Admin access created</DialogTitle>
             <DialogDescription>

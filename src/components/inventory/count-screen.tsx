@@ -493,7 +493,7 @@ export function CountScreen({
           }
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           {pendingScan && (
             <>
               <DialogHeader>
@@ -565,7 +565,7 @@ export function CountScreen({
       </Dialog>
 
       <Dialog open={confirmFinalize} onOpenChange={(o) => !pending && setConfirmFinalize(o)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Finalize this count?</DialogTitle>
             <DialogDescription>

@@ -56,7 +56,7 @@ export function ReportActions({
       )}
 
       <Dialog open={mode !== null} onOpenChange={(o) => !o && setMode(null)}>
-        <DialogContent className="flex max-h-[85vh] max-w-md flex-col">
+        <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
           <DialogHeader>
             <DialogTitle>
               {mode === "close" ? "Close the day" : "Send a test report"}

@@ -591,7 +591,7 @@ export function ContestWizard({
   return (
     <Dialog open={open} onOpenChange={openChange}>
       <DialogTrigger render={children} />
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit contest" : "New contest"}</DialogTitle>
           <DialogDescription>

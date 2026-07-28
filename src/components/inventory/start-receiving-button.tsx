@@ -46,7 +46,7 @@ export function StartReceivingButton({ locations }: { locations: LocationOption[
         <PackagePlus className="mr-1.5 size-4" /> New Stock
       </Button>
       <Dialog open={open} onOpenChange={(o) => !pending && setOpen(o)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Receive new stock</DialogTitle>
             <DialogDescription>

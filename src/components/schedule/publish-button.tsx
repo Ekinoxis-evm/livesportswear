@@ -57,7 +57,7 @@ export function PublishButton({
       <DialogTrigger
         render={<Button>{published ? "Re-publish" : "Publish"}</Button>}
       />
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {published ? "Re-publish this schedule?" : "Publish this schedule?"}
