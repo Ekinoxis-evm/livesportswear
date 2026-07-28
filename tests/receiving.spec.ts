@@ -9,8 +9,14 @@ import {
   buildReceivingWrites,
   parseSku,
   matrixView,
+  extractMatrix,
+  buildReferenceIndex,
+  matchByReference,
+  candidateColors,
   type ReceivingItem,
   type FreshOnHand,
+  type CatalogVariant,
+  type ExtractedLine,
 } from "@/lib/receiving";
 
 const item = (overrides: Partial<ReceivingItem> = {}): ReceivingItem => ({
@@ -286,5 +292,91 @@ describe("matrixView — reconstructing the reference × size grid", () => {
     expect(view.summary.docPieces).toBe(9);
     expect(view.summary.arrivedPieces).toBe(3);
     expect(view.summary.verifiedReferences).toBe(0); // 46586 only partly verified
+  });
+
+  it("routes an unmatched line to `other` even when its code parses as a SKU", () => {
+    const view = matrixView([
+      mItem({ id: "a", sku: "46586.M.00RX80", doc_qty: 3, unknown: false }),
+      mItem({ id: "u", sku: "99999.S.00ZZ00", doc_qty: 1, unknown: true }),
+    ]);
+    expect(view.rows).toHaveLength(1);
+    expect(view.other.map((i) => i.id)).toEqual(["u"]);
+  });
+});
+
+describe("extractMatrix — reading-step preview of the raw document", () => {
+  const line = (o: Partial<ExtractedLine>): ExtractedLine => ({
+    code: "46586.M.00RX80",
+    codeType: "sku",
+    description: "Legging",
+    qty: 1,
+    ...o,
+  });
+
+  it("groups by reference+color with per-size cells, row totals and a grand total", () => {
+    const m = extractMatrix([
+      line({ code: "46586.S.00RX80", qty: 2 }),
+      line({ code: "46586.M.00RX80", qty: 3 }),
+      line({ code: "90001.L.00AA11", qty: 4, description: "Tee" }),
+    ]);
+    expect(m.sizes).toEqual(["S", "M", "L"]);
+    expect(m.rows).toHaveLength(2);
+    const first = m.rows[0];
+    expect(first.reference).toBe("46586");
+    expect(first.cells.map((c) => [c.size, c.qty])).toEqual([["S", 2], ["M", 3]]);
+    expect(first.total).toBe(5);
+    expect(m.grandTotal).toBe(9);
+  });
+
+  it("sums duplicate size cells and counts non-matrix lines in the grand total", () => {
+    const m = extractMatrix([
+      line({ code: "46586.M.00RX80", qty: 2 }),
+      line({ code: "46586.M.00RX80", qty: 1 }),
+      line({ code: "7501234567890", codeType: "barcode", qty: 5 }),
+    ]);
+    expect(m.rows[0].cells).toEqual([{ size: "M", qty: 3 }]);
+    expect(m.other).toHaveLength(1);
+    expect(m.grandTotal).toBe(8);
+  });
+});
+
+describe("matchByReference — reference + size, color-lenient", () => {
+  const v = (o: Partial<CatalogVariant>): CatalogVariant => ({
+    barcode: "b",
+    sku: "46586.M.00RX80",
+    productTitle: "Legging",
+    variantTitle: "M",
+    productType: "LEGGING",
+    inventoryQuantity: 3,
+    ...o,
+  });
+
+  it("matches by reference+size even when the doc color differs from Shopify", () => {
+    const index = buildReferenceIndex([v({ barcode: "b1", sku: "46586.M.00RX80" })]);
+    const res = matchByReference("46586.M.BLACK", index); // doc color text is wrong
+    expect(res.status).toBe("matched");
+    if (res.status === "matched") expect(res.variant.barcode).toBe("b1");
+  });
+
+  it("disambiguates by color when a reference+size has several colors", () => {
+    const index = buildReferenceIndex([
+      v({ barcode: "blk", sku: "46586.M.00BLK" }),
+      v({ barcode: "nvy", sku: "46586.M.00NVY" }),
+    ]);
+    expect(matchByReference("46586.M.00NVY", index)).toMatchObject({
+      status: "matched",
+      variant: { barcode: "nvy" },
+    });
+    const ambiguous = matchByReference("46586.M.99XXX", index); // color matches neither
+    expect(ambiguous.status).toBe("ambiguous");
+    if (ambiguous.status === "ambiguous") {
+      expect(candidateColors(ambiguous.candidates)).toEqual(["00BLK", "00NVY"]);
+    }
+  });
+
+  it("reports missing for an unknown reference or a non-SKU code", () => {
+    const index = buildReferenceIndex([v({ sku: "46586.M.00RX80" })]);
+    expect(matchByReference("00000.M.00RX80", index)).toEqual({ status: "missing", reference: "00000" });
+    expect(matchByReference("7501234567890", index)).toEqual({ status: "missing", reference: null });
   });
 });

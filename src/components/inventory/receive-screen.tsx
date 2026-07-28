@@ -13,7 +13,13 @@ import {
   receiveStock,
 } from "@/server/receiving";
 import { removeItem } from "@/server/inventory";
-import { matrixView, type ExtractedLine, type MatrixRow, type ReceivingItem } from "@/lib/receiving";
+import {
+  matrixView,
+  extractMatrix,
+  type ExtractedLine,
+  type MatrixRow,
+  type ReceivingItem,
+} from "@/lib/receiving";
 import { ReceiveMatrix } from "@/components/inventory/receive-matrix";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +78,8 @@ function ExtractPhase({ countId }: { countId: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [lines, setLines] = useState<ExtractedLine[] | null>(null);
+  // Read-only reference × size preview of what was read from the document.
+  const matrix = useMemo(() => (lines ? extractMatrix(lines) : null), [lines]);
 
   function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -147,8 +155,63 @@ function ExtractPhase({ countId }: { countId: string }) {
           <CardContent className="flex flex-col gap-3 pt-6">
             <div className="flex items-center justify-between">
               <h2 className="font-medium">2 · Review extracted lines</h2>
-              <span className="text-muted-foreground text-sm">{lines.length} line(s)</span>
+              <span className="text-muted-foreground text-sm">
+                {matrix && matrix.rows.length > 0
+                  ? `${matrix.rows.length} reference(s) · ${matrix.grandTotal} pieces`
+                  : `${lines.length} line(s)`}
+              </span>
             </div>
+
+            {matrix && matrix.rows.length > 0 && (
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Reference</TableHead>
+                      <TableHead>Color</TableHead>
+                      {matrix.sizes.map((s) => (
+                        <TableHead key={s} className="text-right tabular-nums">
+                          {s}
+                        </TableHead>
+                      ))}
+                      <TableHead className="text-right font-semibold">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {matrix.rows.map((row) => (
+                      <TableRow key={`${row.reference}-${row.color}`}>
+                        <TableCell className="font-mono text-xs font-medium">{row.reference}</TableCell>
+                        <TableCell className="font-mono text-xs">{row.color}</TableCell>
+                        {matrix.sizes.map((s) => {
+                          const cell = row.cells.find((c) => c.size === s);
+                          return (
+                            <TableCell key={s} className="text-right tabular-nums">
+                              {cell ? cell.qty : <span className="text-muted-foreground/40">·</span>}
+                            </TableCell>
+                          );
+                        })}
+                        <TableCell className="text-right font-semibold tabular-nums">{row.total}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="border-t-2">
+                      <TableCell colSpan={2 + matrix.sizes.length} className="text-right font-medium">
+                        All pieces
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">{matrix.grandTotal}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {matrix && matrix.rows.length > 0 && (
+              <p className="text-muted-foreground text-xs">
+                {matrix.other.length > 0
+                  ? `Plus ${matrix.other.length} line(s) without a size-matrix code — adjust below.`
+                  : "Adjust any line below, then match to Shopify."}
+              </p>
+            )}
+
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
