@@ -16,7 +16,16 @@ import {
   setOnHandQuantities,
   type VariantHit,
 } from "@/lib/shopify";
-import { mapCsvRows, gridToRows, buildReceivingWrites, type ExtractedLine, type ReceivingItem } from "@/lib/receiving";
+import {
+  mapCsvRows,
+  gridToRows,
+  buildReceivingWrites,
+  buildReferenceIndex,
+  matchByReference,
+  candidateColors,
+  type ExtractedLine,
+  type ReceivingItem,
+} from "@/lib/receiving";
 import { extractLinesFromDocument } from "@/lib/receiving-extract";
 import { type ActionResult, firstError, dbError } from "@/server/shared";
 
@@ -235,18 +244,32 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
   if (count.status !== "open") return { ok: false, error: "This session is already received." };
 
   // Match against the catalog fetched ONCE (a packing slip can have hundreds of
-  // lines — a Shopify lookup per line would blow the serverless timeout). Only
-  // barcode-bearing variants are tracked, so a doc SKU resolves via its variant's
-  // barcode entry. Barcode first, SKU fallback, honoring the line's codeType hint.
+  // lines — a Shopify lookup per line would blow the serverless timeout). Try an
+  // EXACT barcode/SKU first, then fall back to reference+size matching: the doc's
+  // color text rarely equals Shopify's color code, so the assembled SKU misses —
+  // but the 4-5 char reference + size resolves the variant reliably, with the
+  // color only needed to disambiguate a reference that has several colors.
   const catalog = isShopifyConfigured() ? await fetchAllTrackedVariants().catch(() => []) : [];
   const byBc = new Map(catalog.map((v) => [v.barcode, v] as const));
   const bySku = new Map(
     catalog.filter((v) => v.sku).map((v) => [v.sku as string, v] as const),
   );
-  const resolve = (line: ExtractedLine): VariantHit | null => {
-    const bc = byBc.get(line.code) ?? null;
-    const sku = bySku.get(line.code) ?? null;
-    return line.codeType === "sku" ? sku ?? bc : bc ?? sku;
+  const byReference = buildReferenceIndex(catalog);
+  // A miss carries a hint (candidate colors / "not in Shopify") so the review
+  // can tell a genuinely-missing reference from a colour ambiguity.
+  const resolve = (line: ExtractedLine): { hit: VariantHit | null; hint: string | null } => {
+    const exact =
+      line.codeType === "sku"
+        ? bySku.get(line.code) ?? byBc.get(line.code)
+        : byBc.get(line.code) ?? bySku.get(line.code);
+    if (exact) return { hit: exact, hint: null };
+
+    const ref = matchByReference(line.code, byReference);
+    if (ref.status === "matched") return { hit: ref.variant, hint: null };
+    if (ref.status === "ambiguous") {
+      return { hit: null, hint: `In Shopify as ${candidateColors(ref.candidates).join(", ")} — pick the colour` };
+    }
+    return { hit: null, hint: ref.reference ? `Reference ${ref.reference} not found in Shopify` : null };
   };
 
   // Resolve every line, then collapse duplicates onto one row per barcode
@@ -263,7 +286,7 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
   };
   const byBarcode = new Map<string, Row>();
   for (const line of lines) {
-    const hit = resolve(line);
+    const { hit, hint } = resolve(line);
     const barcode = hit?.barcode || line.code;
     const existing = byBarcode.get(barcode);
     if (existing) {
@@ -275,7 +298,9 @@ export async function commitExtraction(input: unknown): Promise<ActionResult<{ m
       barcode,
       sku: hit?.sku ?? null,
       product_title: hit?.productTitle ?? line.description ?? "Unmatched line",
-      variant_title: hit?.variantTitle ?? null,
+      // Matched → the variant's title (usually the size); miss → the review
+      // hint so the admin can see whether it's a colour ambiguity or missing.
+      variant_title: hit?.variantTitle ?? hint,
       expected: hit?.inventoryQuantity ?? null,
       doc_qty: line.qty,
       hs_code: line.hsCode ?? null,

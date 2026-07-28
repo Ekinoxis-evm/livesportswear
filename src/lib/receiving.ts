@@ -348,7 +348,9 @@ export function matrixView(items: ReceivingItem[]): MatrixView {
   const sizeSet = new Set<string>();
 
   for (const item of items) {
-    const parsed = parseSku(item.sku ?? item.barcode);
+    // Unmatched lines go to `other` (with their review hint) even when the code
+    // parses as reference.SIZE.color — the matrix is matched references only.
+    const parsed = item.unknown ? null : parseSku(item.sku ?? item.barcode);
     if (!parsed) {
       other.push(item);
       continue;
@@ -400,6 +402,124 @@ export function matrixView(items: ReceivingItem[]): MatrixView {
       verifiedReferences: rows.filter((r) => r.verified).length,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Reading-step preview — group the EXTRACTED lines (before matching) into the
+// reference × size grid so the admin reviews the document the way it was
+// written: per-size quantities, a row total, and a grand total of all pieces.
+// ---------------------------------------------------------------------------
+export type ExtractMatrixRow = {
+  reference: string;
+  color: string;
+  description: string;
+  cells: { size: string; qty: number }[]; // one per size present in THIS row
+  total: number;
+};
+
+export type ExtractMatrix = {
+  sizes: string[]; // ordered union of every size column
+  rows: ExtractMatrixRow[];
+  other: ExtractedLine[]; // lines whose code isn't reference.SIZE.color
+  grandTotal: number; // every piece across the whole document
+};
+
+/** Reference × size preview of the raw extracted lines (no Shopify needed). */
+export function extractMatrix(lines: ExtractedLine[]): ExtractMatrix {
+  const groups = new Map<string, ExtractMatrixRow>();
+  const other: ExtractedLine[] = [];
+  const sizeSet = new Set<string>();
+  let grandTotal = 0;
+
+  for (const line of lines) {
+    grandTotal += line.qty;
+    const parsed = parseSku(line.code);
+    if (!parsed) {
+      other.push(line);
+      continue;
+    }
+    const key = `${parsed.reference}||${parsed.color}`;
+    let row = groups.get(key);
+    if (!row) {
+      row = { reference: parsed.reference, color: parsed.color, description: line.description, cells: [], total: 0 };
+      groups.set(key, row);
+    }
+    if (!row.description && line.description) row.description = line.description;
+    const cell = row.cells.find((c) => c.size === parsed.size);
+    if (cell) cell.qty += line.qty;
+    else row.cells.push({ size: parsed.size, qty: line.qty });
+    row.total += line.qty;
+    sizeSet.add(parsed.size);
+  }
+
+  const sizes = [...sizeSet].sort((a, b) => sizeRank(a) - sizeRank(b) || a.localeCompare(b));
+  const rows = [...groups.values()].sort(
+    (a, b) => a.reference.localeCompare(b.reference) || a.color.localeCompare(b.color),
+  );
+  for (const row of rows) row.cells.sort((a, b) => sizeRank(a.size) - sizeRank(b.size) || a.size.localeCompare(b.size));
+
+  return { sizes, rows, other, grandTotal };
+}
+
+// ---------------------------------------------------------------------------
+// Reference-based matching — Shopify SKUs are reference.SIZE.color, but the
+// document's color text rarely equals Shopify's color code, so matching the
+// full assembled SKU misses. Match on the RELIABLE reference (4-5 char prefix)
+// + size instead; color only disambiguates when a reference has several colors.
+// ---------------------------------------------------------------------------
+export type CatalogVariant = {
+  barcode: string;
+  sku: string | null;
+  productTitle: string;
+  variantTitle: string | null;
+  productType: string | null;
+  inventoryQuantity: number | null;
+};
+
+export type RefVariant = CatalogVariant & { reference: string; size: string; color: string };
+
+/** Index catalog variants by their SKU reference (skips SKUs that don't parse). */
+export function buildReferenceIndex(variants: CatalogVariant[]): Map<string, RefVariant[]> {
+  const index = new Map<string, RefVariant[]>();
+  for (const v of variants) {
+    const parsed = parseSku(v.sku);
+    if (!parsed) continue;
+    const arr = index.get(parsed.reference) ?? [];
+    arr.push({ ...v, ...parsed });
+    index.set(parsed.reference, arr);
+  }
+  return index;
+}
+
+export type RefMatch =
+  | { status: "matched"; variant: RefVariant }
+  | { status: "ambiguous"; reference: string; size: string; candidates: RefVariant[] }
+  | { status: "missing"; reference: string | null };
+
+/**
+ * Resolve one `reference.SIZE.color` code against the reference index. Matches
+ * on reference + size; when several colors share that size, the doc color picks
+ * one, else it's ambiguous. Unknown reference (or non-SKU code) is missing.
+ */
+export function matchByReference(code: string, index: Map<string, RefVariant[]>): RefMatch {
+  const parsed = parseSku(code);
+  if (!parsed) return { status: "missing", reference: null };
+  const { reference, size, color } = parsed;
+  const variants = index.get(reference);
+  if (!variants || variants.length === 0) return { status: "missing", reference };
+
+  const bySize = variants.filter((v) => v.size.toUpperCase() === size.toUpperCase());
+  if (bySize.length === 0) return { status: "ambiguous", reference, size, candidates: variants };
+  if (bySize.length === 1) return { status: "matched", variant: bySize[0] };
+
+  const byColor = bySize.filter((v) => v.color.toUpperCase() === color.toUpperCase());
+  if (byColor.length === 1) return { status: "matched", variant: byColor[0] };
+  return { status: "ambiguous", reference, size, candidates: bySize };
+}
+
+/** Distinct colors available for a reference — the review hint for a miss. */
+export function candidateColors(candidates: RefVariant[]): string[] {
+  return [...new Set(candidates.map((c) => c.color))].sort();
 }
 
 export type FreshOnHand = { inventoryItemId: string; onHand: number | null };
