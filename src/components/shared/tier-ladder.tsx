@@ -27,7 +27,7 @@ export function TierLadder({
           )}
         >
           <span className="flex items-center gap-2 font-medium tabular-nums">
-            {formatMoney(t.min_sales, currency)}
+            {t.min_sales === 0 ? "Base" : formatMoney(t.min_sales, currency)}
             <span className="text-muted-foreground text-xs font-normal">
               {(t.rate * 100).toFixed(t.rate * 100 % 1 === 0 ? 0 : 1)}%
             </span>

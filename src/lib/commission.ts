@@ -1,10 +1,11 @@
 /**
- * Commission tiers. Pure. `rate` is a fraction (0.04 = 4%). Thresholds are
- * band boundaries: the first rate applies below the first threshold, the
- * second between the first and second, and so on; the top rate keeps applying
- * beyond the last threshold. (`min_sales` is the stored jsonb field name —
- * semantically it's the band's upper boundary.) The "goal" is the next
- * boundary that unlocks a better rate.
+ * Commission tiers. Pure. `rate` is a fraction (0.04 = 4%). Each `min_sales` is
+ * a threshold you must **reach** to unlock its rate ("reach $10k → 4.5%"): the
+ * applicable rate is the highest tier whose `min_sales ≤ sales`, applied to the
+ * FULL sales. Below every threshold the rate is 0 — UNLESS a `{min_sales: 0}`
+ * tier is present, which acts as the base rate. The "goal" (`nextTier`) is the
+ * next threshold that unlocks a better rate. (This matches the tier ladder,
+ * which marks a tier `reached` at `sales ≥ min_sales`.)
  */
 export type CommissionTier = { min_sales: number; rate: number };
 
@@ -21,17 +22,25 @@ export function commissionFor(
   const sorted = [...tiers].sort((a, b) => a.min_sales - b.min_sales);
   if (sorted.length === 0) return { rate: 0, earned: 0, nextTier: null };
 
-  const band = sorted.findIndex((t) => sales < t.min_sales);
-  const idx = band === -1 ? sorted.length - 1 : band;
-  const rate = sorted[idx].rate;
+  // The highest tier the rep has reached (min_sales ≤ sales); -1 if below all.
+  let idx = -1;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sales >= sorted[i].min_sales) idx = i;
+    else break;
+  }
+  const rate = idx === -1 ? 0 : sorted[idx].rate;
+
+  // The next threshold to reach for a better rate.
+  const nextIdx = idx + 1;
   const next =
-    band !== -1 && idx + 1 < sorted.length
+    nextIdx < sorted.length
       ? {
-          min_sales: sorted[idx].min_sales,
-          rate: sorted[idx + 1].rate,
-          remaining: sorted[idx].min_sales - sales,
+          min_sales: sorted[nextIdx].min_sales,
+          rate: sorted[nextIdx].rate,
+          remaining: Math.round((sorted[nextIdx].min_sales - sales) * 100) / 100,
         }
       : null;
+
   return {
     rate,
     earned: Math.round(sales * rate * 100) / 100,

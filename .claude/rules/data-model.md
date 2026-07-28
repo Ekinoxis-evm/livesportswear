@@ -304,9 +304,13 @@ the admin dashboard.
 - `tiers jsonb` (added 0012) — per store/month commission tiers
   `[{min_sales, rate}]`; when null, commission falls back to the global
   `commission_config.tiers`. Set via `setStoreMonth` (goal + tiers together).
-  Semantics: thresholds are band boundaries — the first rate applies below the
-  first threshold, the next rate from there up, and the top rate continues
-  beyond the last threshold (`lib/commission.ts` `commissionFor`).
+  Semantics (`lib/commission.ts` `commissionFor`, fixed 2026-07-27): each
+  `min_sales` is a threshold you must **reach** to unlock its rate — the rate is
+  the highest tier with `min_sales ≤ sales`, applied to full sales; **below every
+  threshold the rate is 0**, UNLESS a `{min_sales: 0}` tier is present, which is
+  the **base rate**. The old reading (rate applies *below* its threshold, and the
+  first rate from $0) was wrong and overstated commission. This matches the tier
+  ladder (`tierGaps` marks `reached` at `sales ≥ min_sales`).
 - `created_at, updated_at`
 - `primary key (location_id, year, month)`
 

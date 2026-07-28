@@ -52,8 +52,9 @@ export function CommissionConfigForm({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label>
-          Tiers — each rate applies below its threshold; the top rate continues
-          beyond the last
+          Tiers — reach a threshold to unlock its rate (on full sales); the top
+          rate continues beyond the last. Add a $0 row for the base rate below
+          the first tier.
         </Label>
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-2">
