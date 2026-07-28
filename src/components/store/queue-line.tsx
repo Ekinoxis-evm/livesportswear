@@ -38,12 +38,14 @@ function LineRow({
   pending,
   onMakeUpNext,
   onFinishReturn,
+  onTakeClient,
 }: {
   entry: LineEntry;
   index: number;
   pending: boolean;
   onMakeUpNext?: () => void;
   onFinishReturn?: () => void;
+  onTakeClient?: () => void;
 }) {
   // disabled while an action is in flight — two concurrent reorders would
   // race each other and the last DB write would silently win
@@ -111,6 +113,13 @@ function LineRow({
         </span>
       </span>
       <div className="flex shrink-0 items-center gap-1">
+        {/* A rep on a return is still free to serve a walk-in — offer it right
+            on their line row so they don't have to wait to be up-next. */}
+        {entry.onReturn && onTakeClient && (
+          <Button size="sm" disabled={pending} onClick={onTakeClient}>
+            Take client
+          </Button>
+        )}
         {entry.onReturn && onFinishReturn && (
           <Button
             variant="outline"
@@ -143,12 +152,14 @@ export function QueueLine({
   onReorder,
   onMakeUpNext,
   onFinishReturn,
+  onTakeClient,
 }: {
   entries: LineEntry[];
   pending: boolean;
   onReorder: (orderedIds: string[]) => Promise<boolean>;
   onMakeUpNext: (employeeId: string, name: string) => void;
   onFinishReturn: (employeeId: string, name: string) => void;
+  onTakeClient: (employeeId: string, name: string) => void;
 }) {
   // Non-null while a local reorder is awaiting the server.
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
@@ -206,6 +217,9 @@ export function QueueLine({
               onMakeUpNext={i > 0 ? () => onMakeUpNext(e.employeeId, e.name) : undefined}
               onFinishReturn={
                 e.onReturn ? () => onFinishReturn(e.employeeId, e.name) : undefined
+              }
+              onTakeClient={
+                e.onReturn ? () => onTakeClient(e.employeeId, e.name) : undefined
               }
             />
           ))}

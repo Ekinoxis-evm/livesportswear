@@ -9,6 +9,7 @@ import {
   ChartColumn,
   Trophy,
   Users,
+  PackagePlus,
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 const LEFT = [
   { href: "/store/checkin", label: "Check-in", icon: UserCheck },
   { href: "/store/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/store/receiving", label: "Receiving", icon: PackagePlus },
 ];
 const RIGHT = [
   { href: "/store/performance", label: "Performance", icon: ChartColumn },
