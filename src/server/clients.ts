@@ -36,7 +36,7 @@ const messageLinkSchema = z.object({
  */
 export async function portalMessageLink(
   input: unknown,
-): Promise<ActionResult<{ url: string }>> {
+): Promise<ActionResult<{ url: string; text: string }>> {
   const parsed = messageLinkSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
 
@@ -101,7 +101,7 @@ export async function portalMessageLink(
       error: "This client's number has no country code — can't open WhatsApp.",
     };
   }
-  return { ok: true, data: { url } };
+  return { ok: true, data: { url, text } };
 }
 
 /** Portal "sync sales" — pull this month's Shopify sales into monthly_sales now. */
