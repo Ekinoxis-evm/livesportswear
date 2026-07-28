@@ -132,11 +132,25 @@ describe("orderFloor — multi-client counters", () => {
     expect(rows.find((r) => r.employeeId === "b")?.state).toBe("up");
   });
 
-  it("counts an open return as attending", () => {
+  it("keeps a return-only member IN the line (non-blocking), flagged onReturn", () => {
     const rows = orderFloor([
       { ...m("a", "2026-06-30T14:00:00Z"), returnCount: 1 },
+      m("b", "2026-06-30T15:00:00Z"),
     ]);
-    expect(rows[0]?.state).toBe("attending");
+    const a = rows.find((r) => r.employeeId === "a");
+    expect(a?.state).toBe("up"); // still in the line, still up-eligible
+    expect(a?.onReturn).toBe(true);
+    expect(rows.find((r) => r.employeeId === "b")?.onReturn).toBe(false);
+  });
+
+  it("a walk-in AND a return together is attending, still onReturn", () => {
+    const rows = orderFloor([
+      { ...m("a", "2026-06-30T14:00:00Z"), attendingCount: 1, returnCount: 1 },
+      m("b", "2026-06-30T15:00:00Z"),
+    ]);
+    const a = rows.find((r) => r.employeeId === "a");
+    expect(a?.state).toBe("attending"); // the walk-in blocks the line
+    expect(a?.onReturn).toBe(true);
   });
 
   it("keeps plain status-based attending working (pre-migration rows)", () => {

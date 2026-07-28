@@ -108,6 +108,7 @@ export default async function StoreSalesPage() {
       sinceLabel: formatInTimeZone(new Date(r.availableSince), tz, "HH:mm"),
       walkins: r.attendingCount ?? 0,
       returns: r.returnCount ?? 0,
+      onReturn: r.onReturn,
       attendingStartedAt: attendingSinceOf.get(r.employeeId) ?? null,
       breakStartedAt: open?.startedAt ?? null,
       // closed breaks only — the open one is clocked live by the timer

@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Coffee,
   MoveRight,
+  Repeat,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -56,6 +57,7 @@ export type SalesRow = {
   sinceLabel: string; // when they (re)joined the line — the FIFO position
   walkins: number; // open walk-in customers
   returns: number; // open returns/exchanges
+  onReturn: boolean; // handling a return — stays in the line, highlighted
   attendingStartedAt: string | null; // oldest open client's take-time (live clock)
   breakStartedAt: string | null; // open break, if any
   breakPriorMinutes: number; // closed breaks earlier today
@@ -83,10 +85,13 @@ function OrderStrip({
             className={cn(
               "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm font-medium",
               i === 0 && "border-primary bg-primary text-primary-foreground",
+              r.onReturn &&
+                "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400",
             )}
           >
             <span className="tabular-nums">{i + 1}</span>
             {firstName(r.name)}
+            {r.onReturn && <Repeat className="size-3" aria-label="on a return" />}
           </span>
         </span>
       ))}
@@ -217,6 +222,11 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
               className="size-14 text-lg"
             />
             <p className="text-4xl font-bold">{up.name}</p>
+            {up.onReturn && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                <Repeat className="size-3.5" /> on a return
+              </span>
+            )}
           </div>
           <Button
             size="lg"
@@ -405,10 +415,14 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 avatarUrl: r.avatarUrl,
                 sinceLabel: r.sinceLabel,
                 turns: r.turns,
+                onReturn: r.onReturn,
               }))}
               pending={pending}
               onReorder={(ids) => run(storeReorderQueue(ids), "Line reordered.")}
               onMakeUpNext={(id, name) => run(storeMakeUpNext(id), `${name} is up next.`)}
+              onFinishReturn={(id, name) =>
+                setFinishTarget({ employeeId: id, name, kind: "return" })
+              }
             />
             {attending.map((r) => (
               <div
