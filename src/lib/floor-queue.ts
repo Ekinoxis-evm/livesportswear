@@ -10,8 +10,9 @@
  *   1. bump ("make up next", latest wins) — an explicit "you're up NOW";
  *   2. manual position (kiosk drag-reorder) — a full-line arrangement.
  * Taking a walk-in clears both for that member, so FIFO fairness resumes
- * naturally. People currently attending are out of the running until every
- * one of their open customers is finished.
+ * naturally. A rep with an open WALK-IN is out of the running for "up" until it
+ * finishes; an open RETURN is NON-BLOCKING — they keep their turn and stay
+ * takeable (flagged `onReturn` for the board's highlight).
  */
 
 export type FloorMember = {
@@ -30,7 +31,11 @@ export type FloorMember = {
 };
 
 type QueueState = "up" | "waiting" | "attending" | "break";
-export type QueueRow = FloorMember & { state: QueueState; turn: number | null };
+export type QueueRow = FloorMember & {
+  state: QueueState;
+  turn: number | null;
+  onReturn: boolean; // has an open return (non-blocking — stays in the line)
+};
 
 function byTurn(a: FloorMember, b: FloorMember): number {
   if (a.bumpedAt || b.bumpedAt) {
@@ -53,30 +58,43 @@ function byTurn(a: FloorMember, b: FloorMember): number {
   );
 }
 
-/** Open customers for a member (counts win; `status` is the legacy signal). */
-function openClients(m: FloorMember): number {
-  const counted = (m.attendingCount ?? 0) + (m.returnCount ?? 0);
-  if (counted > 0) return counted;
-  return m.status === "attending" ? 1 : 0;
+/**
+ * Open WALK-INS decide line membership — a walk-in takes a rep out of the line.
+ * A return is non-blocking (counted separately, `openReturns`). `status` is the
+ * legacy pre-counter signal: a plain attending row with no counts and no return
+ * reads as one open walk-in.
+ */
+function openWalkins(m: FloorMember): number {
+  const w = m.attendingCount ?? 0;
+  if (w > 0) return w;
+  return m.status === "attending" && (m.returnCount ?? 0) === 0 ? 1 : 0;
+}
+function openReturns(m: FloorMember): number {
+  return m.returnCount ?? 0;
 }
 
 /** Ordered present members: the available line (in turn order), attending, then on break. */
 export function orderFloor(members: FloorMember[]): QueueRow[] {
   const present = members.filter((m) => !m.leftAt);
+  // Only an open WALK-IN removes a rep from the line; a return keeps their spot.
   const available = present
-    .filter((m) => openClients(m) === 0 && !m.onBreak)
+    .filter((m) => openWalkins(m) === 0 && !m.onBreak)
     .sort(byTurn);
-  const attending = present.filter((m) => openClients(m) > 0);
+  const attending = present.filter((m) => openWalkins(m) > 0);
   // On break = off the line entirely; ending it restamps availableSince, so
   // they rejoin at the back (handled in storeEndBreak, not here).
-  const onBreak = present.filter((m) => openClients(m) === 0 && m.onBreak);
+  const onBreak = present.filter((m) => openWalkins(m) === 0 && m.onBreak);
 
+  const row = (m: FloorMember, state: QueueState, turn: number | null): QueueRow => ({
+    ...m,
+    state,
+    turn,
+    onReturn: openReturns(m) > 0,
+  });
   const rows: QueueRow[] = [];
-  available.forEach((m, i) =>
-    rows.push({ ...m, state: i === 0 ? "up" : "waiting", turn: i + 1 }),
-  );
-  attending.forEach((m) => rows.push({ ...m, state: "attending", turn: null }));
-  onBreak.forEach((m) => rows.push({ ...m, state: "break", turn: null }));
+  available.forEach((m, i) => rows.push(row(m, i === 0 ? "up" : "waiting", i + 1)));
+  attending.forEach((m) => rows.push(row(m, "attending", null)));
+  onBreak.forEach((m) => rows.push(row(m, "break", null)));
   return rows;
 }
 

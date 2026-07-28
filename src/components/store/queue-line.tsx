@@ -29,6 +29,7 @@ export type LineEntry = {
   avatarUrl: string | null;
   sinceLabel: string; // when they (re)joined the line
   turns: number;
+  onReturn: boolean; // handling a return without leaving the line
 };
 
 function LineRow({
@@ -36,11 +37,13 @@ function LineRow({
   index,
   pending,
   onMakeUpNext,
+  onFinishReturn,
 }: {
   entry: LineEntry;
   index: number;
   pending: boolean;
   onMakeUpNext?: () => void;
+  onFinishReturn?: () => void;
 }) {
   // disabled while an action is in flight — two concurrent reorders would
   // race each other and the last DB write would silently win
@@ -55,6 +58,7 @@ function LineRow({
       className={cn(
         "bg-background flex items-center justify-between gap-2 py-2.5",
         isUp && "bg-primary/5 -mx-2 rounded-lg px-2",
+        entry.onReturn && "ring-1 ring-amber-500/40 bg-amber-500/5 -mx-2 rounded-lg px-2",
         isDragging && "relative z-10 opacity-80",
       )}
     >
@@ -91,6 +95,11 @@ function LineRow({
                 Up next
               </span>
             )}
+            {entry.onReturn && (
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                On a return
+              </span>
+            )}
           </span>
           <span className="text-muted-foreground text-xs tabular-nums">
             {entry.turns} {entry.turns === 1 ? "turn" : "turns"} today · in line
@@ -99,6 +108,17 @@ function LineRow({
         </span>
       </span>
       <div className="flex shrink-0 items-center gap-1">
+        {entry.onReturn && onFinishReturn && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-amber-500/40 text-amber-700 dark:text-amber-400"
+            disabled={pending}
+            onClick={onFinishReturn}
+          >
+            Finish return
+          </Button>
+        )}
         {onMakeUpNext && (
           <Button variant="ghost" size="sm" disabled={pending} onClick={onMakeUpNext}>
             Make up next
@@ -119,11 +139,13 @@ export function QueueLine({
   pending,
   onReorder,
   onMakeUpNext,
+  onFinishReturn,
 }: {
   entries: LineEntry[];
   pending: boolean;
   onReorder: (orderedIds: string[]) => Promise<boolean>;
   onMakeUpNext: (employeeId: string, name: string) => void;
+  onFinishReturn: (employeeId: string, name: string) => void;
 }) {
   // Non-null while a local reorder is awaiting the server.
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
@@ -179,6 +201,9 @@ export function QueueLine({
               index={i}
               pending={pending}
               onMakeUpNext={i > 0 ? () => onMakeUpNext(e.employeeId, e.name) : undefined}
+              onFinishReturn={
+                e.onReturn ? () => onFinishReturn(e.employeeId, e.name) : undefined
+              }
             />
           ))}
         </div>
