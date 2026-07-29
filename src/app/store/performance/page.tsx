@@ -25,8 +25,8 @@ import {
 } from "@/lib/sales-period";
 import { PeriodPills } from "@/components/shared/period-pills";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
-import { GoalIndicator } from "@/components/shared/goal-indicator";
-import { GoalLevelsBar } from "@/components/shared/goal-levels-bar";
+import { GoalMeter } from "@/components/shared/goal-meter";
+import { buildGoalMeter } from "@/lib/goal-meter";
 import { storeGoalLevels } from "@/lib/goal-levels";
 import { goalPace } from "@/lib/goal-pace";
 import {
@@ -237,6 +237,17 @@ export default async function StorePerformancePage({
     storeGoal: monthGoal,
     personalGoalSum: [...personalGoalOf.values()].reduce((a, g) => a + g, 0),
   }).levels;
+  // One meter: the store goal + its commission levels on a single bar.
+  const storeMeter = buildGoalMeter({
+    current: monthTotal,
+    milestones: goalLevels.map((l, i) => ({
+      value: l.storeTarget,
+      label: i === 0 ? "Base" : `Level ${i + 1}`,
+      rate: l.rate,
+    })),
+    goalValue: monthGoal > 0 ? monthGoal : null,
+    paceDays: goalPace(monthGoal, monthTotal, bd, month).daysLeft,
+  });
 
   // Per-rep rows for the active period. Today and custom pull attributed live
   // Shopify sales; the 60s range cache absorbs the kiosk's 45s auto-refresh
@@ -323,8 +334,14 @@ export default async function StorePerformancePage({
             labels={{ month: monthLabel(month) }}
           />
 
-          {mode === "month" && (
-            <div className="flex flex-col gap-1.5">
+          {mode === "month" &&
+            (storeMeter ? (
+              <GoalMeter
+                model={storeMeter}
+                format={(n) => formatMoney(n, currency)}
+                title="Store sales so far"
+              />
+            ) : (
               <div className="flex items-end justify-between gap-3">
                 <span className="flex flex-col">
                   <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
@@ -334,61 +351,9 @@ export default async function StorePerformancePage({
                     {formatMoney(monthTotal, currency)}
                   </span>
                 </span>
-                {monthGoal > 0 ? (
-                  <span className="flex flex-col items-end">
-                    <span className="text-muted-foreground text-[11px] uppercase tracking-wide">
-                      Goal ·{" "}
-                      <span
-                        className={
-                          monthTotal >= monthGoal ? "text-emerald-600" : "text-foreground"
-                        }
-                      >
-                        {Math.round((monthTotal / monthGoal) * 100)}%
-                      </span>
-                    </span>
-                    <span className="text-primary text-3xl font-bold tabular-nums">
-                      {formatMoney(monthGoal, currency)}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground text-sm">no goal set</span>
-                )}
+                <span className="text-muted-foreground text-sm">no goal set</span>
               </div>
-              {monthGoal > 0 && (
-                <div
-                  className="bg-muted h-2.5 w-full overflow-hidden rounded-full"
-                  role="progressbar"
-                  aria-valuenow={Math.min(Math.round((monthTotal / monthGoal) * 100), 100)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label="Store monthly goal progress"
-                >
-                  <div
-                    className={
-                      monthTotal >= monthGoal ? "h-full bg-emerald-500" : "bg-primary h-full"
-                    }
-                    style={{ width: `${Math.min((monthTotal / monthGoal) * 100, 100)}%` }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {mode === "month" && monthGoal > 0 && (
-            <GoalIndicator
-              pace={goalPace(monthGoal, monthTotal, bd, month)}
-              format={(n) => formatMoney(n, currency)}
-            />
-          )}
-
-          {mode === "month" && goalLevels.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-lg border p-3">
-              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-                Team levels — the store target rises with the commission rate
-              </span>
-              <GoalLevelsBar levels={goalLevels} current={monthTotal} currency={currency} />
-            </div>
-          )}
+            ))}
 
           {mode !== "month" &&
             (salesUnavailable ? (

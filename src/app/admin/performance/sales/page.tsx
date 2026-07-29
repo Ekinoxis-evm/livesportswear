@@ -31,7 +31,8 @@ import { PeriodPills } from "@/components/shared/period-pills";
 import { SyncSalesButton } from "@/components/shared/sync-sales-button";
 import { syncMonthlySales } from "@/server/shopify";
 import { SalesRankTable } from "@/components/shared/sales-rank-table";
-import { GoalIndicator } from "@/components/shared/goal-indicator";
+import { GoalMeter } from "@/components/shared/goal-meter";
+import { buildGoalMeter } from "@/lib/goal-meter";
 import { goalPace } from "@/lib/goal-pace";
 import { remainingWorkdays } from "@/lib/scheduling/workdays";
 import type { StatShift } from "@/lib/scheduling/stats";
@@ -303,8 +304,14 @@ export default async function SalesTabPage({
                 {paceRows.map((r) => (
                   <div key={r.name} className="flex flex-col gap-1.5">
                     <span className="text-sm font-medium">{r.name}</span>
-                    <GoalIndicator
-                      pace={r.pace}
+                    <GoalMeter
+                      model={buildGoalMeter({
+                        current: r.pace.sold,
+                        milestones: [],
+                        goalValue: r.pace.goal,
+                        paceDays: r.pace.paceDays,
+                        workBasis: r.pace.workBasis,
+                      })}
                       format={(n) => formatMoney(n, currency)}
                       compact
                     />
