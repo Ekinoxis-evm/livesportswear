@@ -21,11 +21,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Stat, StatGrid } from "@/components/portal/stats";
-import { GoalIndicator } from "@/components/shared/goal-indicator";
-import { TierLadder } from "@/components/shared/tier-ladder";
+import { GoalMeter } from "@/components/shared/goal-meter";
 import { SyncSalesButton } from "@/components/shared/sync-sales-button";
 import { portalSyncSales } from "@/server/clients";
-import { tierGaps } from "@/lib/tier-gaps";
+import { buildGoalMeter } from "@/lib/goal-meter";
 import { goalPace } from "@/lib/goal-pace";
 import { remainingWorkdays } from "@/lib/scheduling/workdays";
 import { RepSalesChart } from "@/components/dashboard/sales-charts";
@@ -205,22 +204,23 @@ export default async function PortalOverviewPage() {
             )}
           </StatGrid>
 
-          <GoalIndicator
-            pace={goalPace(goalAmount, mySales, today, month, workDaysLeft)}
+          <GoalMeter
+            model={buildGoalMeter({
+              current: mySales,
+              milestones: tiers
+                .filter((t) => t.min_sales > 0)
+                .map((t) => ({
+                  value: t.min_sales,
+                  label: `${(t.rate * 100).toFixed((t.rate * 100) % 1 === 0 ? 0 : 1)}%`,
+                  rate: t.rate,
+                })),
+              goalValue: goalAmount > 0 ? goalAmount : null,
+              paceDays: goalPace(goalAmount, mySales, today, month, workDaysLeft).paceDays,
+              workBasis: true,
+            })}
             format={(n) => formatMoney(n, currency)}
+            title="Your sales this month"
           />
-
-          {tiers.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-                Commission tiers — how much more to each
-              </span>
-              <TierLadder
-                gaps={tierGaps(mySales, tiers, { workDaysLeft })}
-                currency={currency}
-              />
-            </div>
-          )}
         </CardContent>
       </Card>
 
