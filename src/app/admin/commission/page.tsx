@@ -2,9 +2,7 @@ import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import { businessDate } from "@/lib/business-date";
 import { primaryTimezone } from "@/lib/business-tz";
-import { asTiers, resolveTiers, type CommissionTier } from "@/lib/commission";
-import { storeGoalLevels } from "@/lib/goal-levels";
-import { monthLabel } from "@/lib/format-date";
+import { asTiers, type CommissionTier } from "@/lib/commission";
 import {
   Card,
   CardContent,
@@ -13,13 +11,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CommissionConfigForm } from "@/components/commission/config-form";
-import { StoreMonthForm, type GoalsByLocation } from "@/components/commission/store-month-form";
 import {
-  EmployeeGoalsForm,
+  MonthlySetup,
+  type GoalsByLocation,
   type EmployeeGoalsByKey,
-} from "@/components/commission/employee-goals-form";
+} from "@/components/commission/monthly-setup";
 import { SyncSalesButton } from "@/components/shared/sync-sales-button";
-import { GoalsOverview } from "@/components/commission/goals-overview";
 import { syncMonthlySales } from "@/server/shopify";
 
 export default async function CommissionPage() {
@@ -73,25 +70,6 @@ export default async function CommissionPage() {
     );
   }
 
-  // Team-levels read-out for the current month (single store → all active reps).
-  const monthKey = `${year}-${monthNum}`;
-  const overview = locations[0]
-    ? (() => {
-        const loc = locations[0];
-        const personalGoals = employees.map(
-          (e) => goalsByEmployee[e.id]?.[monthKey] ?? 0,
-        );
-        const positiveGoals = personalGoals.filter((g) => g > 0);
-        return storeGoalLevels({
-          tiers: resolveTiers(tiersByKey[`${loc.id}-${monthKey}`], globalTiers),
-          activeReps: employees.length,
-          storeGoal: goalsByLocation[loc.id]?.[monthKey] ?? 0,
-          personalGoalSum: personalGoals.reduce((a, g) => a + g, 0),
-          basePersonalGoal: positiveGoals.length ? Math.min(...positiveGoals) : 0,
-        });
-      })()
-    : null;
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3">
@@ -117,59 +95,24 @@ export default async function CommissionPage() {
         <SyncSalesButton action={syncMonthlySales} label="Sync sales now" />
       </div>
 
-      {overview && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Goals &amp; commission — team levels</CardTitle>
-            <CardDescription>
-              Each commission tier is a per-rep target; × the team it&apos;s a store
-              level. Line the store goal + personal goals up with the first level.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <GoalsOverview
-              data={overview}
-              currency={currency}
-              monthLabel={monthLabel(`${year}-${String(monthNum).padStart(2, "0")}`)}
-            />
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Store setup — goal &amp; commission</CardTitle>
+          <CardTitle className="text-base">This month — goals &amp; commission</CardTitle>
           <CardDescription>
-            Pick a store and month, then set that month&apos;s sales goal and its
-            commission tiers together. Tiers fall back to the global default below.
+            Set the month&apos;s commission tiers, each rep&apos;s personal goal and the store
+            goal together. The personal goal is the first tier that unlocks more commission; the
+            store goal is the sum of the personal goals — the Apply buttons line them up.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <StoreMonthForm
+          <MonthlySetup
             locations={locations}
+            employees={employees.map((e) => ({ id: e.id, name: e.name }))}
             year={year}
             month={monthNum}
             goalsByLocation={goalsByLocation}
             tiersByKey={tiersByKey}
             globalTiers={globalTiers}
-            currency={currency}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Personal goals</CardTitle>
-          <CardDescription>
-            Each rep&apos;s monthly sales target. Contests can gate prizes on
-            &ldquo;beat their monthly personal goal&rdquo;.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <EmployeeGoalsForm
-            employees={employees.map((e) => ({ id: e.id, name: e.name }))}
-            year={year}
-            month={monthNum}
             goalsByEmployee={goalsByEmployee}
             currency={currency}
           />
