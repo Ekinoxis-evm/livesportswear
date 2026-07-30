@@ -44,11 +44,18 @@
   (`src/components/portal/stats.tsx`) instead of `SalesRankTable` — one person
   has no ranking to show. `DayBars` (`components/portal/day-bars.tsx`) is a
   CSS-only per-day chart, no recharts, used for periods up to ~62 days.
-- **Goal progress**: `GoalIndicator` (`src/components/shared/goal-indicator.tsx`)
-  is the shared monthly-goal visual — a **fill-card** where the goal colour fills
-  the card left→right to the percent, with the "left to reach" + per-day-pace
-  figures on top (reached turns emerald). Used on portal · kiosk · admin; math is
-  pure in `src/lib/goal-pace.ts` (`goalPace`). It replaced the old `GoalBar`.
+- **Goal progress**: `GoalMeter` (`src/components/shared/goal-meter.tsx`) is the
+  ONE shared monthly-goal visual — a single bar `0 → top level`: the fill turns
+  **emerald** once the goal is reached, a tick marks each commission level (+ the
+  set goal), and the always-on view is just the current figure, the % and the bar.
+  The **"$X more · $Y/day → next level (rate)"** detail + the level list appear on
+  **tap (kiosk — no cursor) or hover (desktop)**. A `compact` prop gives the slim
+  bar for dense admin rows. The render model is pure in `src/lib/goal-meter.ts`
+  (`buildGoalMeter`), reusing `goalPace` (day/workday basis), `storeGoalLevels`
+  (store levels) and the commission tiers (per-rep). It replaced the old stacked
+  `GoalIndicator` fill-card + `GoalLevelsBar` + `TierLadder` (all deleted). Used on
+  kiosk Performance (store levels), portal (per-rep tiers) and admin
+  Performance→Sales (compact).
 - **A shift on a schedule**: `ShiftChip` (`src/components/schedule/shift-chip.tsx`)
   — name + time on a **light tint of the employee's profile colour**, not a dot.
   The tint helper is `shiftTint` in `src/lib/shift-color.ts` (a `color-mix`, works
