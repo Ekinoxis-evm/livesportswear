@@ -71,7 +71,7 @@ export default async function InventoryPage() {
             <strong>push</strong> the corrections to Shopify. Start below.
           </p>
         </div>
-        <InventoryFunnel current="count" />
+        <InventoryFunnel current="count" locationId={locs[0]?.id} />
       </div>
 
       {/* The mental model that was missing: these two jobs do opposite things,

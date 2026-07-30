@@ -55,11 +55,13 @@ export const NAV_ITEMS: NavEntry[] = [
     icon: ScanBarcode,
     href: "/admin/products",
     primary: true,
+    // Book + Push aren't listed here — they're steps of the inventory flow,
+    // reached by the in-page Count ▸ Book ▸ Push tabs, not the sidebar. The
+    // "/admin/inventory" prefix keeps the group + Inventory item highlighted
+    // across /book, /push and /[id].
     children: [
       { href: "/admin/products", label: "Catalog" },
-      { href: "/admin/inventory", label: "Counting" },
-      { href: "/admin/inventory/book", label: "Inventory book" },
-      { href: "/admin/inventory/push", label: "Push to Shopify" },
+      { href: "/admin/inventory", label: "Inventory" },
     ],
   },
   { href: "/admin/locations", label: "Locations", icon: MapPin, primary: false },
