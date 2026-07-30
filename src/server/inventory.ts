@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/auth";
 import { isShopifyConfigured } from "@/lib/shopify-config";
 import {
@@ -354,20 +355,44 @@ export async function finalizeCount(countId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Delete/cancel an in-progress process — a count OR a receiving session at any
+ * stage before it's finished (open · counting · ready). A finalized/received
+ * record stays immutable (the book was built from it). Items cascade (FK).
+ */
 export async function deleteCount(countId: string): Promise<ActionResult> {
   await requireAdmin();
   if (!z.string().uuid().safeParse(countId).success) {
-    return { ok: false, error: "Invalid count." };
+    return { ok: false, error: "Invalid session." };
   }
   const supabase = await createServerClient();
-  // Open counts only — a finalized count is an immutable record.
+  const { data: row } = await supabase
+    .from("inventory_counts")
+    .select("status, document_path")
+    .eq("id", countId)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "Session not found." };
+  if (row.status === "final") {
+    return { ok: false, error: "A finished record can't be deleted." };
+  }
+
   const { error, count } = await supabase
     .from("inventory_counts")
     .delete({ count: "exact" })
     .eq("id", countId)
-    .eq("status", "open");
+    .neq("status", "final");
   if (error) return { ok: false, error: dbError(error) };
-  if (!count) return { ok: false, error: "Only open counts can be deleted." };
+  if (!count) return { ok: false, error: "A finished record can't be deleted." };
+
+  // Best-effort: drop the uploaded arrival doc so it isn't left orphaned.
+  if (row.document_path) {
+    try {
+      await createServiceClient().storage.from("receiving-docs").remove([row.document_path]);
+    } catch {
+      /* non-fatal — the count is gone; a stray private file is harmless */
+    }
+  }
   revalidatePath("/admin/inventory");
+  revalidatePath("/store/receiving");
   return { ok: true };
 }

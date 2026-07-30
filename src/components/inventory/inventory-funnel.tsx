@@ -35,13 +35,15 @@ export function InventoryFunnel({
       {STEPS.map((s, i) => {
         const state = i < idx ? "done" : i === idx ? "current" : "todo";
         const href = hrefFor(s.key);
+        const navigable = href != null && state !== "current";
         const chip = (
           <span
             className={cn(
-              "flex items-center gap-1.5 rounded-full border px-3 py-1 font-medium",
+              "flex items-center gap-1.5 rounded-full border px-3 py-1 font-medium transition-colors",
               state === "current" && "border-primary bg-primary text-primary-foreground",
               state === "done" && "text-muted-foreground",
-              state === "todo" && "text-muted-foreground/60",
+              state === "todo" && "text-muted-foreground/70",
+              navigable && "hover:bg-muted hover:text-foreground",
             )}
           >
             {state === "done" ? (
@@ -55,8 +57,8 @@ export function InventoryFunnel({
         return (
           <span key={s.key} className="flex items-center gap-2">
             {i > 0 && <span className="text-muted-foreground/40" aria-hidden>→</span>}
-            {href && state !== "current" ? (
-              <Link href={href} className="hover:opacity-80">
+            {navigable ? (
+              <Link href={href} aria-label={`Go to ${s.label}`}>
                 {chip}
               </Link>
             ) : (

@@ -17,6 +17,7 @@ import {
   VarianceReportTable,
 } from "@/components/inventory/count-report-tables";
 import { CountScreen } from "@/components/inventory/count-screen";
+import { DeleteSessionButton } from "@/components/inventory/delete-session-button";
 import {
   ReceiveScreen,
   type ReceiveItem,
@@ -79,7 +80,18 @@ export default async function InventoryCountPage({
       {count.status === "final" ? (
         <Badge variant="secondary">{isRestock ? "received" : "final"}</Badge>
       ) : (
-        <Badge>{isRestock ? "receiving" : "counting"}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge>
+            {count.status === "counting"
+              ? "counting"
+              : count.status === "ready"
+                ? "ready to push"
+                : isRestock
+                  ? "receiving"
+                  : "counting"}
+          </Badge>
+          <DeleteSessionButton countId={count.id} restock={isRestock} />
+        </div>
       )}
     </div>
   );
