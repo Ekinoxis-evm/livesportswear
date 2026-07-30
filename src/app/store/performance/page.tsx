@@ -338,7 +338,7 @@ export default async function StorePerformancePage({
             (storeMeter ? (
               <GoalMeter
                 model={storeMeter}
-                format={(n) => formatMoney(n, currency)}
+                currency={currency}
                 title="Store sales so far"
               />
             ) : (

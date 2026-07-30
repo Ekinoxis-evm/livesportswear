@@ -9,7 +9,6 @@ import { customRangeInTz } from "@/lib/shopify-range";
 import { getStaffSalesCached, getShopSalesCached } from "@/lib/shopify-range-cache";
 import { repMonthlyData } from "@/lib/monthly-series";
 import { shortDate } from "@/lib/format-date";
-import { formatMoney } from "@/lib/commission";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -312,7 +311,7 @@ export default async function SalesTabPage({
                         paceDays: r.pace.paceDays,
                         workBasis: r.pace.workBasis,
                       })}
-                      format={(n) => formatMoney(n, currency)}
+                      currency={currency}
                       compact
                     />
                   </div>
