@@ -218,7 +218,7 @@ export default async function PortalOverviewPage() {
               paceDays: goalPace(goalAmount, mySales, today, month, workDaysLeft).paceDays,
               workBasis: true,
             })}
-            format={(n) => formatMoney(n, currency)}
+            currency={currency}
             title="Your sales this month"
           />
         </CardContent>

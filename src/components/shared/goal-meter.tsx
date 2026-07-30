@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/commission";
 import type { GoalMeterModel } from "@/lib/goal-meter";
 
 /**
@@ -15,13 +16,15 @@ import type { GoalMeterModel } from "@/lib/goal-meter";
  */
 export function GoalMeter({
   model,
-  format,
+  currency,
   title,
   compact = false,
   className,
 }: {
   model: GoalMeterModel | null;
-  format: (n: number) => string;
+  /** A string, not a formatter — GoalMeter is a client component, so a function
+      prop can't cross the server→client boundary. Format is done here. */
+  currency: string;
   title?: string;
   /** Slim bar + % only (for dense admin rows). */
   compact?: boolean;
@@ -30,6 +33,8 @@ export function GoalMeter({
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
   if (!model) return null;
+
+  const format = (n: number) => formatMoney(n, currency);
 
   const open = pinned || hovered;
   const pctLabel = Math.round(Math.min(Math.max(model.pct, 0), 1) * 100);
