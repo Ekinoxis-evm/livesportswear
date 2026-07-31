@@ -47,15 +47,17 @@
 - **Goal progress**: `GoalMeter` (`src/components/shared/goal-meter.tsx`) is the
   ONE shared monthly-goal visual — a single bar `0 → top level`: the fill turns
   **emerald** once the goal is reached, a tick marks each commission level (+ the
-  set goal), and the always-on view is just the current figure, the % and the bar.
-  The **"$X more · $Y/day → next level (rate)"** detail + the level list appear on
-  **tap (kiosk — no cursor) or hover (desktop)**. A `compact` prop gives the slim
-  bar for dense admin rows. The render model is pure in `src/lib/goal-meter.ts`
-  (`buildGoalMeter`), reusing `goalPace` (day/workday basis), `storeGoalLevels`
-  (store levels) and the commission tiers (per-rep). It replaced the old stacked
-  `GoalIndicator` fill-card + `GoalLevelsBar` + `TierLadder` (all deleted). Used on
-  kiosk Performance (store levels), portal (per-rep tiers) and admin
-  Performance→Sales (compact).
+  set goal). **Everything is always on** (no tap/hover — so it's a plain
+  server-renderable component, not `"use client"`): the current figure + %, then a
+  **"$X more · $Y/day → next level (rate)"** line, then the tiers as tidy rows
+  (reached ✓ green, the next highlighted with →, each with its target + rate). A
+  `compact` prop gives a slim bar + one-line to-go summary for dense admin rows.
+  The render model is pure in `src/lib/goal-meter.ts` (`buildGoalMeter`), reusing
+  `goalPace` (day/workday basis), `storeGoalLevels` (store levels) and the
+  commission tiers (per-rep). It replaced the old stacked `GoalIndicator`
+  fill-card + `GoalLevelsBar` + `TierLadder` (all deleted). Used on kiosk
+  Performance (store levels), portal (per-rep tiers) and admin Performance→Sales
+  (compact).
 - **A shift on a schedule**: `ShiftChip` (`src/components/schedule/shift-chip.tsx`)
   — name + time on a **light tint of the employee's profile colour**, not a dot.
   The tint helper is `shiftTint` in `src/lib/shift-color.ts` (a `color-mix`, works
