@@ -63,10 +63,12 @@ export async function buildDayReportXlsx(d: DayReportXlsxInput): Promise<Buffer>
     row.getCell(2).numFmt = MONEY;
   };
   const t = d.totals;
-  money("Net sales", t.netSales);
   money("Gross sales", t.grossSales);
   money("Discounts", t.discounts);
-  money("Returns value", t.returnsValue);
+  money("Returns", t.returnsValue);
+  money("Net sales", t.netSales);
+  money("Taxes", t.taxes);
+  money("Total sales", t.totalSales);
   s.addRow(["Orders", t.orders ?? 0]);
   money("Cash received", t.cashNet);
   money("Card received", t.cardNet);

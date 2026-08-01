@@ -41,6 +41,8 @@ export type DayReportEmailProps = {
   grossSales?: string | null;
   discounts?: string | null; // pre-formatted with the leading minus
   returnsValue?: string | null; // pre-formatted with the leading minus
+  taxes?: string | null; // pre-formatted with the leading plus
+  totalSales?: string | null; // formatted net + taxes (Shopify "Total sales" — the register)
   shopifyOrders?: number | null;
   cashReceived?: string | null;
   cardReceived?: string | null;
@@ -134,6 +136,8 @@ export function DayReportEmail({
   grossSales,
   discounts,
   returnsValue,
+  taxes,
+  totalSales,
   shopifyOrders,
   cashReceived,
   cardReceived,
@@ -210,7 +214,7 @@ export function DayReportEmail({
           {shopifySales != null ? (
             <Section style={{ margin: "16px 0 0" }}>
               {grossSales != null && (
-                <MetricRow label="Sales value" value={grossSales} />
+                <MetricRow label="Gross sales" value={grossSales} />
               )}
               {discounts != null && (
                 <MetricRow label="Discounts" value={discounts} />
@@ -219,7 +223,10 @@ export function DayReportEmail({
                 <MetricRow label="Returns" value={returnsValue} />
               )}
               <Hr style={{ borderColor: border, margin: "8px 0" }} />
-              <MetricRow label="Net sales" value={shopifySales} emphasized />
+              <MetricRow label="Net sales" value={shopifySales} />
+              {taxes != null && <MetricRow label="Taxes" value={taxes} />}
+              <Hr style={{ borderColor: border, margin: "8px 0" }} />
+              <MetricRow label="Total sales" value={totalSales ?? shopifySales} emphasized />
               {shopifyOrders != null && (
                 <MetricRow label="Orders" value={String(shopifyOrders)} />
               )}

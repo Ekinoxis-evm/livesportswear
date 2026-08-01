@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildWeekChart, type DayInput, type StaffMeta } from "@/lib/week-sales-chart";
 
-const bd = (net: number) => ({ gross: net, discounts: 0, returns: 0, net });
+const bd = (net: number) => ({ gross: net, discounts: 0, returns: 0, net, taxes: 0, total: net });
 const meta = new Map<string, StaffMeta>([
   ["1", { name: "Ana", color: "#f00" }],
   ["2", { name: "Ben", color: "#00f" }],

@@ -114,7 +114,7 @@ export default async function StorePerformancePage({
     service
       .from("monthly_sales")
       .select(
-        "employee_id, amount, gross_amount, discounts_amount, returns_amount, employees!inner(location_id)",
+        "employee_id, amount, gross_amount, discounts_amount, returns_amount, tax_amount, employees!inner(location_id)",
       )
       .eq("month", month)
       .eq("employees.location_id", locationId),

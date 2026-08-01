@@ -12,6 +12,8 @@ const b = (net: number): SalesBreakdown => ({
   discounts: 0,
   returns: 0,
   net,
+  taxes: 0,
+  total: net,
 });
 
 describe("resolveSalesPeriod", () => {
@@ -78,7 +80,7 @@ describe("monthRows", () => {
   it("shapes breakdowns, nulls pre-decomposition months, and computes goal pct", () => {
     const rows = monthRows(
       [
-        { employee_id: "a", amount: 500, gross_amount: 600, discounts_amount: 100 },
+        { employee_id: "a", amount: 500, gross_amount: 600, discounts_amount: 100, tax_amount: 40 },
         { employee_id: "b", amount: 300, gross_amount: null },
       ],
       [
@@ -89,7 +91,7 @@ describe("monthRows", () => {
       { goals: new Map([["a", 1000]]) },
     );
     expect(rows.map((r) => r.name)).toEqual(["Ana", "Bea"]); // Cero filtered
-    expect(rows[0].breakdown).toEqual({ gross: 600, discounts: 100, returns: 0, net: 500 });
+    expect(rows[0].breakdown).toEqual({ gross: 600, discounts: 100, returns: 0, net: 500, taxes: 40, total: 540 });
     expect(rows[0].goalPct).toBe(0.5);
     expect(rows[1].breakdown).toBeNull();
   });

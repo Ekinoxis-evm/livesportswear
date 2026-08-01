@@ -163,7 +163,7 @@ export default async function DashboardPage({
   const [salesRes, goalsRes, employeesRes, eventsRes, adsRes, cfgRes, yearSalesRes, yearGoalsRes] = await Promise.all([
     supabase
       .from("monthly_sales")
-      .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
+      .select("employee_id, amount, gross_amount, discounts_amount, returns_amount, tax_amount")
       .eq("month", month),
     supabase
       .from("store_goals")
@@ -233,6 +233,7 @@ export default async function DashboardPage({
     .map((e) => {
       const row = salesRowBy.get(e.id);
       const amount = Number(row?.amount ?? 0);
+      const taxes = Number(row?.tax_amount ?? 0);
       const breakdown: SalesBreakdown | null =
         row?.gross_amount != null
           ? {
@@ -240,6 +241,8 @@ export default async function DashboardPage({
               discounts: Number(row.discounts_amount ?? 0),
               returns: Number(row.returns_amount ?? 0),
               net: amount,
+              taxes,
+              total: amount + taxes,
             }
           : null;
       const tiers = monthTiersByLoc[e.location_id] ?? globalTiers;
@@ -346,7 +349,7 @@ export default async function DashboardPage({
     }
   }
   const avgTicket =
-    shopMonth && shopMonth.orders > 0 ? shopMonth.total / shopMonth.orders : null;
+    shopMonth && shopMonth.orders > 0 ? shopMonth.net / shopMonth.orders : null;
 
   return (
     <div className="flex flex-col gap-6">

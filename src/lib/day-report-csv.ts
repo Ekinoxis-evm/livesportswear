@@ -56,6 +56,8 @@ export type DayReportTotals = {
   grossSales: number | null;
   discounts: number | null;
   returnsValue: number | null; // merchandise value refunded off orders
+  taxes: number | null;
+  totalSales: number | null; // net + taxes (Shopify "Total sales")
   orders: number | null;
   cashNet: number | null;
   cardNet: number | null;

@@ -438,14 +438,30 @@ against it.
 - RLS: admin-all via `admin_can_access_location(employee_location(employee_id))`;
   employees read their own rows.
 
-### `monthly_sales` (added 0004; breakdown columns 0031)
+### `monthly_sales` (added 0004; breakdown columns 0031, 0059)
 One row per (employee, month): the rep's attributed NET sales, synced from
 Shopify (`runShopifySync` — cron + admin button) or entered manually.
 - `employee_id uuid fk -> employees`, `month text 'YYYY-MM'`, unique together
 - `amount numeric(14,2)` — NET sales (THE metric; commission + contests read this)
 - `gross_amount`, `discounts_amount`, `returns_amount numeric(14,2)` (0031,
   nullable) — the decomposition; null on months synced before 0031 until re-synced
+- `tax_amount numeric(14,2)` (0059, nullable) — the month's tax total, so the
+  Month/all-time views show Shopify's **Taxes** and **Total sales**
+  (Total = `amount + tax_amount`); null on months synced before 0059 (Total
+  falls back to Net there) until re-synced. `amount` stays NET; this is reporting.
 - `source text ('manual'|'shopify')`
+
+> **Shopify-exact sales breakdown (`src/lib/sales-breakdown.ts`).** Every sales
+> figure is Shopify's own order money, verified to the penny against Shopify
+> Analytics: **Gross sales** (`total_line_items_price`) − **Discounts**
+> (`total_discounts`) − **Returns** (`subtotal_price − current_subtotal_price`) =
+> **Net sales** (`current_subtotal_price`); **+ Taxes** (`total_tax`) = **Total
+> sales** (net + taxes; shipping ~0 for this POS-pickup store). Those exact labels
+> are used everywhere (`SalesBreakdownBlock`, `SalesRankTable`, day report/XLSX/PDF).
+> Net stays THE metric for goals/commission/contests; Total is the register figure.
+> Caveat: returns are dated to the ORDER date (we bucket by `created_at`), not the
+> refund date as Shopify Analytics does — so bounded periods with cross-boundary
+> refunds can differ slightly (small in practice).
 
 ### `inventory_counts` + `inventory_count_items` (added 0032)
 Physical inventory counts, admin-only (`/admin/inventory`): scan barcodes on

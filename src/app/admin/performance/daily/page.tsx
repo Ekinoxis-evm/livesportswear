@@ -178,6 +178,8 @@ export default async function PerformancePage({
   // otherwise a live read (today, or a day closed before Shopify connected).
   let shopifySales: number | null =
     closeRow?.shopify_sales != null ? Number(closeRow.shopify_sales) : null;
+  // The close-day snapshot predates tax capture, so Taxes = 0 / Total = Net for a
+  // closed day; a live (un-closed) day gets taxes from the live read below.
   let breakdown: SalesBreakdown | null =
     closeRow?.gross_sales != null && closeRow?.shopify_sales != null
       ? {
@@ -185,6 +187,8 @@ export default async function PerformancePage({
           discounts: Number(closeRow.discounts ?? 0),
           returns: Number(closeRow.returns_value ?? 0),
           net: Number(closeRow.shopify_sales),
+          taxes: 0,
+          total: Number(closeRow.shopify_sales),
         }
       : null;
   const cashSales: number | null =

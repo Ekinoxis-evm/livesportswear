@@ -141,7 +141,7 @@ export default async function SalesTabPage({
       await Promise.all([
         supabase
           .from("monthly_sales")
-          .select("employee_id, amount, gross_amount, discounts_amount, returns_amount")
+          .select("employee_id, amount, gross_amount, discounts_amount, returns_amount, tax_amount")
           .eq("month", monthStr),
         supabase
           .from("employee_goals")
