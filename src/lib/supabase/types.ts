@@ -846,6 +846,7 @@ export type Database = {
           month: string
           returns_amount: number | null
           source: string
+          tax_amount: number | null
           updated_at: string
         }
         Insert: {
@@ -858,6 +859,7 @@ export type Database = {
           month: string
           returns_amount?: number | null
           source?: string
+          tax_amount?: number | null
           updated_at?: string
         }
         Update: {
@@ -870,6 +872,7 @@ export type Database = {
           month?: string
           returns_amount?: number | null
           source?: string
+          tax_amount?: number | null
           updated_at?: string
         }
         Relationships: [

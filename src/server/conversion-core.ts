@@ -68,6 +68,8 @@ export type CloseDayDraft = {
   grossSales: string | null;
   discounts: string | null;
   returnsValue: string | null;
+  taxes: string | null; // formatted with leading plus
+  totalSales: string | null; // formatted net + taxes (Shopify "Total sales")
   shopifyOrders: number | null;
   cashReceived: string | null;
   refunds: string | null; // "-$41.73 · 1" when any
@@ -281,6 +283,8 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     grossSales: shopify?.gross ?? null,
     discounts: shopify?.discounts ?? null,
     returnsValue: shopify?.returns ?? null,
+    taxes: shopify?.taxes ?? null,
+    totalSales: shopify?.total ?? null,
     orders: shopify?.orders ?? null,
     cashNet: tenders?.cashNet ?? null,
     cardNet: tenders?.cardNet ?? null,
@@ -405,6 +409,11 @@ export async function reportDraftFor(
         d.shopify != null && d.shopify.returns > 0
           ? `−${formatMoney(d.shopify.returns, d.currency)}`
           : null,
+      taxes:
+        d.shopify != null && d.shopify.taxes > 0
+          ? `+${formatMoney(d.shopify.taxes, d.currency)}`
+          : null,
+      totalSales: d.shopify != null ? formatMoney(d.shopify.total, d.currency) : null,
       shopifyOrders: d.shopify?.orders ?? null,
       cashReceived: d.tenders != null ? formatMoney(d.tenders.cashNet, d.currency) : null,
       refunds:

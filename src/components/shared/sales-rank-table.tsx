@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import type { SalesRankRow } from "@/lib/sales-period";
 
 /**
- * The standardized ranked employee-sales table: # · Employee (· Store) ·
- * Value · Discounts · Returns · Net, plus the optional per-surface column
- * groups (Goal %, Share %, or the monthly commission trio).
+ * The standardized ranked employee-sales table with Shopify's exact labels:
+ * # · Employee (· Store) · Gross · Discounts · Returns · Net sales · Taxes ·
+ * Total, plus the optional per-surface column groups (Goal %, Share %, or the
+ * monthly commission trio). Net stays the ranking key + the metric.
  */
 export function SalesRankTable({
   rows,
@@ -42,6 +43,8 @@ export function SalesRankTable({
     discounts: (r) => r.breakdown?.discounts ?? null,
     returns: (r) => r.breakdown?.returns ?? null,
     net: (r) => r.net,
+    taxes: (r) => r.breakdown?.taxes ?? null,
+    total: (r) => r.breakdown?.total ?? r.net,
     goal: (r) => r.goalPct,
     share: (r) => r.sharePct,
     rate: (r) => r.rate,
@@ -67,10 +70,12 @@ export function SalesRankTable({
             {H("rank", "#", "py-2 font-medium")}
             {H("name", "Employee", "py-2 font-medium")}
             {showStore && H("store", "Store", "py-2 font-medium")}
-            {H("value", "Value", th)}
-            {H("discounts", "Discounts", th)}
-            {H("returns", "Returns", th)}
-            {H("net", "Net", th)}
+            {H("value", "Gross", `${th} hidden sm:table-cell`)}
+            {H("discounts", "Discounts", `${th} hidden md:table-cell`)}
+            {H("returns", "Returns", `${th} hidden md:table-cell`)}
+            {H("net", "Net sales", th)}
+            {H("taxes", "Taxes", `${th} hidden lg:table-cell`)}
+            {H("total", "Total", th)}
             {showGoal && H("goal", "Goal", th)}
             {showShare && H("share", "Share", th)}
             {showCommission && (
@@ -90,21 +95,27 @@ export function SalesRankTable({
               {showStore && (
                 <td className="text-muted-foreground py-2">{r.store ?? "—"}</td>
               )}
-              <td className="text-muted-foreground py-2 text-right tabular-nums">
+              <td className="text-muted-foreground hidden py-2 text-right tabular-nums sm:table-cell">
                 {r.breakdown ? money(r.breakdown.gross) : "—"}
               </td>
-              <td className="text-muted-foreground py-2 text-right tabular-nums">
+              <td className="text-muted-foreground hidden py-2 text-right tabular-nums md:table-cell">
                 {r.breakdown && r.breakdown.discounts > 0
                   ? `−${money(r.breakdown.discounts)}`
                   : "—"}
               </td>
-              <td className="text-muted-foreground py-2 text-right tabular-nums">
+              <td className="text-muted-foreground hidden py-2 text-right tabular-nums md:table-cell">
                 {r.breakdown && r.breakdown.returns > 0
                   ? `−${money(r.breakdown.returns)}`
                   : "—"}
               </td>
               <td className="py-2 text-right font-semibold tabular-nums">
                 {money(r.net)}
+              </td>
+              <td className="text-muted-foreground hidden py-2 text-right tabular-nums lg:table-cell">
+                {r.breakdown && r.breakdown.taxes > 0 ? `+${money(r.breakdown.taxes)}` : "—"}
+              </td>
+              <td className="py-2 text-right font-semibold tabular-nums">
+                {money(r.breakdown?.total ?? r.net)}
               </td>
               {showGoal && (
                 <td

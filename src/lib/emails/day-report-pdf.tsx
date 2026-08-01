@@ -105,7 +105,7 @@ export function DayReportPdf({
         </View>
 
         <View style={s.moneyRow}>
-          <Money label="Sales value" value={money(totals.grossSales)} />
+          <Money label="Gross sales" value={money(totals.grossSales)} />
           <Money
             label="Discounts"
             value={totals.discounts ? `−${money(totals.discounts)}` : money(totals.discounts)}
@@ -117,6 +117,11 @@ export function DayReportPdf({
             }
           />
           <Money label="Net sales" value={money(totals.netSales)} />
+          <Money
+            label="Taxes"
+            value={totals.taxes ? `+${money(totals.taxes)}` : money(totals.taxes)}
+          />
+          <Money label="Total sales" value={money(totals.totalSales)} />
         </View>
         <View style={s.moneyRow}>
           <Money label="Cash received" value={money(totals.cashNet)} />

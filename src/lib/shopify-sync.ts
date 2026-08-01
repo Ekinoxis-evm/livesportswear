@@ -76,6 +76,7 @@ export async function runShopifySync(month: string): Promise<SyncResult> {
           gross_amount: sales.gross,
           discounts_amount: sales.discounts,
           returns_amount: sales.returns,
+          tax_amount: sales.taxes,
           source: "shopify",
         },
         { onConflict: "employee_id,month" },

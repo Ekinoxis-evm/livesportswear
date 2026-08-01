@@ -12,6 +12,8 @@ const input: DayReportXlsxInput = {
     grossSales: 120,
     discounts: 20,
     returnsValue: 0,
+    taxes: 7,
+    totalSales: 107,
     orders: 3,
     cashNet: 50,
     cardNet: 50,

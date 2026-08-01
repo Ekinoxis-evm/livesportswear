@@ -94,6 +94,7 @@ export function monthRows(
     gross_amount?: number | string | null;
     discounts_amount?: number | string | null;
     returns_amount?: number | string | null;
+    tax_amount?: number | string | null;
   }[],
   employees: { id: string; name: string; store?: string }[],
   opts: { goals?: Map<string, number>; keepZeros?: boolean } = {},
@@ -103,6 +104,8 @@ export function monthRows(
     .map((e) => {
       const row = rowBy.get(e.id);
       const net = Number(row?.amount ?? 0);
+      // Months synced before 0059 have no tax_amount → Total falls back to Net.
+      const taxes = Number(row?.tax_amount ?? 0);
       const breakdown: SalesBreakdown | null =
         row?.gross_amount != null
           ? {
@@ -110,6 +113,8 @@ export function monthRows(
               discounts: Number(row.discounts_amount ?? 0),
               returns: Number(row.returns_amount ?? 0),
               net,
+              taxes,
+              total: net + taxes,
             }
           : null;
       const goal = opts.goals?.get(e.id) ?? null;

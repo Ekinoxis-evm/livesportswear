@@ -85,15 +85,16 @@ type RestOrder = {
   total_line_items_price: string;
   total_discounts: string;
   subtotal_price: string;
+  total_tax: string;
 };
 
 // current_subtotal_price = NET sales: after discounts and refunds, excluding
 // taxes and shipping — the metric every sales number in the app uses. The
-// extra money fields decompose it: gross − discounts − returns = net
-// (see lib/sales-breakdown.ts).
+// extra money fields decompose it Shopify-style: gross − discounts − returns =
+// net; net + taxes = total sales (see lib/sales-breakdown.ts).
 const ORDER_FIELDS =
   "id,user_id,cancelled_at,test,current_subtotal_price," +
-  "total_line_items_price,total_discounts,subtotal_price";
+  "total_line_items_price,total_discounts,subtotal_price,total_tax";
 
 export type StaffSales = {
   /** staff user_id (numeric string) → summed sales breakdown (net = the metric) */
@@ -196,8 +197,6 @@ export async function fetchStaffSalesByDay(
 }
 
 export type DaySales = SalesBreakdown & {
-  /** kept as an alias of `net` — the number older consumers read */
-  total: number;
   currency: string | null;
   orders: number;
 };
@@ -234,7 +233,7 @@ export async function fetchDaySales(
       : null;
   }
   const b = roundBreakdown(sum);
-  return { ...b, total: b.net, currency, orders };
+  return { ...b, currency, orders };
 }
 
 export type DayOrder = {
