@@ -389,6 +389,19 @@ a *temporary* credential; see security.md.
 - RLS: enabled with **no policies** (default deny) — read/written only by
   admin-gated server code via the service client.
 
+### `admin_credentials` (added 0060)
+The admin equivalent of `employee_credentials` — admins have no `employees` row
+(auth user only), so their generated temp password had nowhere to live and was
+lost after the one-time dialog. Keyed on the auth user id so a **master** admin
+can re-copy or reset an admin's password from Settings (`src/server/admins.ts`
+`inviteAdmin`/`resetAdminPassword`; shown in `admins-panel.tsx`). Deliberate
+plaintext for a *temporary* handover credential; see security.md.
+- `admin_user_id uuid pk fk -> auth.users (on delete cascade)`
+- `temp_password text not null`, `set_by uuid` (master admin), `set_at`
+- RLS: enabled with **no policies** (default deny) — read/written only by the
+  master-gated server actions via the service client. The FK cascade means
+  deleting the auth user (`removeAdmin`) drops the stored password too.
+
 ### `floor_breaks` (added 0025)
 An on-floor employee steps off the line without checking out. Tracked only —
 worked hours stay checkout − checkin; the 30-min daily budget is flagged

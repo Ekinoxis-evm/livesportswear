@@ -177,7 +177,17 @@
   `employee_credentials` (default-deny RLS, service-role only) and shown on the
   admin employee page until the employee changes it — `changeOwnPassword`
   (portal) or the reset-password page deletes the row. Only the *temporary*
-  password is ever stored; a self-chosen password never is.
+  password is ever stored; a self-chosen password never is. **Admins get the same
+  via `admin_credentials` (0060)** — keyed on the auth user id (admins have no
+  `employees` row), so a master admin can re-copy or **reset** an admin's password
+  from Settings (`inviteAdmin`/`resetAdminPassword` in `src/server/admins.ts`, both
+  `requireMasterAdmin`). Same default-deny/service-role posture.
+- **Creating master admins (0060).** `inviteAdmin` now takes a `master` flag: a
+  master gets `app_metadata.admin_scope="master"` (explicit — a missing scope
+  reads as master, but we always set it) and **no** `admin_locations` rows (all
+  stores); a scoped admin keeps `"location"` + its rows. Master-only
+  (`requireMasterAdmin`), so only a master can mint another master — the one way
+  to create masters from the UI (previously out-of-band only).
 - **Credential email delivery caveat:** Resend on the default
   `onboarding@resend.dev` sender only delivers to the Resend account owner.
   Verify the company domain in Resend and point `SENDER_EMAIL_ADDRESS` at it for
