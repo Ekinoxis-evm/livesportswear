@@ -56,6 +56,27 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_credentials: {
+        Row: {
+          admin_user_id: string
+          set_at: string
+          set_by: string | null
+          temp_password: string
+        }
+        Insert: {
+          admin_user_id: string
+          set_at?: string
+          set_by?: string | null
+          temp_password: string
+        }
+        Update: {
+          admin_user_id?: string
+          set_at?: string
+          set_by?: string | null
+          temp_password?: string
+        }
+        Relationships: []
+      }
       admin_locations: {
         Row: {
           admin_user_id: string
