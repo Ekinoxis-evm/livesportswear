@@ -41,7 +41,7 @@ export function ShiftChip({
       }
     >
       {isManager && <Crown className="size-3 shrink-0 text-amber-500" />}
-      <span className="truncate">{name}</span>
+      <span className="min-w-0 flex-1 truncate">{name}</span>
       {timeLabel && (
         <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">
           {timeLabel}

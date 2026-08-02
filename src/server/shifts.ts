@@ -188,6 +188,106 @@ export async function updateShift(
   return { ok: true };
 }
 
+/**
+ * Load a shift the current admin may edit (RLS scopes to their locations) and
+ * return its id + schedule location for the times resolver.
+ */
+async function loadOwnedShift(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  id: string,
+): Promise<{ ok: true; locationId: string } | { ok: false; error: string }> {
+  const shift = await supabase
+    .from("shifts")
+    .select("id, schedules(location_id)")
+    .eq("id", id)
+    .single();
+  if (shift.error || !shift.data) return { ok: false, error: "Shift not found." };
+  const joined = shift.data.schedules as
+    | { location_id: string }
+    | { location_id: string }[]
+    | null;
+  const locationId = Array.isArray(joined) ? joined[0]?.location_id : joined?.location_id;
+  if (!locationId) return { ok: false, error: "Shift not found." };
+  return { ok: true, locationId };
+}
+
+const moveSchema = z
+  .object({
+    date: z.string().refine(isValidDateStr, "Invalid date."),
+    shift_template_id: z.preprocess(emptyToNull, uuid.nullable().optional()),
+    start_time: z.preprocess(emptyToNull, time.nullable().optional()),
+    end_time: z.preprocess(emptyToNull, time.nullable().optional()),
+  })
+  .refine(endAfterStart, endAfterStartError);
+
+/**
+ * Drag-and-drop MOVE: relocate a shift to another cell (day + slot). Sets the
+ * new date, template and the template's/explicit times — the person stays.
+ */
+export async function moveShift(id: string, input: unknown): Promise<ActionResult> {
+  await requireAdmin();
+  if (!uuid.safeParse(id).success) return { ok: false, error: "Invalid shift id." };
+  const parsed = moveSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const supabase = await createServerClient();
+  const owned = await loadOwnedShift(supabase, id);
+  if (!owned.ok) return owned;
+
+  const times = await resolveTimes(
+    supabase,
+    owned.locationId,
+    parsed.data.shift_template_id,
+    parsed.data.start_time,
+    parsed.data.end_time,
+  );
+  if (!times.ok) return times;
+
+  const { error } = await supabase
+    .from("shifts")
+    .update({
+      date: parsed.data.date,
+      shift_template_id: parsed.data.shift_template_id ?? null,
+      start_time: times.start,
+      end_time: times.end,
+    })
+    .eq("id", id);
+  if (error) return { ok: false, error: dbError(error) };
+  revalidatePath("/admin/schedules");
+  return { ok: true };
+}
+
+/**
+ * Drag-and-drop SWAP: two shifts exchange their employee (each keeps its cell +
+ * time), so dropping one person onto another swaps their spots and leaves no
+ * slot empty. Both must be shifts the admin can edit (RLS-scoped).
+ */
+export async function swapShifts(aId: string, bId: string): Promise<ActionResult> {
+  await requireAdmin();
+  if (!uuid.safeParse(aId).success || !uuid.safeParse(bId).success || aId === bId) {
+    return { ok: false, error: "Invalid shifts." };
+  }
+  const supabase = await createServerClient();
+  const { data: rows, error } = await supabase
+    .from("shifts")
+    .select("id, employee_id")
+    .in("id", [aId, bId]);
+  if (error) return { ok: false, error: dbError(error) };
+  if (!rows || rows.length !== 2) return { ok: false, error: "Shift not found." };
+
+  const a = rows.find((r) => r.id === aId)!;
+  const b = rows.find((r) => r.id === bId)!;
+  if (a.employee_id === b.employee_id) return { ok: true }; // same person — nothing to swap
+
+  const [ua, ub] = await Promise.all([
+    supabase.from("shifts").update({ employee_id: b.employee_id }).eq("id", aId),
+    supabase.from("shifts").update({ employee_id: a.employee_id }).eq("id", bId),
+  ]);
+  if (ua.error || ub.error) return { ok: false, error: dbError(ua.error ?? ub.error!) };
+  revalidatePath("/admin/schedules");
+  return { ok: true };
+}
+
 export async function deleteShift(id: string): Promise<ActionResult> {
   await requireAdmin();
   if (!uuid.safeParse(id).success) {
