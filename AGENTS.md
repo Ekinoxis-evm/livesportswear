@@ -17,7 +17,7 @@ This project uses Next.js 16 (App Router). APIs, conventions, and file structure
 - **Who**: Admins run scheduling + performance; a shared per-store kiosk account runs the floor;
   employees get a portal + magic-link schedule/ICS.
 - **Stack**: Next.js 16, Supabase, Resend, Shopify Admin API, Vercel AI SDK (receiving), Vercel, Tailwind v4, shadcn/ui
-- **Plan & decisions**: [`PLAN.md`](./PLAN.md); deeper rules in `.claude/rules/*` and `CLAUDE.md`
+- **Plan & decisions**: deeper rules in `.claude/rules/*` and the "Current state" log in `CLAUDE.md`
 
 ## Where to put code
 
