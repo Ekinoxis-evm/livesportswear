@@ -21,6 +21,9 @@ export type SalesRankRow = {
   rate?: number;
   earned?: number;
   nextTierLabel?: string;
+  /** Commission next-tier gap for the month view (set by the surface, not the
+   * builders). An object = the tier the rep is climbing to; null = top tier. */
+  nextTier?: { remaining: number; perDay: number; rate: number } | null;
 };
 
 /** Custom wins whenever dates were submitted; the pill alone also activates it. */
