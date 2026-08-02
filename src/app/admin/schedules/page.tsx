@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScheduleControls } from "@/components/schedule/schedule-controls";
 import { ScheduleWorkspace } from "@/components/schedule/schedule-workspace";
+import { MixerWizard } from "@/components/schedule/mixer-wizard";
 import { ViolationsBanner } from "@/components/schedule/violations-banner";
 import { PublishButton } from "@/components/schedule/publish-button";
 import { ResendEmailMenu } from "@/components/schedule/resend-email-menu";
@@ -275,13 +276,45 @@ export default async function SchedulesPage({
         )}
       </div>
 
-      <ScheduleControls
-        locations={activeLocations}
-        locationId={locationId}
-        weekStart={weekStart}
-        thisWeek={thisWeekStart}
-        nextWeek={nextWeekStart}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ScheduleControls
+          locations={activeLocations}
+          locationId={locationId}
+          weekStart={weekStart}
+          thisWeek={thisWeekStart}
+          nextWeek={nextWeekStart}
+        />
+        {(!schedule || schedule.status !== "published") && empList.length > 0 && (
+          <MixerWizard
+            locationId={locationId}
+            weekStart={weekStart}
+            employees={empList.map((e) => ({
+              id: e.id,
+              name: e.name,
+              role: e.role,
+              maxDays: e.max_days_per_week,
+              daysOff: e.weekly_days_off,
+            }))}
+            templates={(templates ?? []).map((t) => ({
+              id: t.id,
+              name: t.name,
+              start_time: t.start_time,
+              end_time: t.end_time,
+              default_headcount: t.default_headcount,
+            }))}
+            timeOff={daysOff
+              .filter((d) => d.status === "approved")
+              .map((d) => ({ employeeId: d.employee_id, date: d.date }))}
+            existingShifts={shiftRows.map((s) => ({
+              employee_id: s.employee_id,
+              date: s.date,
+              shift_template_id: s.shift_template_id,
+              start_time: s.start_time,
+              end_time: s.end_time,
+            }))}
+          />
+        )}
+      </div>
 
       {drafts.length > 0 && (
         <div className="bg-muted/40 flex flex-col gap-2 rounded-lg border p-3">
