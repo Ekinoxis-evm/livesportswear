@@ -18,7 +18,7 @@ export type SchedulePublishedEmailProps = {
   employeeName: string;
   locationName: string;
   weekRange: string;
-  shifts: { date: string; label: string; time: string }[];
+  shifts: { date: string; label: string; time: string; coworkers: string }[];
   scheduleUrl: string;
 };
 
@@ -98,62 +98,45 @@ export function SchedulePublishedEmail({
               }}
             >
               <Row style={{ backgroundColor: strip }}>
-                <Column style={{ padding: "10px 16px", width: "40%" }}>
-                  <Text
-                    style={{
-                      fontSize: "11px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      color: muted,
-                      margin: 0,
-                    }}
-                  >
-                    Date
-                  </Text>
-                </Column>
-                <Column style={{ padding: "10px 16px", width: "30%" }}>
-                  <Text
-                    style={{
-                      fontSize: "11px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      color: muted,
-                      margin: 0,
-                    }}
-                  >
-                    Shift
-                  </Text>
-                </Column>
-                <Column style={{ padding: "10px 16px", width: "30%" }}>
-                  <Text
-                    style={{
-                      fontSize: "11px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      color: muted,
-                      margin: 0,
-                    }}
-                  >
-                    Time
-                  </Text>
-                </Column>
+                {(
+                  [
+                    ["Date", "24%"],
+                    ["Shift", "20%"],
+                    ["Time", "24%"],
+                    ["With", "32%"],
+                  ] as const
+                ).map(([heading, width]) => (
+                  <Column key={heading} style={{ padding: "10px 16px", width }}>
+                    <Text
+                      style={{
+                        fontSize: "11px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        color: muted,
+                        margin: 0,
+                      }}
+                    >
+                      {heading}
+                    </Text>
+                  </Column>
+                ))}
               </Row>
               {shifts.map((shift, i) => (
                 <Row
                   key={`${shift.date}-${shift.time}-${i}`}
                   style={{ borderTop: `1px solid ${border}` }}
                 >
-                  <Column style={{ padding: "12px 16px", width: "40%" }}>
+                  <Column style={{ padding: "12px 16px", width: "24%", verticalAlign: "top" }}>
                     <Text style={{ fontSize: "14px", color: text, margin: 0 }}>
                       {shift.date}
                     </Text>
                   </Column>
-                  <Column style={{ padding: "12px 16px", width: "30%" }}>
+                  <Column style={{ padding: "12px 16px", width: "20%", verticalAlign: "top" }}>
                     <Text style={{ fontSize: "14px", color: muted, margin: 0 }}>
                       {shift.label}
                     </Text>
                   </Column>
-                  <Column style={{ padding: "12px 16px", width: "30%" }}>
+                  <Column style={{ padding: "12px 16px", width: "24%", verticalAlign: "top" }}>
                     <Text
                       style={{
                         fontSize: "14px",
@@ -163,6 +146,11 @@ export function SchedulePublishedEmail({
                       }}
                     >
                       {shift.time}
+                    </Text>
+                  </Column>
+                  <Column style={{ padding: "12px 16px", width: "32%", verticalAlign: "top" }}>
+                    <Text style={{ fontSize: "14px", color: shift.coworkers ? text : muted, margin: 0 }}>
+                      {shift.coworkers || "—"}
                     </Text>
                   </Column>
                 </Row>

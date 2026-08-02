@@ -6,6 +6,7 @@ export type FeedShift = {
   start_time: string; // HH:MM or HH:MM:SS (location-local)
   end_time: string;
   templateName: string | null;
+  coworkers?: string[]; // others on this shift (overlapping hours) → event description
 };
 
 export type FeedInput = {
@@ -36,6 +37,9 @@ export function buildEmployeeFeed(input: FeedInput): string {
       timezone: input.location.timezone,
       summary: `${shift.templateName ?? "Shift"} · ${input.location.name}`,
       location: input.location.address ?? undefined,
+      description: shift.coworkers?.length
+        ? `With: ${shift.coworkers.join(", ")}`
+        : undefined,
     });
   }
 

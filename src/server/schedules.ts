@@ -19,6 +19,7 @@ import { validateSchedule, hasBlockers } from "@/lib/scheduling/rules";
 import { buildEmployeeFeed } from "@/lib/ical";
 import { sendSafe } from "@/lib/resend";
 import { SchedulePublishedEmail } from "@/lib/emails/schedule-published";
+import { overlappingCoworkerNames } from "@/lib/coworkers";
 import { type ActionResult, dbError, firstError } from "@/server/shared";
 
 const uuid = z.string().uuid();
@@ -296,6 +297,10 @@ type EmailCtx = {
   weekRange: string;
   templateName: Map<string, string>;
   appUrl: string;
+  // The whole week's shifts + a name map, so each shift can list who else is on
+  // it (overlapping hours). Both send paths supply these.
+  allShifts: EmailShift[];
+  employeeName: Map<string, string>;
 };
 
 /** One employee's published-week email (+ .ics) — used by publish and resend. */
@@ -308,6 +313,8 @@ async function sendScheduleEmailTo(
     s.shift_template_id
       ? (ctx.templateName.get(s.shift_template_id) ?? null)
       : slotLabelForHours(s.start_time, s.end_time);
+  const coworkersOf = (s: EmailShift) =>
+    overlappingCoworkerNames(s, ctx.allShifts, ctx.employeeName);
 
   const ics = buildEmployeeFeed({
     employeeName: emp.name,
@@ -318,6 +325,7 @@ async function sendScheduleEmailTo(
       start_time: s.start_time,
       end_time: s.end_time,
       templateName: label(s),
+      coworkers: coworkersOf(s),
     })),
   });
 
@@ -333,6 +341,7 @@ async function sendScheduleEmailTo(
         date: `${SHORT_WEEKDAYS[isoWeekday(s.date) - 1]} ${s.date.slice(8, 10)}`,
         label: label(s) ?? (s.shift_template_id ? "Shift" : "Custom"),
         time: `${hhmm(s.start_time)}–${hhmm(s.end_time)}`,
+        coworkers: coworkersOf(s).join(", "),
       })),
     }),
     attachments: [{ filename: "schedule.ics", content: ics }],
@@ -453,6 +462,8 @@ export async function publishSchedule(
     weekRange: formatWeekRange(sched.data.week_start),
     templateName: new Map(templates.map((t) => [t.id, t.name])),
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+    allShifts: shifts,
+    employeeName: new Map(employees.map((e) => [e.id, e.name])),
   };
 
   let sent = 0;
@@ -497,33 +508,42 @@ export async function resendScheduleEmail(
     return { ok: false, error: "Publish the schedule first." };
   }
 
-  const [{ data: loc }, { data: emp }, shiftsRes, templatesRes] = await Promise.all([
-    supabase
-      .from("locations")
-      .select("name, address, timezone")
-      .eq("id", sched.data.location_id)
-      .maybeSingle(),
-    supabase
-      .from("employees")
-      .select("id, name, email, magic_token, location_id, active")
-      .eq("id", employeeId)
-      .maybeSingle(),
-    supabase
-      .from("shifts")
-      .select("id, employee_id, date, shift_template_id, start_time, end_time")
-      .eq("schedule_id", scheduleId)
-      .eq("employee_id", employeeId),
-    supabase
-      .from("shift_templates")
-      .select("id, name")
-      .eq("location_id", sched.data.location_id),
-  ]);
+  // Load the WHOLE week's shifts (not just this employee's) + the location's
+  // employee names, so each shift can list who else is on it (overlapping hours).
+  const [{ data: loc }, { data: emp }, shiftsRes, templatesRes, rosterRes] =
+    await Promise.all([
+      supabase
+        .from("locations")
+        .select("name, address, timezone")
+        .eq("id", sched.data.location_id)
+        .maybeSingle(),
+      supabase
+        .from("employees")
+        .select("id, name, email, magic_token, location_id, active")
+        .eq("id", employeeId)
+        .maybeSingle(),
+      supabase
+        .from("shifts")
+        .select("id, employee_id, date, shift_template_id, start_time, end_time")
+        .eq("schedule_id", scheduleId),
+      supabase
+        .from("shift_templates")
+        .select("id, name")
+        .eq("location_id", sched.data.location_id),
+      supabase
+        .from("employees")
+        .select("id, name")
+        .eq("location_id", sched.data.location_id),
+    ]);
   if (!loc) return { ok: false, error: "Location not found." };
   if (!emp || !emp.active || emp.location_id !== sched.data.location_id) {
     return { ok: false, error: "That employee isn't at this store." };
   }
 
-  const empShifts = (shiftsRes.data ?? []).sort(sortShifts);
+  const allShifts = shiftsRes.data ?? [];
+  const empShifts = allShifts
+    .filter((s) => s.employee_id === employeeId)
+    .sort(sortShifts);
   if (empShifts.length === 0) {
     return { ok: false, error: `${emp.name} has no shifts this week.` };
   }
@@ -533,6 +553,8 @@ export async function resendScheduleEmail(
     weekRange: formatWeekRange(sched.data.week_start),
     templateName: new Map((templatesRes.data ?? []).map((t) => [t.id, t.name])),
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+    allShifts,
+    employeeName: new Map((rosterRes.data ?? []).map((e) => [e.id, e.name])),
   });
   if (!res.ok) return { ok: false, error: res.error ?? "The email couldn't be sent." };
 
