@@ -3,7 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, X, CalendarOff, Check } from "lucide-react";
+import { Plus, X, CalendarOff, Check, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { isoWeekday } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
 import { SLOT_COLOR } from "@/lib/shift-color";
@@ -16,8 +28,87 @@ import {
 } from "@/lib/shift-slots";
 import { cn } from "@/lib/utils";
 import { ensureSchedule, copyFromLastWeek } from "@/server/schedules";
-import { createShift, deleteShift } from "@/server/shifts";
+import { createShift, deleteShift, moveShift, swapShifts } from "@/server/shifts";
 import { decideTimeOff } from "@/server/time-off";
+
+// Drag payloads: a chip carries the shift being moved; a drop target is either
+// another chip (→ swap the two people) or an empty cell (→ move the shift there).
+type DragData = { shiftId: string; employeeId: string; date: string; slotIndex: number };
+type DropData =
+  | { kind: "chip"; shiftId: string; employeeId: string }
+  | { kind: "cell"; date: string; slotIndex: number };
+
+/**
+ * A shift chip with a drag HANDLE (grip), so the remove × and chip body stay
+ * tappable and only the handle starts a drag. The whole chip is a drop target
+ * too, so dropping another person onto it swaps their spots.
+ */
+function DraggableChip({
+  shiftId,
+  data,
+  children,
+}: {
+  shiftId: string;
+  data: DragData;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } =
+    useDraggable({ id: `shift-${shiftId}`, data });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `chip-${shiftId}`,
+    data: { kind: "chip", shiftId, employeeId: data.employeeId } satisfies DropData,
+  });
+  return (
+    <div ref={setDropRef} className={cn("rounded-md", isOver && "ring-2 ring-primary/50")}>
+      <div
+        ref={setDragRef}
+        style={{
+          transform: CSS.Translate.toString(transform),
+          opacity: isDragging ? 0.4 : 1,
+        }}
+        className="flex items-center gap-0.5"
+      >
+        <button
+          type="button"
+          aria-label="Drag shift"
+          className="text-muted-foreground/50 hover:text-muted-foreground shrink-0 cursor-grab touch-none active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-3.5" />
+        </button>
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/** An empty spot in a (slot × day) cell — dropping a shift here moves it. */
+function DroppableCell({
+  date,
+  slotIndex,
+  children,
+}: {
+  date: string;
+  slotIndex: number;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `cell-${slotIndex}-${date}`,
+    data: { kind: "cell", date, slotIndex } satisfies DropData,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex min-h-8 flex-col gap-1 rounded-md p-0.5 transition-colors",
+        isOver && "bg-primary/5 ring-1 ring-primary/30",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -97,6 +188,38 @@ export function ScheduleBoard({
     router.refresh();
   }
 
+  // Press-delay on touch + a small drag distance on mouse so the remove × and
+  // the Add dropdown still register as taps, not drags.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
+
+  function onDragEnd(e: DragEndEvent) {
+    const a = e.active.data.current as DragData | undefined;
+    const over = e.over?.data.current as DropData | undefined;
+    if (!a || !over) return;
+
+    if (over.kind === "chip") {
+      // Drop onto another person → swap their spots (leaves no slot empty).
+      if (over.shiftId === a.shiftId || over.employeeId === a.employeeId) return;
+      run(swapShifts(a.shiftId, over.shiftId), "Shifts swapped.");
+      return;
+    }
+    // Drop onto an empty cell → move the shift there (same person, new slot/day).
+    if (over.date === a.date && over.slotIndex === a.slotIndex) return;
+    const slot = SHIFT_SLOTS[over.slotIndex];
+    const tpl = templateForSlot(slot, templates);
+    const already = shifts.some(
+      (s) => s.date === over.date && shiftMatchesSlot(s, slot, tpl) && s.employee_id === a.employeeId,
+    );
+    if (already) {
+      toast.error(`${nameOf.get(a.employeeId) ?? "They"} already work that shift.`);
+      return;
+    }
+    run(moveShift(a.shiftId, { date: over.date, ...slotCreatePayload(slot, templates) }), "Shift moved.");
+  }
+
   if (!scheduleId) {
     return (
       <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed p-12 text-center">
@@ -148,6 +271,7 @@ export function ScheduleBoard({
   }
 
   return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
     <div className="overflow-x-auto rounded-lg border">
       <table className="w-full border-collapse text-sm">
         <thead>
@@ -158,7 +282,7 @@ export function ScheduleBoard({
             {days.map((d) => {
               const offToday = daysOff.filter((o) => o.date === d);
               return (
-                <th key={d} className="min-w-36 p-2 text-left align-top font-medium">
+                <th key={d} className="min-w-44 p-2 text-left align-top font-medium">
                   <div className="flex flex-col gap-1">
                     <span>
                       <span className="text-muted-foreground">
@@ -241,29 +365,34 @@ export function ScheduleBoard({
                   const under = headcount > 0 && assigned.length < headcount;
                   return (
                     <td key={d} className="border-l p-1.5 align-top">
-                      <div className="flex flex-col gap-1">
+                      <DroppableCell date={d} slotIndex={slotIndex}>
                         {assigned.map((s) => {
                           const off = offByCell.get(`${s.employee_id}|${d}`);
                           return (
-                            <ShiftChip
+                            <DraggableChip
                               key={s.id}
-                              name={nameOf.get(s.employee_id) ?? "—"}
-                              color={colorOf.get(s.employee_id)}
-                              isManager={managerIds.has(s.employee_id)}
-                              off={!!off}
-                              className="justify-between"
-                              trailing={
-                                <button
-                                  type="button"
-                                  aria-label="Remove"
-                                  disabled={busy}
-                                  onClick={() => run(deleteShift(s.id), "Shift removed.")}
-                                  className="shrink-0 opacity-60 hover:opacity-100"
-                                >
-                                  <X className="size-3" />
-                                </button>
-                              }
-                            />
+                              shiftId={s.id}
+                              data={{ shiftId: s.id, employeeId: s.employee_id, date: d, slotIndex }}
+                            >
+                              <ShiftChip
+                                name={nameOf.get(s.employee_id) ?? "—"}
+                                color={colorOf.get(s.employee_id)}
+                                isManager={managerIds.has(s.employee_id)}
+                                off={!!off}
+                                className="justify-between"
+                                trailing={
+                                  <button
+                                    type="button"
+                                    aria-label="Remove"
+                                    disabled={busy}
+                                    onClick={() => run(deleteShift(s.id), "Shift removed.")}
+                                    className="shrink-0 opacity-60 hover:opacity-100"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                }
+                              />
+                            </DraggableChip>
                           );
                         })}
 
@@ -310,7 +439,7 @@ export function ScheduleBoard({
                             {assigned.length}/{headcount}
                           </span>
                         )}
-                      </div>
+                      </DroppableCell>
                     </td>
                   );
                 })}
@@ -357,5 +486,6 @@ export function ScheduleBoard({
         </tbody>
       </table>
     </div>
+    </DndContext>
   );
 }
