@@ -6,14 +6,20 @@ import { revalidatePath } from "next/cache";
 import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireAdmin } from "@/lib/auth";
-import { isMonday, addDays, isoWeekday, formatWeekRange } from "@/lib/scheduling/week";
+import { isMonday, addDays, isoWeekday, formatWeekRange, weekDays } from "@/lib/scheduling/week";
 import { SHORT_WEEKDAYS } from "@/lib/weekdays";
-import { slotLabelForHours } from "@/lib/shift-slots";
+import {
+  SHIFT_SLOTS,
+  templateForSlot,
+  shiftMatchesSlot,
+  slotLabelForHours,
+} from "@/lib/shift-slots";
+import { fillSchedule, type MixerSlot, type MixerPlacement } from "@/lib/scheduling/generate";
 import { validateSchedule, hasBlockers } from "@/lib/scheduling/rules";
 import { buildEmployeeFeed } from "@/lib/ical";
 import { sendSafe } from "@/lib/resend";
 import { SchedulePublishedEmail } from "@/lib/emails/schedule-published";
-import { type ActionResult, dbError } from "@/server/shared";
+import { type ActionResult, dbError, firstError } from "@/server/shared";
 
 const uuid = z.string().uuid();
 
@@ -143,6 +149,135 @@ export async function copyFromLastWeek(
 
   revalidatePath("/admin/schedules");
   return { ok: true, data: { copied: rows.length } };
+}
+
+// ---------------------------------------------------------------------------
+// The MIXER: auto-fill a week from the pure generator. Per-run caps/headcounts
+// override the saved settings (not persisted). `scratch` clears the week first;
+// `complete` fills gaps around what's there. Deterministic by seed, so the
+// applied week matches the wizard's preview.
+// ---------------------------------------------------------------------------
+const mixerSchema = z.object({
+  locationId: uuid,
+  weekStart: z.string(),
+  employeeIds: z.array(uuid).min(1),
+  caps: z.record(
+    z.string(),
+    z.object({
+      maxDays: z.coerce.number().int().min(0).max(7),
+      daysOff: z.coerce.number().int().min(0).max(7),
+    }),
+  ),
+  headcounts: z.record(z.string(), z.coerce.number().int().min(0).max(50)),
+  mode: z.enum(["scratch", "complete"]),
+  seed: z.coerce.number().int(),
+});
+
+export async function applyMixer(
+  input: unknown,
+): Promise<ActionResult<{ added: number; gaps: number }>> {
+  await requireAdmin();
+  const parsed = mixerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const { locationId, weekStart, employeeIds, caps, headcounts, mode, seed } = parsed.data;
+  if (!isMonday(weekStart)) return { ok: false, error: "Week must start on a Monday." };
+
+  const ensured = await ensureSchedule(locationId, weekStart);
+  if (!ensured.ok) return ensured;
+  const scheduleId = ensured.data!.id;
+  if (ensured.data!.status === "published") {
+    return { ok: false, error: "This week is already published — unpublish to change it." };
+  }
+
+  const supabase = await createServerClient();
+  const days = weekDays(weekStart);
+
+  const { data: empRows } = await supabase
+    .from("employees")
+    .select("id, max_days_per_week, weekly_days_off")
+    .eq("location_id", locationId)
+    .eq("active", true)
+    .in("id", employeeIds);
+  const employees = (empRows ?? []).map((e) => ({
+    id: e.id,
+    maxDays: caps[e.id]?.maxDays ?? e.max_days_per_week,
+    daysOff: caps[e.id]?.daysOff ?? e.weekly_days_off,
+  }));
+  if (employees.length === 0) return { ok: false, error: "No employees selected." };
+
+  const { data: tplRows } = await supabase
+    .from("shift_templates")
+    .select("id, name, start_time, end_time, default_headcount")
+    .eq("location_id", locationId)
+    .eq("active", true);
+  const templates = tplRows ?? [];
+  const slots: MixerSlot[] = SHIFT_SLOTS.map((slot) => {
+    const tpl = templateForSlot(slot, templates);
+    return {
+      key: slot.key,
+      templateId: tpl?.id ?? null,
+      start: slot.start,
+      end: slot.end,
+      headcount: headcounts[slot.key] ?? tpl?.default_headcount ?? 0,
+    };
+  });
+
+  // Approved time-off intersecting the week → per-day off flags.
+  const { data: offRows } = await supabase
+    .from("time_off_requests")
+    .select("employee_id, start_date, end_date")
+    .eq("status", "approved")
+    .in("employee_id", employeeIds)
+    .lte("start_date", days[days.length - 1])
+    .gte("end_date", days[0]);
+  const timeOff: { employeeId: string; date: string }[] = [];
+  for (const o of offRows ?? []) {
+    for (const d of days) if (d >= o.start_date && d <= o.end_date) timeOff.push({ employeeId: o.employee_id, date: d });
+  }
+
+  const { data: shiftRows } = await supabase
+    .from("shifts")
+    .select("id, employee_id, date, shift_template_id, start_time, end_time")
+    .eq("schedule_id", scheduleId);
+  const existingShifts = shiftRows ?? [];
+
+  if (mode === "scratch" && existingShifts.length > 0) {
+    const del = await supabase.from("shifts").delete().eq("schedule_id", scheduleId);
+    if (del.error) return { ok: false, error: dbError(del.error) };
+  }
+
+  const existing: MixerPlacement[] =
+    mode === "complete"
+      ? existingShifts.flatMap((s) => {
+          const slot = SHIFT_SLOTS.find((sl) => shiftMatchesSlot(s, sl, templateForSlot(sl, templates)));
+          return slot && employeeIds.includes(s.employee_id)
+            ? [{ employeeId: s.employee_id, date: s.date, slotKey: slot.key }]
+            : [];
+        })
+      : [];
+
+  const { assignments, gaps } = fillSchedule({ days, employees, slots, timeOff, existing, seed });
+
+  if (assignments.length > 0) {
+    const slotByKey = new Map(slots.map((s) => [s.key, s]));
+    const rows = assignments.map((a) => {
+      const slot = slotByKey.get(a.slotKey)!;
+      return {
+        schedule_id: scheduleId,
+        employee_id: a.employeeId,
+        date: a.date,
+        shift_template_id: slot.templateId,
+        start_time: slot.start,
+        end_time: slot.end,
+        notes: null,
+      };
+    });
+    const { error } = await supabase.from("shifts").insert(rows);
+    if (error) return { ok: false, error: dbError(error) };
+  }
+
+  revalidatePath("/admin/schedules");
+  return { ok: true, data: { added: assignments.length, gaps: gaps.reduce((s, g) => s + g.short, 0) } };
 }
 
 const hhmm = (t: string) => t.slice(0, 5);
