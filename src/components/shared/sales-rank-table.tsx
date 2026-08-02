@@ -21,6 +21,7 @@ export function SalesRankTable({
   showGoal = false,
   showShare = false,
   showCommission = false,
+  showNextTier = false,
   density,
 }: {
   rows: SalesRankRow[];
@@ -29,6 +30,9 @@ export function SalesRankTable({
   showGoal?: boolean;
   showShare?: boolean;
   showCommission?: boolean;
+  /** Month view: two commission-tier columns — how much more to reach the next
+   * tier, and the per-day pace to get there. Each row needs `nextTier`. */
+  showNextTier?: boolean;
   /** The kiosk passes `comfortable`; admin keeps the compact default. */
   density?: "compact" | "comfortable";
 }) {
@@ -50,12 +54,20 @@ export function SalesRankTable({
     rate: (r) => r.rate,
     commission: (r) => r.earned,
     tier: (r) => r.nextTierLabel,
+    // At-top rows (nextTier === null) sort as fully reached (0 to go).
+    toNextTier: (r) =>
+      r.nextTier === undefined ? null : (r.nextTier?.remaining ?? 0),
+    perDay: (r) => (r.nextTier === undefined ? null : (r.nextTier?.perDay ?? 0)),
   });
 
   if (rows.length === 0) {
     return <p className="text-muted-foreground text-sm">No sales to rank yet.</p>;
   }
   const th = "py-2 text-right font-medium";
+  // The tier columns are the point of the month view; on the narrow kiosk the
+  // Shopify-reconciliation breakdown (Gross/Discounts/Returns/Taxes) would push
+  // them off-screen, so drop it there (still in the summary block + day report).
+  const showBreakdown = !showNextTier;
   const money = (v: number) => formatMoney(v, currency);
   const H = (key: string, label: string, className: string) => (
     <SortableTh sortKey={key} sort={sort} onSort={onSort} className={className}>
@@ -70,13 +82,19 @@ export function SalesRankTable({
             {H("rank", "#", "py-2 font-medium")}
             {H("name", "Employee", "py-2 font-medium")}
             {showStore && H("store", "Store", "py-2 font-medium")}
-            {H("value", "Gross", `${th} hidden sm:table-cell`)}
-            {H("discounts", "Discounts", `${th} hidden md:table-cell`)}
-            {H("returns", "Returns", `${th} hidden md:table-cell`)}
+            {showBreakdown && H("value", "Gross", `${th} hidden sm:table-cell`)}
+            {showBreakdown && H("discounts", "Discounts", `${th} hidden md:table-cell`)}
+            {showBreakdown && H("returns", "Returns", `${th} hidden md:table-cell`)}
             {H("net", "Net sales", th)}
-            {H("taxes", "Taxes", `${th} hidden lg:table-cell`)}
+            {showBreakdown && H("taxes", "Taxes", `${th} hidden lg:table-cell`)}
             {H("total", "Total", th)}
             {showGoal && H("goal", "Goal", th)}
+            {showNextTier && (
+              <>
+                {H("toNextTier", "To next tier", th)}
+                {H("perDay", "Per day", th)}
+              </>
+            )}
             {showShare && H("share", "Share", th)}
             {showCommission && (
               <>
@@ -95,25 +113,33 @@ export function SalesRankTable({
               {showStore && (
                 <td className="text-muted-foreground py-2">{r.store ?? "—"}</td>
               )}
-              <td className="text-muted-foreground hidden py-2 text-right tabular-nums sm:table-cell">
-                {r.breakdown ? money(r.breakdown.gross) : "—"}
-              </td>
-              <td className="text-muted-foreground hidden py-2 text-right tabular-nums md:table-cell">
-                {r.breakdown && r.breakdown.discounts > 0
-                  ? `−${money(r.breakdown.discounts)}`
-                  : "—"}
-              </td>
-              <td className="text-muted-foreground hidden py-2 text-right tabular-nums md:table-cell">
-                {r.breakdown && r.breakdown.returns > 0
-                  ? `−${money(r.breakdown.returns)}`
-                  : "—"}
-              </td>
+              {showBreakdown && (
+                <td className="text-muted-foreground hidden py-2 text-right tabular-nums sm:table-cell">
+                  {r.breakdown ? money(r.breakdown.gross) : "—"}
+                </td>
+              )}
+              {showBreakdown && (
+                <td className="text-muted-foreground hidden py-2 text-right tabular-nums md:table-cell">
+                  {r.breakdown && r.breakdown.discounts > 0
+                    ? `−${money(r.breakdown.discounts)}`
+                    : "—"}
+                </td>
+              )}
+              {showBreakdown && (
+                <td className="text-muted-foreground hidden py-2 text-right tabular-nums md:table-cell">
+                  {r.breakdown && r.breakdown.returns > 0
+                    ? `−${money(r.breakdown.returns)}`
+                    : "—"}
+                </td>
+              )}
               <td className="py-2 text-right font-semibold tabular-nums">
                 {money(r.net)}
               </td>
-              <td className="text-muted-foreground hidden py-2 text-right tabular-nums lg:table-cell">
-                {r.breakdown && r.breakdown.taxes > 0 ? `+${money(r.breakdown.taxes)}` : "—"}
-              </td>
+              {showBreakdown && (
+                <td className="text-muted-foreground hidden py-2 text-right tabular-nums lg:table-cell">
+                  {r.breakdown && r.breakdown.taxes > 0 ? `+${money(r.breakdown.taxes)}` : "—"}
+                </td>
+              )}
               <td className="py-2 text-right font-semibold tabular-nums">
                 {money(r.breakdown?.total ?? r.net)}
               </td>
@@ -128,6 +154,27 @@ export function SalesRankTable({
                 >
                   {r.goalPct != null ? `${Math.round(r.goalPct * 100)}%` : "—"}
                 </td>
+              )}
+              {showNextTier && (
+                <>
+                  <td className="py-2 text-right tabular-nums">
+                    {r.nextTier === undefined ? (
+                      "—"
+                    ) : r.nextTier === null ? (
+                      <span className="font-medium text-emerald-600">top tier</span>
+                    ) : (
+                      <span className="flex flex-col items-end leading-tight">
+                        <span className="font-semibold">{money(r.nextTier.remaining)}</span>
+                        <span className="text-muted-foreground text-[11px]">
+                          → {(r.nextTier.rate * 100).toFixed(r.nextTier.rate * 100 % 1 === 0 ? 0 : 1)}%
+                        </span>
+                      </span>
+                    )}
+                  </td>
+                  <td className="text-muted-foreground py-2 text-right tabular-nums">
+                    {r.nextTier ? `${money(r.nextTier.perDay)}/d` : "—"}
+                  </td>
+                </>
               )}
               {showShare && (
                 <td className="text-muted-foreground py-2 text-right tabular-nums">

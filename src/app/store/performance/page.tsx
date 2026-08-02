@@ -42,10 +42,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ReportActions, type CloserEntry } from "@/components/store/report-actions";
-import { NextTierList } from "@/components/store/next-tier-list";
 import { SyncSalesButton } from "@/components/shared/sync-sales-button";
 import { storeSyncSales } from "@/server/store-floor";
-import { resolveTiers, asTiers } from "@/lib/commission";
+import { resolveTiers, asTiers, commissionFor } from "@/lib/commission";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default async function StorePerformancePage({
@@ -237,6 +236,9 @@ export default async function StorePerformancePage({
     storeGoal: monthGoal,
     personalGoalSum: [...personalGoalOf.values()].reduce((a, g) => a + g, 0),
   }).levels;
+  // Calendar days left in the month (incl. today) — the kiosk pace basis (flat
+  // calendar days, not workdays). Independent of goal/sold amounts.
+  const daysLeft = goalPace(monthGoal, monthTotal, bd, month).daysLeft;
   // One meter: the store goal + its commission levels on a single bar.
   const storeMeter = buildGoalMeter({
     current: monthTotal,
@@ -246,7 +248,7 @@ export default async function StorePerformancePage({
       rate: l.rate,
     })),
     goalValue: monthGoal > 0 ? monthGoal : null,
-    paceDays: goalPace(monthGoal, monthTotal, bd, month).daysLeft,
+    paceDays: daysLeft,
   });
 
   // Per-rep rows for the active period. Today and custom pull attributed live
@@ -257,6 +259,23 @@ export default async function StorePerformancePage({
   let unmappedCount = 0;
   if (mode === "month") {
     rows = monthRows(monthSalesRows ?? [], roster, { goals: personalGoalOf });
+    // Attach each rep's commission next-tier gap (the tier they're climbing to)
+    // so the table shows "to next tier" + "per day" as columns.
+    if (tiers.length > 0) {
+      rows = rows.map((r) => {
+        const next = commissionFor(r.net, tiers).nextTier;
+        return {
+          ...r,
+          nextTier: next
+            ? {
+                remaining: next.remaining,
+                perDay: daysLeft > 0 ? next.remaining / daysLeft : next.remaining,
+                rate: next.rate,
+              }
+            : null,
+        };
+      });
+    }
   } else if (isShopifyConfigured()) {
     unmappedCount = roster.filter((e) => !e.shopify_staff_id).length;
     if (staffEntries) {
@@ -276,6 +295,9 @@ export default async function StorePerformancePage({
       <TabsList className="w-full">
         <TabsTrigger value="sales" className="h-11 flex-1">
           Sales
+        </TabsTrigger>
+        <TabsTrigger value="orders" className="h-11 flex-1">
+          Orders
         </TabsTrigger>
         <TabsTrigger value="attendance" className="h-11 flex-1">
           Attendance
@@ -373,21 +395,9 @@ export default async function StorePerformancePage({
               rows={rows}
               currency={currency}
               showGoal={mode === "month"}
+              showNextTier={mode === "month" && tiers.length > 0}
               density="comfortable"
             />
-          )}
-
-          {mode === "month" && rows.length > 0 && tiers.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <span className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-                To the next commission tier
-              </span>
-              <NextTierList
-                rows={rows.map((r) => ({ name: r.name, net: r.net }))}
-                tiers={tiers}
-                currency={currency}
-              />
-            </div>
           )}
 
           {mode !== "month" && unmappedCount > 0 && (
@@ -399,14 +409,22 @@ export default async function StorePerformancePage({
           )}
         </CardContent>
       </Card>
+      </TabsContent>
 
-      {ordersView && (
+      <TabsContent value="orders" className="flex flex-col gap-5">
+      {ordersView ? (
         <OrdersToday
           total={ordersView.total}
           perPerson={ordersView.perPerson}
           rows={orderListRows}
           currency={currency}
         />
+      ) : (
+        <Card>
+          <CardContent className="text-muted-foreground py-6 text-sm">
+            No orders yet today.
+          </CardContent>
+        </Card>
       )}
       </TabsContent>
 
