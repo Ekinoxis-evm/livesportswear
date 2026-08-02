@@ -45,4 +45,40 @@ describe("buildEmployeeFeed", () => {
     expect(feed).toContain("BEGIN:VCALENDAR");
     expect(feed).not.toContain("BEGIN:VEVENT");
   });
+
+  it("names the coworkers on the shift in the event description", () => {
+    const feed = buildEmployeeFeed({
+      employeeName: "Mara Díaz",
+      location: { name: "Store", address: null, timezone: "America/Bogota" },
+      shifts: [
+        {
+          id: "s1",
+          date: "2025-05-26",
+          start_time: "09:30:00",
+          end_time: "17:30:00",
+          templateName: "Morning",
+          coworkers: ["Ana", "Bruno"],
+        },
+      ],
+    });
+    expect(feed).toContain("DESCRIPTION:With: Ana\\, Bruno");
+  });
+
+  it("omits the description when nobody shares the shift", () => {
+    const feed = buildEmployeeFeed({
+      employeeName: "Solo",
+      location: { name: "Store", address: null, timezone: "America/Bogota" },
+      shifts: [
+        {
+          id: "s1",
+          date: "2025-05-26",
+          start_time: "09:30:00",
+          end_time: "17:30:00",
+          templateName: "Morning",
+          coworkers: [],
+        },
+      ],
+    });
+    expect(feed).not.toContain("DESCRIPTION");
+  });
 });
