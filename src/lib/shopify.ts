@@ -14,14 +14,6 @@ import {
   zeroBreakdown,
   type SalesBreakdown,
 } from "@/lib/sales-breakdown";
-import {
-  giftCardAdjustments,
-  giftCardNet,
-  subtractGiftCard,
-  withoutGiftCards,
-  type GiftCardAdjustment,
-  type GiftCardOrderNode,
-} from "@/lib/gift-cards";
 
 // Staff attribution uses the REST orders API: order.user_id and the order
 // timeline's "placed" author come with read_orders alone, while GraphQL's
@@ -104,114 +96,6 @@ const ORDER_FIELDS =
   "id,user_id,cancelled_at,test,current_subtotal_price," +
   "total_line_items_price,total_discounts,subtotal_price,total_tax";
 
-// Gift-card product ids change ~never; one lookup per instance-hour is plenty.
-let giftCardProducts: { ids: string[]; at: number } | null = null;
-const GIFT_CARD_PRODUCTS_TTL_MS = 3_600_000;
-
-async function giftCardProductIds(): Promise<string[]> {
-  if (giftCardProducts && Date.now() - giftCardProducts.at < GIFT_CARD_PRODUCTS_TTL_MS) {
-    return giftCardProducts.ids;
-  }
-  const data = await shopifyGraphql<{ products: { nodes: { id: string }[] } }>(
-    `query { products(first: 50, query: "gift_card:true") { nodes { id } } }`,
-    {},
-  );
-  const ids = data.products.nodes.map((n) => n.id.split("/").pop() ?? n.id);
-  giftCardProducts = { ids, at: Date.now() };
-  return ids;
-}
-
-const GIFT_CARD_ORDERS_QUERY = `query($q: String!, $after: String) {
-  orders(first: 100, query: $q, after: $after) {
-    nodes {
-      id
-      cancelledAt
-      test
-      lineItems(first: 50) {
-        nodes {
-          product { isGiftCard }
-          originalTotalSet { shopMoney { amount } }
-          discountedTotalSet { shopMoney { amount } }
-        }
-      }
-      refunds {
-        refundLineItems(first: 50) {
-          nodes {
-            subtotalSet { shopMoney { amount } }
-            lineItem { product { isGiftCard } }
-          }
-        }
-      }
-    }
-    pageInfo { hasNextPage endCursor }
-  }
-}`;
-
-const GIFT_CARD_RANGE_TTL_MS = 60_000;
-const giftCardRanges = new Map<
-  string,
-  { at: number; promise: Promise<Map<string, GiftCardAdjustment>> }
->();
-
-/**
- * `orderId → gift-card adjustment` for [start, endExclusive), so the sales
- * sweeps can subtract the cards Shopify Analytics never counted as sales (see
- * lib/gift-cards.ts). Deliberately a SEPARATE, narrow GraphQL pass rather than
- * adding `line_items` to the REST sweeps: the order search filters straight to
- * the gift-card products, so this is a couple of hundred bytes and one round
- * trip (14 such orders in the store's whole 2024→now history), where pulling
- * line items on every order was measured at 20× the payload and 16× the time.
- */
-export async function fetchGiftCardSales(
-  start: string,
-  endExclusive: string,
-): Promise<Map<string, GiftCardAdjustment>> {
-  const key = `${start}|${endExclusive}`;
-  const hit = giftCardRanges.get(key);
-  // The promise (not the result) is cached, so the three sweeps a kiosk render
-  // fires concurrently over the same window share ONE query instead of three.
-  if (hit && Date.now() - hit.at < GIFT_CARD_RANGE_TTL_MS) return hit.promise;
-
-  const promise = loadGiftCardSales(start, endExclusive).catch((e) => {
-    giftCardRanges.delete(key); // never cache a failure
-    throw e;
-  });
-  giftCardRanges.set(key, { at: Date.now(), promise });
-  if (giftCardRanges.size > 32) {
-    for (const [k, v] of giftCardRanges) {
-      if (Date.now() - v.at >= GIFT_CARD_RANGE_TTL_MS) giftCardRanges.delete(k);
-    }
-  }
-  return promise;
-}
-
-async function loadGiftCardSales(
-  start: string,
-  endExclusive: string,
-): Promise<Map<string, GiftCardAdjustment>> {
-  const productIds = await giftCardProductIds();
-  if (productIds.length === 0) return new Map();
-
-  const q =
-    `created_at:>='${start}' AND created_at:<'${endExclusive}' AND ` +
-    `(${productIds.map((id) => `product_id:${id}`).join(" OR ")})`;
-
-  const nodes: GiftCardOrderNode[] = [];
-  let after: string | null = null;
-  do {
-    const data: {
-      orders: {
-        nodes: GiftCardOrderNode[];
-        pageInfo: { hasNextPage: boolean; endCursor: string | null };
-      };
-    } = await shopifyGraphql(GIFT_CARD_ORDERS_QUERY, { q, after });
-    nodes.push(...data.orders.nodes);
-    after = data.orders.pageInfo.hasNextPage ? data.orders.pageInfo.endCursor : null;
-  } while (after);
-
-  return giftCardAdjustments(nodes);
-}
-
 export type StaffSales = {
   /** staff user_id (numeric string) → summed sales breakdown (net = the metric) */
   totals: Map<string, SalesBreakdown>;
@@ -233,7 +117,6 @@ export async function fetchStaffSales(
   const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
   const totals = new Map<string, SalesBreakdown>();
   const sampleOrder = new Map<string, number>();
-  const giftCards = await fetchGiftCardSales(start, endExclusive);
 
   let path: string | null =
     `/orders.json?status=any&limit=250&fields=${ORDER_FIELDS}` +
@@ -244,8 +127,10 @@ export async function fetchStaffSales(
     for (const o of body.orders) {
       if (!o.user_id || o.cancelled_at || o.test) continue;
       const staffId = String(o.user_id);
-      const b = withoutGiftCards(orderBreakdown(o), giftCards.get(String(o.id)));
-      totals.set(staffId, addBreakdown(totals.get(staffId) ?? zeroBreakdown(), b));
+      totals.set(
+        staffId,
+        addBreakdown(totals.get(staffId) ?? zeroBreakdown(), orderBreakdown(o)),
+      );
       if (!sampleOrder.has(staffId)) sampleOrder.set(staffId, o.id);
     }
     path = nextPageInfo
@@ -275,7 +160,6 @@ export async function fetchStaffSalesByDay(
   const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
   const fields = `${ORDER_FIELDS},created_at`;
   const byDay = new Map<string, DayStaffSales>();
-  const giftCards = await fetchGiftCardSales(start, endExclusive);
 
   let path: string | null =
     `/orders.json?status=any&limit=250&fields=${fields}` +
@@ -293,7 +177,7 @@ export async function fetchStaffSalesByDay(
         bucket = { total: zeroBreakdown(), byStaff: new Map() };
         byDay.set(day, bucket);
       }
-      const b = withoutGiftCards(orderBreakdown(o), giftCards.get(String(o.id)));
+      const b = orderBreakdown(o);
       bucket.total = addBreakdown(bucket.total, b);
       if (o.user_id) {
         const staffId = String(o.user_id);
@@ -331,7 +215,6 @@ export async function fetchDaySales(
   let sum = zeroBreakdown();
   let orders = 0;
   let currency: string | null = null;
-  const giftCards = await fetchGiftCardSales(start, endExclusive);
 
   let path: string | null =
     `/orders.json?status=any&limit=250&fields=${fields}` +
@@ -341,7 +224,7 @@ export async function fetchDaySales(
       await shopifyRest(path);
     for (const o of page.body.orders) {
       if (o.cancelled_at || o.test) continue;
-      sum = addBreakdown(sum, withoutGiftCards(orderBreakdown(o), giftCards.get(String(o.id))));
+      sum = addBreakdown(sum, orderBreakdown(o));
       orders++;
       currency ??= o.currency ?? null;
     }
@@ -393,7 +276,6 @@ export async function fetchDayOrders(
 ): Promise<DayOrder[]> {
   const max = new Date(new Date(endExclusive).getTime() - 1000).toISOString();
   const out: DayOrder[] = [];
-  const giftCards = await fetchGiftCardSales(start, endExclusive);
   let path: string | null =
     `/orders.json?status=any&limit=250&fields=${ORDER_LIST_FIELDS}` +
     `&created_at_min=${encodeURIComponent(start)}&created_at_max=${encodeURIComponent(max)}`;
@@ -402,15 +284,12 @@ export async function fetchDayOrders(
       await shopifyRest<{ orders: RestDayOrder[] }>(path);
     for (const o of page.body.orders) {
       if (o.cancelled_at || o.test) continue;
-      // This path has no discounts/returns columns, so the gift card comes off
-      // net and gross directly rather than through `withoutGiftCards`.
-      const gc = giftCards.get(String(o.id));
       out.push({
         id: String(o.id),
         name: o.name ?? `#${o.id}`,
         createdAt: o.created_at,
-        net: subtractGiftCard(Number(o.current_subtotal_price ?? 0), gc ? giftCardNet(gc) : 0),
-        gross: subtractGiftCard(Number(o.total_line_items_price ?? 0), gc?.gross ?? 0),
+        net: Number(o.current_subtotal_price ?? 0),
+        gross: Number(o.total_line_items_price ?? 0),
         currency: o.currency ?? null,
         sourceName: o.source_name ?? null,
         staffId: o.user_id != null ? String(o.user_id) : null,
