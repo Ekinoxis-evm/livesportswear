@@ -59,7 +59,22 @@
 ## Secrets
 - `.env.local` is gitignored. `.env.example` is the source of truth for required keys.
 - `MAGIC_TOKEN_SECRET` (if we ever HMAC tokens), `CRON_SECRET`, and Supabase service-role go in Vercel env vars only.
-- Never commit env files. The pre-commit hook greps for likely secrets.
+- Never commit env files. **This repo is PUBLIC**, so a leak is instant and
+  world-readable — treat `.gitignore` as necessary but not sufficient.
+- **Pre-commit hook**: `.githooks/pre-commit` blocks staged env files, private
+  key material, and secret-shaped content (Supabase JWT / `sbp_`, Resend `re_`,
+  Shopify `shpat_`/`shpss_`, PEM blocks). It lives in the repo, not
+  `.git/hooks/`, so it survives a fresh clone; `pnpm install` points git at it
+  via the `prepare` script (`git config core.hooksPath .githooks`). It reports
+  the file and the rule, never the matched value. `--no-verify` bypasses it.
+  Patterns are anchored on a non-word boundary so `require_foo` doesn't read as
+  a Resend key. *(Written 2026-08-05 — this line previously claimed a hook that
+  did not exist.)*
+- Keep `.env.local` at mode `600`; it holds the service-role key (bypasses all
+  RLS), the Vercel token, the Shopify client secret and the Resend key.
+- GitHub secret scanning + push protection are **free on public repos** and were
+  disabled as of 2026-08-05 — enabling them adds the server-side net the hook
+  can't provide (a hook only runs on machines that have it).
 
 ## Cron endpoints
 - Every `/api/cron/*` route checks `Authorization: Bearer ${CRON_SECRET}`.

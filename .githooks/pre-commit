@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Blocks commits that would leak credentials.
+#
+# This repository is PUBLIC and .env.local holds a Supabase service-role key
+# (bypasses every RLS policy), a Vercel token, the Shopify client secret and a
+# Resend key. .gitignore is the only thing keeping them out, and a single
+# `git add -f` or a rename outside the .env* pattern defeats it. This is the
+# second line.
+#
+# Checks the STAGED content only, so it is fast. Reports file + which rule
+# fired, never the matched value — a hook that echoes the secret it caught into
+# your terminal scrollback has not helped.
+#
+# Genuine false positive? `git commit --no-verify` bypasses it. Prefer fixing
+# the pattern over making that a habit.
+
+set -uo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+fail=0
+note() { printf '  \033[31m✖\033[0m %s\n' "$1"; fail=1; }
+
+# 1. Files that must never be committed, whatever is inside them.
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  base=$(basename "$f")
+  case "$base" in
+    .env.example|.env.sample) ;;
+    .env|.env.*|*.env) note "$f — env file (only .env.example belongs in git)" ;;
+  esac
+  case "$base" in
+    *.pem|*.key|*.p12|*.pfx|*.keystore|id_rsa|id_ed25519)
+      note "$f — private key material" ;;
+  esac
+done <<EOF
+$staged
+EOF
+
+# 2. Secret-shaped content. Patterns are anchored on a non-word character so
+#    "require_foo" cannot masquerade as a Resend "re_" key — that exact false
+#    positive showed up while auditing this repo.
+#
+#    Pattern and label are passed as separate arguments on purpose: packing them
+#    into one delimited string breaks, because BOUND itself contains a "|".
+BOUND='(^|[^A-Za-z0-9_])'
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  # -I makes grep skip binary blobs; read the staged blob once, test it many times.
+  content=$(git show ":$f" 2>/dev/null) || continue
+  [ -z "$content" ] && continue
+
+  check() { # check <regex> <label>
+    # -e is required: the PEM pattern starts with "-", which grep would
+    # otherwise parse as a flag.
+    printf '%s' "$content" | grep -qIE -e "$1" && note "$f — looks like a $2"
+  }
+  check "${BOUND}eyJhbGciOi[A-Za-z0-9_-]{20,}"                                  "Supabase/JWT key"
+  check "${BOUND}sbp_[A-Za-z0-9]{30,}"                                          "Supabase access token"
+  check "${BOUND}re_[A-Za-z0-9]{20,}"                                           "Resend API key"
+  check "${BOUND}shp(at|ss|ca|pa)_[A-Za-z0-9]{20,}"                             "Shopify token"
+  check "SUPABASE_SERVICE_ROLE_KEY[[:space:]]*=[[:space:]]*[A-Za-z0-9._-]{20,}" "service-role key assignment"
+  check "-----BEGIN[A-Z ]*PRIVATE KEY-----"                                     "PEM private key"
+done <<EOF
+$staged
+EOF
+
+if [ "$fail" -ne 0 ]; then
+  echo
+  echo "  Commit blocked: the staged changes look like they contain credentials."
+  echo "  Unstage them, or run 'git commit --no-verify' if this is a false positive."
+  echo
+  exit 1
+fi
+
+exit 0
