@@ -475,6 +475,24 @@ Shopify (`runShopifySync` — cron + admin button) or entered manually.
 > Caveat: returns are dated to the ORDER date (we bucket by `created_at`), not the
 > refund date as Shopify Analytics does — so bounded periods with cross-boundary
 > refunds can differ slightly (small in practice).
+>
+> **Gift cards are excluded** (`src/lib/gift-cards.ts`). Shopify treats a gift card
+> as a LIABILITY, not a sale — revenue lands when the card is redeemed — but the
+> order money fields include the gift-card line, so every figure ran high by the
+> card's face value while Shopify's own staff report did not. That was the
+> discrepancy people kept seeing. `fetchGiftCardSales` (`src/lib/shopify.ts`) is a
+> narrow GraphQL pass — `products(query:"gift_card:true")` → `orders(query:
+> "created_at:… AND (product_id:…)")` — returning `orderId → {gross, discounts,
+> returns}`, which the four aggregate sweeps (`fetchStaffSales`,
+> `fetchStaffSalesByDay`, `fetchDaySales`, `fetchDayOrders`) subtract per order via
+> the pure `withoutGiftCards`. Taxes are untouched: gift-card lines are non-taxable.
+> It is a separate query on purpose — adding `line_items` to the REST sweeps measured
+> 20× the payload and 16× the time, where the filtered query is ~15 KB for the store's
+> **entire** 2024→now gift-card history (14 orders). Redeeming a card is unaffected:
+> that's a tender on a real merchandise sale, which still counts in full.
+> Not adjusted (deliberately): `fetchRecentOrders` / `client_events.order_total` (what
+> the customer paid, not a sales metric), `fetchCustomerOrders` (client spend), and
+> `store_day_closes` rows snapshotted before this change.
 
 ### `inventory_counts` + `inventory_count_items` (added 0032)
 Physical inventory counts, admin-only (`/admin/inventory`): scan barcodes on

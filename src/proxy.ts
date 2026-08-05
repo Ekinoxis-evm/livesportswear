@@ -59,6 +59,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // api/health is excluded on purpose: this proxy calls auth.getUser() on
+    // every matched request, so when Supabase is unreachable the middleware
+    // itself throws. The liveness probe has to survive that to report on it.
+    "/((?!api/health|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
