@@ -30,6 +30,16 @@ export type AttendanceRow = {
   orderTotal: number | null;
   orderCount: number; // linked orders (>1 = split across receipts)
   customer: string | null;
+
+  // Asked on the no-sale flow only (0061); null on sold rows and pre-0061 rows.
+  boughtBefore: string | null; // 'yes' | 'no' | 'unsure'
+  knewBrand: string | null;
+};
+
+const ANSWER_LABEL: Record<string, string> = {
+  yes: "Yes",
+  no: "No",
+  unsure: "Not sure",
 };
 
 type Filter = "all" | "sold" | "nosale";
@@ -53,6 +63,8 @@ export function AttendanceToday({
     duration: (r) => r.servedSeconds,
     customer: (r) => r.customer,
     order: (r) => r.orderTotal,
+    boughtBefore: (r) => r.boughtBefore,
+    knewBrand: (r) => r.knewBrand,
   });
 
   return (
@@ -102,6 +114,8 @@ export function AttendanceToday({
                   <SortableTh sortKey="result" sort={sort} onSort={onSort} className="py-2 font-medium">Result</SortableTh>
                   <SortableTh sortKey="duration" sort={sort} onSort={onSort} className="hidden py-2 text-right font-medium sm:table-cell">Duration</SortableTh>
                   <SortableTh sortKey="customer" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Customer</SortableTh>
+                  <SortableTh sortKey="boughtBefore" sort={sort} onSort={onSort} className="hidden py-2 font-medium lg:table-cell">Bought before</SortableTh>
+                  <SortableTh sortKey="knewBrand" sort={sort} onSort={onSort} className="hidden py-2 font-medium lg:table-cell">Knew LIVE!</SortableTh>
                   <SortableTh sortKey="order" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Order</SortableTh>
                 </tr>
               </thead>
@@ -138,6 +152,12 @@ export function AttendanceToday({
                     </td>
                     <td className="text-muted-foreground hidden py-2 sm:table-cell">
                       {r.customer ?? "—"}
+                    </td>
+                    <td className="text-muted-foreground hidden py-2 lg:table-cell">
+                      {r.boughtBefore ? (ANSWER_LABEL[r.boughtBefore] ?? r.boughtBefore) : "—"}
+                    </td>
+                    <td className="text-muted-foreground hidden py-2 lg:table-cell">
+                      {r.knewBrand ? (ANSWER_LABEL[r.knewBrand] ?? r.knewBrand) : "—"}
                     </td>
                     <td className="py-2 text-right tabular-nums">
                       {r.orderTotal != null ? (

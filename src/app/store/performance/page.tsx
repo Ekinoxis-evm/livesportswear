@@ -83,7 +83,7 @@ export default async function StorePerformancePage({
     service
       .from("client_events")
       .select(
-        "id, employee_id, attended_at, kind, return_type, sold, got_contact, served_seconds, order_total, shopify_order_name, linked_orders, customer_name",
+        "id, employee_id, attended_at, kind, return_type, sold, got_contact, served_seconds, order_total, shopify_order_name, linked_orders, customer_name, bought_before, knew_brand",
       )
       .eq("location_id", locationId)
       .eq("business_date", bd),
@@ -219,6 +219,8 @@ export default async function StorePerformancePage({
           ? 1
           : 0,
       customer: e.customer_name,
+      boughtBefore: e.bought_before,
+      knewBrand: e.knew_brand,
     }));
 
   // Month numbers from the synced monthly_sales table (DB-only).

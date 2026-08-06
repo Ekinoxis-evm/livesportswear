@@ -23,7 +23,13 @@ const orderSchema = z.object({
 });
 export type FinishOrder = z.input<typeof orderSchema>;
 
-// A walk-in that didn't buy REQUIRES at least one reason.
+// Asked before the reason on a no-sale. "unsure" is a real answer — a rep who
+// never got to ask must not be pushed into a yes/no, or the data is invented.
+export const ANSWERS = ["yes", "no", "unsure"] as const;
+export type Answer = (typeof ANSWERS)[number];
+
+// A walk-in that didn't buy REQUIRES at least one reason, plus both profile
+// answers (report-only labels; no metric reads them).
 const walkinSchema = z
   .object({
     kind: z.literal("walkin"),
@@ -34,9 +40,14 @@ const walkinSchema = z
     note: z.string().trim().max(300).optional(),
     // A sold walk-in can link several orders (split payment, two receipts).
     orders: z.array(orderSchema).max(10).optional(),
+    bought_before: z.enum(ANSWERS).optional(),
+    knew_brand: z.enum(ANSWERS).optional(),
   })
   .refine((v) => v.sold || (v.reasons?.length ?? 0) > 0, {
     message: "Pick at least one reason.",
+  })
+  .refine((v) => v.sold || (v.bought_before !== undefined && v.knew_brand !== undefined), {
+    message: "Answer both questions about the client.",
   });
 
 // For a return, `sold` means "the customer bought something else". `return_type`

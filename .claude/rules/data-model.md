@@ -134,6 +134,17 @@ layer (counts), not money.
   (`src/lib/conversion.ts`), which stays `walkin`|`return`. `both` implies
   `sold=true` (returned + bought more); `return`/`exchange` imply `sold=false`.
 - `got_contact boolean not null default false`
+- `bought_before text`, `knew_brand text` (added 0061; check `yes`|`no`|`unsure`)
+  — asked on the kiosk **before** the reason when a walk-in didn't buy: had this
+  client bought from LIVE! before, and did they already know the brand. A reason
+  chip alone can't separate a returning client who couldn't find her size from a
+  stranger who'd never heard of us. **Report-only labels** — conversion,
+  commission and contests still key on `kind`/`sold`, same posture as
+  `return_type`. `unsure` is a real answer, deliberately distinct from NULL: a
+  rep who never got to ask must not be forced into a yes/no. NULL = not
+  captured (pre-0061 rows, and every sold / return / re-take row). Required by
+  `finishSchema` (`src/lib/finish-schema.ts`) on the no-sale walk-in path only;
+  shown as two `lg:`-only columns on the kiosk attendance list.
 - `served_seconds int` (added 0056) — how long the client was attended (taken →
   finished). Captured from the per-client start stamp popped off
   `floor_checkins.attending_started_at` at finish; null for pre-0056 rows and
