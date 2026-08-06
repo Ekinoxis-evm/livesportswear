@@ -394,8 +394,8 @@ export default async function StorePerformancePage({
             <SalesRankTable
               rows={rows}
               currency={currency}
+              showGoal={mode === "month"}
               showNextTier={mode === "month" && tiers.length > 0}
-              showTotal={false}
               density="comfortable"
             />
           )}

@@ -12,8 +12,7 @@ import type { SalesRankRow } from "@/lib/sales-period";
  * The standardized ranked employee-sales table with Shopify's exact labels:
  * # · Employee (· Store) · Gross · Discounts · Returns · Net sales · Taxes ·
  * Total, plus the optional per-surface column groups (Goal %, Share %, or the
- * monthly commission trio). Net stays the ranking key + the metric, and is the
- * only sales figure the kiosk shows (`showTotal={false}`).
+ * monthly commission trio). Net stays the ranking key + the metric.
  */
 export function SalesRankTable({
   rows,
@@ -23,7 +22,6 @@ export function SalesRankTable({
   showShare = false,
   showCommission = false,
   showNextTier = false,
-  showTotal = true,
   density,
 }: {
   rows: SalesRankRow[];
@@ -35,10 +33,6 @@ export function SalesRankTable({
   /** Month view: two commission-tier columns — how much more to reach the next
    * tier, and the per-day pace to get there. Each row needs `nextTier`. */
   showNextTier?: boolean;
-  /** Total sales (net + taxes) sits next to Net and reads as a second, bigger
-   * "sales" number. On the kiosk that confuses the floor, so it's dropped there
-   * — Total still shows in the summary breakdown block and the day report. */
-  showTotal?: boolean;
   /** The kiosk passes `comfortable`; admin keeps the compact default. */
   density?: "compact" | "comfortable";
 }) {
@@ -93,7 +87,7 @@ export function SalesRankTable({
             {showBreakdown && H("returns", "Returns", `${th} hidden md:table-cell`)}
             {H("net", "Net sales", th)}
             {showBreakdown && H("taxes", "Taxes", `${th} hidden lg:table-cell`)}
-            {showTotal && H("total", "Total", th)}
+            {H("total", "Total", th)}
             {showGoal && H("goal", "Goal", th)}
             {showNextTier && (
               <>
@@ -146,11 +140,9 @@ export function SalesRankTable({
                   {r.breakdown && r.breakdown.taxes > 0 ? `+${money(r.breakdown.taxes)}` : "—"}
                 </td>
               )}
-              {showTotal && (
-                <td className="py-2 text-right font-semibold tabular-nums">
-                  {money(r.breakdown?.total ?? r.net)}
-                </td>
-              )}
+              <td className="py-2 text-right font-semibold tabular-nums">
+                {money(r.breakdown?.total ?? r.net)}
+              </td>
               {showGoal && (
                 <td
                   className={cn(
