@@ -137,6 +137,7 @@ export type Database = {
         Row: {
           attend_started_at: string | null
           attended_at: string
+          bought_before: string | null
           business_date: string
           created_at: string
           customer_email: string | null
@@ -146,6 +147,7 @@ export type Database = {
           got_contact: boolean
           id: string
           kind: string
+          knew_brand: string | null
           linked_orders: Json | null
           location_id: string
           note: string | null
@@ -162,6 +164,7 @@ export type Database = {
         Insert: {
           attend_started_at?: string | null
           attended_at?: string
+          bought_before?: string | null
           business_date: string
           created_at?: string
           customer_email?: string | null
@@ -171,6 +174,7 @@ export type Database = {
           got_contact?: boolean
           id?: string
           kind?: string
+          knew_brand?: string | null
           linked_orders?: Json | null
           location_id: string
           note?: string | null
@@ -187,6 +191,7 @@ export type Database = {
         Update: {
           attend_started_at?: string | null
           attended_at?: string
+          bought_before?: string | null
           business_date?: string
           created_at?: string
           customer_email?: string | null
@@ -196,6 +201,7 @@ export type Database = {
           got_contact?: boolean
           id?: string
           kind?: string
+          knew_brand?: string | null
           linked_orders?: Json | null
           location_id?: string
           note?: string | null

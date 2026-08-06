@@ -18,7 +18,7 @@ import {
   storeRecentOrders,
   storeThankYouLink,
 } from "@/server/store-floor";
-import type { FinishInput } from "@/lib/finish-schema";
+import { ANSWERS, type Answer, type FinishInput } from "@/lib/finish-schema";
 import type { ProductHit, RecentOrder } from "@/lib/shopify";
 import type { MessageLanguage } from "@/lib/message-languages";
 import { cn } from "@/lib/utils";
@@ -98,8 +98,10 @@ function FinishSteps({
   onSubmit: (employeeId: string, input: FinishInput) => void;
 }) {
   const [step, setStep] = useState<
-    "choice" | "order" | "contact" | "thankyou" | "reasons"
+    "choice" | "order" | "contact" | "thankyou" | "profile" | "reasons"
   >("choice");
+  const [boughtBefore, setBoughtBefore] = useState<Answer | null>(null);
+  const [knewBrand, setKnewBrand] = useState<Answer | null>(null);
   const [orders, setOrders] = useState<RecentOrder[] | null>(null);
   const [selected, setSelected] = useState<RecentOrder[]>([]);
   const [gotContact, setGotContact] = useState(false);
@@ -219,7 +221,7 @@ function FinishSteps({
             variant="outline"
             className="border-destructive/40 text-destructive h-14 flex-1"
             disabled={pending}
-            onClick={() => setStep("reasons")}
+            onClick={() => setStep("profile")}
           >
             <X className="mr-1.5 size-5" /> No sale
           </Button>
@@ -443,6 +445,68 @@ function FinishSteps({
     );
   }
 
+  // Asked BEFORE the reason: a reason chip alone can't tell a returning client
+  // who couldn't find her size from a stranger who'd never heard of the brand.
+  if (step === "profile") {
+    const ANSWER_LABEL: Record<Answer, string> = {
+      yes: "Yes",
+      no: "No",
+      unsure: "Not sure",
+    };
+    const group = (
+      label: string,
+      value: Answer | null,
+      set: (a: Answer) => void,
+    ) => (
+      <div className="flex flex-col gap-1.5">
+        <Label>{label}</Label>
+        <div className="flex gap-2">
+          {ANSWERS.map((a) => (
+            <button
+              key={a}
+              type="button"
+              disabled={pending}
+              onClick={() => set(a)}
+              className={cn(
+                "h-14 flex-1 rounded-md border text-sm font-medium transition-colors",
+                value === a
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "hover:bg-muted",
+              )}
+            >
+              {ANSWER_LABEL[a]}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>{target.name} — about this client</DialogTitle>
+          <DialogDescription>
+            Both answers help read the reason that follows. &ldquo;Not sure&rdquo; is
+            fine — better than a guess.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4">
+          {group("Had they bought from LIVE! before?", boughtBefore, setBoughtBefore)}
+          {group("Did they already know LIVE!?", knewBrand, setKnewBrand)}
+        </div>
+
+        <Button
+          size="lg"
+          className="h-12"
+          disabled={pending || boughtBefore === null || knewBrand === null}
+          onClick={() => setStep("reasons")}
+        >
+          Continue
+        </Button>
+      </>
+    );
+  }
+
   return (
     <>
       <DialogHeader>
@@ -551,6 +615,8 @@ function FinishSteps({
             reasons,
             products: products.map((p) => ({ id: p.id, title: p.title, sku: p.sku })),
             note: note.trim() || undefined,
+            bought_before: boughtBefore ?? undefined,
+            knew_brand: knewBrand ?? undefined,
           })
         }
       >

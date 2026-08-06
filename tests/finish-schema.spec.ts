@@ -29,6 +29,8 @@ describe("finishSchema", () => {
       reasons: ["No size"],
       products: [{ id: "123", title: "Runner shorts" }],
       note: "wanted the blue one",
+      bought_before: "no",
+      knew_brand: "yes",
     });
     expect(res.success).toBe(true);
   });
@@ -43,6 +45,8 @@ describe("finishSchema", () => {
         { id: "123", title: "Everyday Jog Pants", sku: "84939.S.0LJ104" },
         { id: "456", title: "Runner shorts", sku: null },
       ],
+      bought_before: "unsure",
+      knew_brand: "unsure",
     });
     expect(res.success).toBe(true);
   });
@@ -57,8 +61,41 @@ describe("finishSchema", () => {
         sold: false,
         got_contact: false,
         reasons: [],
+        bought_before: "no",
+        knew_brand: "no",
       }).success,
     ).toBe(false);
+  });
+
+  // The two profile questions (0061) are asked before the reason and are
+  // required on a no-sale — a half-answered pair must not reach the DB.
+  const noSale = (extra: Record<string, unknown>) =>
+    finishSchema.safeParse({
+      kind: "walkin",
+      sold: false,
+      got_contact: false,
+      reasons: ["No size"],
+      ...extra,
+    }).success;
+
+  it("rejects a no-sale missing either profile answer", () => {
+    expect(noSale({})).toBe(false);
+    expect(noSale({ bought_before: "yes" })).toBe(false);
+    expect(noSale({ knew_brand: "yes" })).toBe(false);
+  });
+
+  it.each(["yes", "no", "unsure"])("accepts '%s' for both profile answers", (a) => {
+    expect(noSale({ bought_before: a, knew_brand: a })).toBe(true);
+  });
+
+  it("rejects a profile answer outside the three options", () => {
+    expect(noSale({ bought_before: "maybe", knew_brand: "yes" })).toBe(false);
+  });
+
+  it("does not require the profile answers on a sold walk-in", () => {
+    expect(
+      finishSchema.safeParse({ kind: "walkin", sold: true, got_contact: false }).success,
+    ).toBe(true);
   });
 
   it("accepts both return outcomes", () => {

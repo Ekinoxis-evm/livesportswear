@@ -299,6 +299,10 @@ export type FinishResult = {
   products?: { id: string; title: string; sku?: string | null }[];
   note?: string;
   orders?: LinkedOrder[]; // a sold walk-in can link several orders
+  // Asked before the reason on a no-sale walk-in (0061). Report-only labels —
+  // no metric reads them, same posture as return_type.
+  bought_before?: "yes" | "no" | "unsure";
+  knew_brand?: "yes" | "no" | "unsure";
 };
 
 /**
@@ -379,6 +383,8 @@ export async function doFinishCustomer(
     reasons: result.reasons ?? null,
     products: result.products ?? null,
     note: result.note ?? null,
+    bought_before: result.bought_before ?? null,
+    knew_brand: result.knew_brand ?? null,
     shopify_order_id: primary?.id ?? null,
     shopify_order_name: primary?.name ?? null,
     order_total: primary ? merged.order_total : null,
