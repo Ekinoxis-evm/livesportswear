@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendSafe } from "@/lib/resend";
 import { businessDate } from "@/lib/business-date";
 import { resolveRecipients } from "@/lib/report-recipients";
+import { cleanNote } from "@/lib/report-note";
 import { totals, byPerson, formatPct, formatDuration, type ConversionTotals } from "@/lib/conversion";
 import { breakMinutes, type BreakRow } from "@/lib/breaks";
 import { workedHours } from "@/lib/attendance";
@@ -437,7 +438,9 @@ export async function closeDayFor(
   closer: { id: string; name: string; location_id: string },
   onlyRecipients?: string[],
   signatories?: string[],
+  rawNote?: string,
 ): Promise<ActionResult> {
+  const note = cleanNote(rawNote);
   const service = createServiceClient();
 
   const { data: loc } = await service
@@ -487,6 +490,7 @@ export async function closeDayFor(
     returns_value: d.shopify?.returns ?? null,
     cash_sales: d.tenders?.cashNet ?? null,
     currency: d.shopify?.currency ?? null,
+    note,
   });
   if (upErr) {
     if (upErr.code === "23505") {
@@ -498,7 +502,7 @@ export async function closeDayFor(
   // The email is signed by everyone the closer picked as on-floor senders;
   // `closed_by` above stays the single recorded closer.
   const signature = joinNames(signatories?.length ? signatories : [closer.name]);
-  const send = await sendDayReport(d, signature);
+  const send = await sendDayReport(d, signature, { note });
   // The day is already closed; report delivery is best-effort with no resend
   // path, so a silent failure (e.g. an unverified Resend sender) must at least
   // be logged. Recipients are already masked by sendSafe; firstError carries no PII.
@@ -520,6 +524,7 @@ export async function sendTestReportFor(
   locationId: string,
   onlyRecipients?: string[],
   signatories?: string[],
+  rawNote?: string,
 ): Promise<ActionResult<{ sentTo: number }>> {
   const base = await buildDayReportData(locationId);
   const d = { ...base, recipients: resolveRecipients(base.recipients, onlyRecipients) };
@@ -527,7 +532,10 @@ export async function sendTestReportFor(
     return { ok: false, error: "No recipients configured — add an email first." };
 
   const signature = signatories?.length ? joinNames(signatories) : "Test";
-  const { sent, failed, firstError } = await sendDayReport(d, signature, { test: true });
+  const { sent, failed, firstError } = await sendDayReport(d, signature, {
+    test: true,
+    note: cleanNote(rawNote),
+  });
   if (sent === 0) return { ok: false, error: firstError ?? "The report could not be sent." };
   if (failed > 0)
     return { ok: false, error: `Sent to ${sent}, but ${failed} failed: ${firstError ?? "unknown error"}` };
@@ -539,11 +547,14 @@ export async function sendTestReportFor(
  * by the real close (`closeDayFor`) and the admin "Send test report" preview.
  * When `test`, the subject is prefixed `[TEST] ` and NO store_day_closes row is
  * written (the caller of the test path skips the insert entirely).
+ *
+ * `note` arrives already cleaned (`cleanNote`) — it is the closer's own words,
+ * rendered at the top of the email so it frames the numbers below it.
  */
 export async function sendDayReport(
   d: DayReportData,
   closedByName: string,
-  opts: { test?: boolean } = {},
+  opts: { test?: boolean; note?: string | null } = {},
 ): Promise<{ sent: number; failed: number; firstError?: string }> {
   const money = (v: number | null) =>
     v === null ? "—" : formatMoney(v, d.currency);
@@ -587,6 +598,7 @@ export async function sendDayReport(
         locationName: d.locName,
         businessDate: `${weekdayName(d.bd)} · ${shortDate(d.bd)}`,
         closedByName,
+        note: opts.note ?? null,
         attended: d.t.attended,
         sold: d.t.sold,
         contacts: d.t.contacts,

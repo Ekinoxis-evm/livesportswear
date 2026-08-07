@@ -23,7 +23,9 @@ export function ReportRecipientsCard({
       recipients={recipients}
       add={(email) => addReportRecipient({ location_id: locationId, email })}
       remove={(email) => removeReportRecipient({ location_id: locationId, email })}
-      sendTest={(recipients) => sendTestReport({ location_id: locationId, recipients })}
+      sendTest={(recipients, note) =>
+        sendTestReport({ location_id: locationId, recipients, note })
+      }
       loadDraft={() => reportDraft({ location_id: locationId })}
     />
   );

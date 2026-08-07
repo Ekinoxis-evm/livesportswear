@@ -262,6 +262,14 @@ keys are connected.
 - `cash_sales numeric` (added 0025) — cash-in-register snapshot at close
 - `gross_sales`, `discounts`, `returns_value numeric(12,2)` (added 0031) —
   net-sales decomposition at close; null on days closed before 0031
+- `note text` (added 0062) — the closer's own words on the day, typed (or
+  pasted) into the **Note** step of the report wizard and rendered at the top of
+  the report email, above the numbers it explains. Optional; null on most days
+  and on every close before 0062. Cleaned + capped at 1000 chars by `cleanNote`
+  (`src/lib/report-note.ts`, pure) before the insert, so the wizard's counter,
+  the email and this column can't disagree. **Written only by a real close** — a
+  `[TEST]` send writes no row here at all, so a test note is emailed and never
+  stored. Read back on admin Performance→Daily. Report-only: no metric reads it.
 - `unique (location_id, business_date)`
 
 ### `store_report_recipients` (added 0039)
