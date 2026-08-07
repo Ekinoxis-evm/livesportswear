@@ -87,6 +87,8 @@ export async function removeReportRecipient(input: unknown): Promise<ActionResul
  */
 const testSendSchema = locationSchema.extend({
   recipients: z.array(z.string()).optional(),
+  // Generous bound at the boundary; `cleanNote` does the real trimming + cap.
+  note: z.string().max(4000).optional(),
 });
 
 export async function sendTestReport(
@@ -100,7 +102,12 @@ export async function sendTestReport(
 
   // `recipients` is a per-send narrowing, intersected server-side against the
   // stored list by sendTestReportFor — never a free-text destination.
-  return sendTestReportFor(parsed.data.location_id, parsed.data.recipients);
+  return sendTestReportFor(
+    parsed.data.location_id,
+    parsed.data.recipients,
+    undefined,
+    parsed.data.note,
+  );
 }
 
 /**

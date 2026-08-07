@@ -3,12 +3,14 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Mail, Paperclip, Plus, X } from "lucide-react";
+import { Check, ClipboardPaste, Mail, Paperclip, Plus, X } from "lucide-react";
 import type { CloseDayDraft } from "@/server/conversion-core";
 import type { ActionResult } from "@/server/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Wizard } from "@/components/shared/wizard";
+import { cleanNote, NOTE_MAX } from "@/lib/report-note";
 import { cn } from "@/lib/utils";
 
 export type CloserEntry = { id: string; name: string };
@@ -49,6 +51,7 @@ export function ReportWizard({
     closerId?: string;
     recipients: string[];
     signatories?: string[];
+    note?: string;
   }) => Promise<ActionResult<unknown>>;
   onDone: () => void;
   onCancel: () => void;
@@ -61,6 +64,7 @@ export function ReportWizard({
   const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState("");
+  const [note, setNote] = useState("");
   // Several on-floor reps can sign the report; the first is the recorded closer.
   const [signerIds, setSignerIds] = useState<string[]>(
     closers[0] ? [closers[0].id] : [],
@@ -116,6 +120,25 @@ export function ReportWizard({
     setNewEmail("");
   }
 
+  /**
+   * The note is often written somewhere else first (WhatsApp, the shift
+   * handover) and pasted in. Safari on the iPad only allows a clipboard read
+   * from a user gesture and shows its own paste prompt; if the read is refused
+   * or unsupported, say so instead of appearing to do nothing.
+   */
+  async function pasteNote() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        toast.error("The clipboard is empty.");
+        return;
+      }
+      setNote((prev) => (prev.trim() ? `${prev.trimEnd()}\n${text}` : text));
+    } catch {
+      toast.error("Couldn't read the clipboard — long-press the box and choose Paste.");
+    }
+  }
+
   function submit() {
     if (!draft) return;
     if (closers.length > 0 && signers.length === 0) return;
@@ -124,6 +147,7 @@ export function ReportWizard({
         closerId: signers[0]?.id,
         recipients: selected,
         signatories: signers.map((s) => s.name),
+        note: cleanNote(note) ?? undefined,
       });
       if (!res.ok) {
         toast.error(res.error ?? "Something went wrong.");
@@ -253,6 +277,40 @@ export function ReportWizard({
               <Paperclip className="size-3.5 shrink-0" />
               CSV + XLSX + PDF · {draft.eventCount} clients · {draft.checkinCount}{" "}
               check-ins
+            </span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: "Note",
+      content: (
+        <div className="flex flex-col gap-3">
+          <p className="text-muted-foreground text-sm">
+            Anything the numbers don&apos;t show? This goes at the top of the
+            report. Optional — leave it empty to send just the figures.
+          </p>
+          <Textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))}
+            maxLength={NOTE_MAX}
+            rows={5}
+            className="min-h-32 text-base"
+            placeholder="e.g. POS was down 3–4pm, so two sales rang up late."
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={pasteNote}>
+                <ClipboardPaste className="size-4" /> Paste
+              </Button>
+              {note.length > 0 && (
+                <Button type="button" variant="ghost" onClick={() => setNote("")}>
+                  Clear
+                </Button>
+              )}
+            </div>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {note.length}/{NOTE_MAX}
             </span>
           </div>
         </div>

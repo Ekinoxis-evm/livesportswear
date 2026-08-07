@@ -22,9 +22,15 @@
 - **Drawer (bottom on mobile)**: avoid; sheet/wizard is enough.
 - **Sonner toast**: success / error confirmations after server actions.
 - **Kiosk multi-step actions** use the same `Wizard` shell as admin: the report
-  send (`components/store/report-wizard.tsx` — one wizard for both the test and
+  send (`components/shared/report-wizard.tsx` — one wizard for both the test and
   close-of-day, so a rep learns one flow) and Re-take client
   (`retake-dialog.tsx`). Steps stay large enough to tap at arm's length.
+  The report wizard's steps are **Recipients → Numbers → Note → Sending** (the
+  last only on the kiosk, which has closers to pick). The **Note** step is
+  optional free text that lands at the top of the report email; it carries a
+  **Paste** button (`navigator.clipboard.readText()`) because the note is
+  usually drafted somewhere else first, and falls back to a toast when Safari
+  refuses the clipboard read rather than looking broken.
 - **Floor buttons that mean opposite things get different colours.** Return /
   Exchange is amber, Re-take client is violet: one starts a new interaction, the
   other folds into an existing one, and at floor speed the words are easy to

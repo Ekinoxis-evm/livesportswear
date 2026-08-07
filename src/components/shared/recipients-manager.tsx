@@ -49,7 +49,10 @@ export function RecipientsManager({
   recipients: string[];
   add: (email: string) => Promise<ActionResult>;
   remove: (email: string) => Promise<ActionResult>;
-  sendTest: (recipients: string[]) => Promise<ActionResult<{ sentTo: number }>>;
+  sendTest: (
+    recipients: string[],
+    note?: string,
+  ) => Promise<ActionResult<{ sentTo: number }>>;
   /** Supplied on every real surface: makes the button open the review wizard
    *  (recipients → numbers → send) instead of firing a send immediately. */
   loadDraft: () => Promise<ActionResult<CloseDayDraft>>;
@@ -186,7 +189,7 @@ export function RecipientsManager({
             <ReportWizard
               mode="test"
               loadDraft={loadDraft}
-              send={({ recipients: only }) => sendTest(only)}
+              send={({ recipients: only, note }) => sendTest(only, note)}
               onDone={() => setWizardOpen(false)}
               onCancel={() => setWizardOpen(false)}
             />

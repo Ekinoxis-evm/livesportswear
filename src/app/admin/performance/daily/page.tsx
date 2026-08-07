@@ -104,7 +104,7 @@ export default async function PerformancePage({
       supabase
         .from("store_day_closes")
         .select(
-          "id, shopify_sales, cash_sales, gross_sales, discounts, returns_value, currency",
+          "id, shopify_sales, cash_sales, gross_sales, discounts, returns_value, currency, note",
         )
         .eq("location_id", location.id)
         .eq("business_date", date)
@@ -259,6 +259,15 @@ export default async function PerformancePage({
           <Badge variant="secondary">Not closed</Badge>
         )}
       </div>
+
+      {closeRow?.note && (
+        <Card>
+          <CardHeader>
+            <CardDescription>Note from the store</CardDescription>
+            <p className="text-sm whitespace-pre-wrap">{closeRow.note}</p>
+          </CardHeader>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>

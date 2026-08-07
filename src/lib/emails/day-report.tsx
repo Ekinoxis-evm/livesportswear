@@ -30,6 +30,7 @@ export type DayReportEmailProps = {
   locationName: string;
   businessDate: string; // YYYY-MM-DD
   closedByName: string;
+  note?: string | null; // the closer's own words, already cleaned (cleanNote)
   attended: number;
   sold: number;
   contacts: number;
@@ -56,6 +57,7 @@ const card = "#ffffff";
 const border = "#b9a996";
 const text = "#1d1d1d";
 const muted = "#6b5e52";
+const strip = "#ded2c4";
 
 function KPI({ label, value }: { label: string; value: string }) {
   return (
@@ -125,6 +127,7 @@ export function DayReportEmail({
   locationName,
   businessDate,
   closedByName,
+  note,
   attended,
   sold,
   contacts,
@@ -186,9 +189,47 @@ export function DayReportEmail({
           >
             Daily report — {locationName}
           </Heading>
-          <Text style={{ fontSize: "13px", color: muted, margin: "0 0 24px" }}>
+          <Text
+            style={{ fontSize: "13px", color: muted, margin: note ? "0 0 16px" : "0 0 24px" }}
+          >
             {businessDate} · closed by {closedByName}
           </Text>
+
+          {note && (
+            <Section
+              style={{
+                backgroundColor: strip,
+                borderLeft: `3px solid ${accent}`,
+                borderRadius: "8px",
+                padding: "12px 14px",
+                margin: "0 0 24px",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: "11px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: muted,
+                  margin: "0 0 6px",
+                }}
+              >
+                Note from the store
+              </Text>
+              {/* pre-wrap so the line breaks of a pasted message survive; React
+                  Email escapes the text, so a paste can't inject markup. */}
+              <Text
+                style={{
+                  fontSize: "14px",
+                  color: text,
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {note}
+              </Text>
+            </Section>
+          )}
 
           <Section style={{ margin: "0 0 8px" }}>
             <Row>

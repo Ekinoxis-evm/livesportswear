@@ -1321,6 +1321,7 @@ export type Database = {
           gross_sales: number | null
           id: string
           location_id: string
+          note: string | null
           returns_value: number | null
           shopify_sales: number | null
           sold_count: number
@@ -1338,6 +1339,7 @@ export type Database = {
           gross_sales?: number | null
           id?: string
           location_id: string
+          note?: string | null
           returns_value?: number | null
           shopify_sales?: number | null
           sold_count?: number
@@ -1355,6 +1357,7 @@ export type Database = {
           gross_sales?: number | null
           id?: string
           location_id?: string
+          note?: string | null
           returns_value?: number | null
           shopify_sales?: number | null
           sold_count?: number
