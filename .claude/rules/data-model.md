@@ -320,6 +320,36 @@ Admin-editable client messages, per location + language. Two kinds: `thank_you`
   `whatsappLink(phone, text)`. The `wa.me` URL carries the phone to the kiosk
   for that one send only — never stored, never logged.
 
+### `store_reminders` + `store_reminder_acks` (added 0063)
+Recurring chores the kiosk **interrupts** for — the first is spraying the store
+perfume. The floor screen shows a blocking popup (`reminder-popup.tsx`) until
+someone taps Done.
+- `store_reminders`: `id`, `location_id fk cascade`, `label`, `note`,
+  `start_time time`, `end_time time`, `interval_minutes int (15..720)`,
+  `active`, `created_by`, timestamps. Check `end_time >= start_time`.
+- **The schedule is a RULE, not a list of times.** Slots are derived by the pure
+  `reminderTimes()` (`src/lib/reminders.ts`) stepping from `start_time` by the
+  interval while `<= end_time` — so **the end is a BOUND, not a slot**: 10:00
+  every 3h to 21:00 is `10 · 13 · 16 · 19`, because 22:00 is past the end. That
+  reliably surprises people, so the admin form (`reminders-card.tsx` on
+  `/admin/locations`) **previews the exact times** instead of describing the rule.
+- `dueSlot()` (same file) returns the **latest** slot that has come due and is
+  unacked — never a backlog. An iPad asleep since opening must not greet the
+  floor with four popups to tap through; the misses stay missing.
+- `store_reminder_acks`: `reminder_id fk cascade`, `business_date` (store-local),
+  `due_at time`, `acked_at`. **The PK is the slot** `(reminder, date, due_at)`,
+  so a double tap or client retry can't duplicate it — same idempotency guard as
+  `store_day_closes`. Rows are only ever inserted; a missing row means "not done".
+  Deliberately records no employee: dismissing is a one-tap chore, not an
+  attestation.
+- The kiosk goes **quiet once `floor_days.closed_at` is set** — nobody is nagged
+  to spray perfume while cashing up.
+- RLS: `store_reminders` admin-all via `admin_can_access_location(location_id)`;
+  acks are admin-**read** via a join to the parent reminder. The kiosk has no
+  policy on either — it acks through `storeAckReminder`
+  (`src/server/store-reminders.ts`), a service-client action re-scoped to the
+  JWT's location. Same single-writer posture as the rest of the floor.
+
 ### `store_goals` (added 0009)
 Monthly store sales target — 12 months/year per location. Surfaced as progress on
 the admin dashboard.

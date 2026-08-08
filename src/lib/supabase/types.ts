@@ -1420,6 +1420,85 @@ export type Database = {
           },
         ]
       }
+      store_reminder_acks: {
+        Row: {
+          acked_at: string
+          business_date: string
+          due_at: string
+          reminder_id: string
+        }
+        Insert: {
+          acked_at?: string
+          business_date: string
+          due_at: string
+          reminder_id: string
+        }
+        Update: {
+          acked_at?: string
+          business_date?: string
+          due_at?: string
+          reminder_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_reminder_acks_reminder_id_fkey"
+            columns: ["reminder_id"]
+            isOneToOne: false
+            referencedRelation: "store_reminders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_reminders: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          end_time: string
+          id: string
+          interval_minutes: number
+          label: string
+          location_id: string
+          note: string | null
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          end_time: string
+          id?: string
+          interval_minutes: number
+          label: string
+          location_id: string
+          note?: string | null
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          end_time?: string
+          id?: string
+          interval_minutes?: number
+          label?: string
+          location_id?: string
+          note?: string | null
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_reminders_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_report_recipients: {
         Row: {
           created_at: string

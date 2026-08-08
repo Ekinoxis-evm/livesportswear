@@ -10,7 +10,71 @@ import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { AutoRefresh } from "@/components/store/auto-refresh";
 import { VersionGuard } from "@/components/store/version-guard";
 import { StoreNav } from "@/components/store/store-nav";
+import { ReminderPopup, type DueReminder } from "@/components/store/reminder-popup";
+import { dueSlot, reminderTimes } from "@/lib/reminders";
 import { Button } from "@/components/ui/button";
+import { formatInTimeZone } from "date-fns-tz";
+
+/**
+ * The one recurring chore the floor is currently behind on, or null.
+ *
+ * Lives in the layout so it covers every kiosk tab, and rides the existing 45s
+ * AutoRefresh rather than adding a poll of its own. Silent once the day is
+ * closed: the closer is cashing up, and nagging them to spray the perfume at
+ * that point is just noise.
+ */
+async function dueReminderFor(
+  locationId: string,
+  tz: string,
+  bd: string,
+): Promise<DueReminder | null> {
+  const service = createServiceClient();
+
+  const [{ data: reminders }, { data: day }] = await Promise.all([
+    service
+      .from("store_reminders")
+      .select("id, label, note, start_time, end_time, interval_minutes")
+      .eq("location_id", locationId)
+      .eq("active", true),
+    service
+      .from("floor_days")
+      .select("closed_at")
+      .eq("location_id", locationId)
+      .eq("business_date", bd)
+      .maybeSingle(),
+  ]);
+  if (!reminders?.length || day?.closed_at) return null;
+
+  const { data: acks } = await service
+    .from("store_reminder_acks")
+    .select("reminder_id, due_at")
+    .eq("business_date", bd)
+    .in(
+      "reminder_id",
+      reminders.map((r) => r.id),
+    );
+
+  const now = formatInTimeZone(new Date(), tz, "HH:mm");
+  for (const r of reminders) {
+    const done = (acks ?? [])
+      .filter((a) => a.reminder_id === r.id)
+      // Postgres hands back "HH:mm:ss"; the generated slots are "HH:mm".
+      .map((a) => a.due_at.slice(0, 5));
+    const slot = dueSlot(
+      reminderTimes({
+        startTime: r.start_time,
+        endTime: r.end_time,
+        intervalMinutes: r.interval_minutes,
+      }),
+      now,
+      done,
+    );
+    // One at a time — two popups stacked on the floor screen is a wall, not a
+    // reminder. The next one comes up on the following refresh.
+    if (slot) return { id: r.id, label: r.label, note: r.note, dueAt: slot };
+  }
+  return null;
+}
 
 export default async function StoreLayout({
   children,
@@ -39,6 +103,8 @@ export default async function StoreLayout({
     .eq("status", "counting")
     .limit(1)
     .maybeSingle();
+
+  const due = await dueReminderFor(locationId, loc?.timezone ?? "UTC", bd);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -82,6 +148,7 @@ export default async function StoreLayout({
       <StoreNav />
       <AutoRefresh />
       <VersionGuard served={served} />
+      <ReminderPopup reminder={due} />
     </div>
   );
 }

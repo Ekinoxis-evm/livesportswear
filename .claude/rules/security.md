@@ -130,6 +130,16 @@
   (`requireAdmin`). Same single-writer posture as the floor: no store-JWT RLS policy on
   `inventory_counts`/`inventory_count_items`.
 
+## Kiosk reminders (0063)
+- `store_reminders` is admin-managed (RLS admin-all, location-scoped); the acks
+  table is admin-**read** only. The kiosk clears a due slot through
+  `storeAckReminder` (`src/server/store-reminders.ts`) — a service-client action
+  gated by `requireStore()` and **re-scoped to the JWT's location**, which
+  refuses a reminder belonging to another store. No store-JWT policy exists on
+  either table; same single-writer posture as the floor and receiving.
+- The ack carries no employee and no PII — it records that a slot was cleared,
+  nothing about who.
+
 ## Client data (0042–0048)
 - `customer_origin` is **attribution only** — no name, email or phone. Shopify
   owns client identity; `country_iso` (a 2-letter code) is the one derived

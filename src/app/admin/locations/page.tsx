@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LocationFormSheet } from "@/components/location/location-form-sheet";
 import { StoreAccountPanel } from "@/components/location/store-account-panel";
 import { LocationsTable } from "@/components/admin/locations-table";
+import { RemindersCard, type ReminderRow } from "@/components/admin/reminders-card";
 import {
   Card,
   CardContent,
@@ -19,6 +20,11 @@ export default async function LocationsPage() {
     .select("*")
     .order("name");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+  const { data: reminders } = await supabase
+    .from("store_reminders")
+    .select("id, location_id, label, note, start_time, end_time, interval_minutes, active")
+    .order("start_time");
 
   return (
     <div className="flex flex-col gap-6">
@@ -68,6 +74,35 @@ export default async function LocationsPage() {
                     {l.name}
                   </span>
                   <StoreAccountPanel locationId={l.id} />
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {locations && locations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Kiosk reminders</CardTitle>
+            <CardDescription>
+              Recurring chores the floor screen interrupts for — it blocks the
+              kiosk until someone taps Done, and goes quiet once the day is closed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            {locations
+              .filter((l) => l.active)
+              .map((l) => (
+                <div key={l.id} className="flex flex-col gap-2">
+                  <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
+                    {l.name}
+                  </span>
+                  <RemindersCard
+                    locationId={l.id}
+                    reminders={((reminders ?? []) as ReminderRow[]).filter(
+                      (r) => r.location_id === l.id,
+                    )}
+                  />
                 </div>
               ))}
           </CardContent>
