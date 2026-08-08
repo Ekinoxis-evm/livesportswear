@@ -45,6 +45,15 @@
   the flow branches (sold → order/contact/thank-you, no sale → bought/knew/reasons)
   and hand-wired targets would drift. Back is disabled while `pending` so it can't
   race a submit in flight.
+- **A recurring chore interrupts; it doesn't wait to be noticed.** `ReminderPopup`
+  (`components/store/reminder-popup.tsx`, rendered from `app/store/layout.tsx` so
+  it covers every kiosk tab) is a Dialog held `open` with `onOpenChange` ignored
+  — outside tap, Escape and swipe all do nothing, which is the point. Only **Done**
+  clears it (writes the ack) and **Remind me in 10 minutes** hides it. The snooze
+  is client state that writes nothing and dies on reload: a chore you can
+  permanently dismiss without doing isn't a reminder. It rides the existing 45s
+  `AutoRefresh` rather than polling. One popup at a time — two stacked on a floor
+  screen is a wall.
 - **Check kiosk layout at 768px, not a desktop window.** The store shell is
   `max-w-3xl` (`app/store/layout.tsx`), so anything gated at `lg:` (1024px) can
   never render there. Two `lg:`-only columns shipped in 0061 and were invisible on
