@@ -143,8 +143,14 @@ layer (counts), not money.
   `return_type`. `unsure` is a real answer, deliberately distinct from NULL: a
   rep who never got to ask must not be forced into a yes/no. NULL = not
   captured (pre-0061 rows, and every sold / return / re-take row). Required by
-  `finishSchema` (`src/lib/finish-schema.ts`) on the no-sale walk-in path only;
-  shown as two `lg:`-only columns on the kiosk attendance list.
+  `finishSchema` (`src/lib/finish-schema.ts`) on the no-sale walk-in path only.
+  Asked **one question per screen**, the tap being the answer (`finish-dialog.tsx`).
+  Surfaced on the kiosk attendance row **under the result**, plus sortable
+  `lg:` columns on wide screens, and as two columns on the day report's CSV +
+  XLSX client-events sheets. *(Those `lg:`-only columns were the ONLY surface
+  until 2026-08-08 — and the kiosk is capped at `max-w-3xl` (768px), so on the
+  actual floor screen they could never render and the answers were invisible.
+  If you add a kiosk column, check it against 768px, not a desktop window.)*
 - `served_seconds int` (added 0056) — how long the client was attended (taken →
   finished). Captured from the per-client start stamp popped off
   `floor_checkins.attending_started_at` at finish; null for pre-0056 rows and

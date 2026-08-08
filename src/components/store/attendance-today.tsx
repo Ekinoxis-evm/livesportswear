@@ -146,6 +146,29 @@ export function AttendanceToday({
                         )}
                         {r.gotContact && <Badge variant="secondary">contact</Badge>}
                       </div>
+                      {/* The kiosk is capped at max-w-3xl (768px), so the two
+                          `lg:` columns below can never render there. On the
+                          floor screen the answers ride the result they explain. */}
+                      {(r.boughtBefore || r.knewBrand) && (
+                        <div className="text-muted-foreground mt-1 flex flex-col text-xs lg:hidden">
+                          {r.boughtBefore && (
+                            <span>
+                              bought before:{" "}
+                              <span className="text-foreground">
+                                {ANSWER_LABEL[r.boughtBefore] ?? r.boughtBefore}
+                              </span>
+                            </span>
+                          )}
+                          {r.knewBrand && (
+                            <span>
+                              knew LIVE!:{" "}
+                              <span className="text-foreground">
+                                {ANSWER_LABEL[r.knewBrand] ?? r.knewBrand}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="text-muted-foreground hidden py-2 text-right tabular-nums sm:table-cell">
                       {formatDuration(r.servedSeconds)}
