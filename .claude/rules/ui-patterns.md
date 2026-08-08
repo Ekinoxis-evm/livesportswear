@@ -35,6 +35,21 @@
   Exchange is amber, Re-take client is violet: one starts a new interaction, the
   other folds into an existing one, and at floor speed the words are easy to
   confuse.
+- **The kiosk finish flow** (`components/store/finish-dialog.tsx`) is a branching
+  step machine, not a `Wizard` — each step owns its own action. Two rules hold it
+  together: **one question per screen, and the tap IS the answer** (no Continue to
+  confirm — the rep is standing next to a client who is leaving), and **a `Back`
+  at the bottom of every step but the first**. Those two go together: tap-to-advance
+  is only safe because a mis-tap is one tap to undo. Back is a **history stack**
+  (`useState<Step[]>`, push to go / pop to return), not a per-step back target —
+  the flow branches (sold → order/contact/thank-you, no sale → bought/knew/reasons)
+  and hand-wired targets would drift. Back is disabled while `pending` so it can't
+  race a submit in flight.
+- **Check kiosk layout at 768px, not a desktop window.** The store shell is
+  `max-w-3xl` (`app/store/layout.tsx`), so anything gated at `lg:` (1024px) can
+  never render there. Two `lg:`-only columns shipped in 0061 and were invisible on
+  the floor for a fortnight. On the kiosk, prefer stacking the detail **under** the
+  cell it explains over adding a column.
 - **Ranked employee sales**: ALWAYS the sales-period module — `PeriodPills`
   (Today · Week · Month · Custom; Custom is a pill that reveals
   `DateRangeForm`) + `SalesRankTable` (`# · Employee (· Store) · Value ·

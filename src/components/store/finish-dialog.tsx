@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Check,
+  ChevronLeft,
   Receipt,
   Repeat,
   Search,
@@ -56,6 +57,35 @@ export type FinishTarget = {
   kind: "walkin" | "return";
 };
 
+type Step = "choice" | "order" | "contact" | "thankyou" | "bought" | "knew" | "reasons";
+
+const ANSWER_LABEL: Record<Answer, string> = {
+  yes: "Yes",
+  no: "No",
+  unsure: "Not sure",
+};
+
+/** The no-sale path: bought → knew → reasons. */
+const NO_SALE_STEPS: Step[] = ["bought", "knew", "reasons"];
+
+/**
+ * Bottom-of-dialog escape hatch, on every step but the first. Disabled while a
+ * submit is in flight so it can't race the finish that's already on its way.
+ */
+function BackBar({ onBack, disabled }: { onBack: () => void; disabled: boolean }) {
+  return (
+    <Button
+      size="lg"
+      variant="ghost"
+      className="text-muted-foreground h-12 justify-center"
+      disabled={disabled}
+      onClick={onBack}
+    >
+      <ChevronLeft className="size-4" /> Back
+    </Button>
+  );
+}
+
 export function FinishDialog({
   target,
   pending,
@@ -97,9 +127,14 @@ function FinishSteps({
   pending: boolean;
   onSubmit: (employeeId: string, input: FinishInput) => void;
 }) {
-  const [step, setStep] = useState<
-    "choice" | "order" | "contact" | "thankyou" | "profile" | "reasons"
-  >("choice");
+  // A STACK, not a single step: the flow branches (sold → order/contact/thankyou,
+  // no sale → bought/knew/reasons), so "go back one" is a pop rather than a
+  // back-target hand-wired per step. The first entry is never popped.
+  const [history, setHistory] = useState<Step[]>(["choice"]);
+  const step = history[history.length - 1];
+  const go = (next: Step) => setHistory((h) => [...h, next]);
+  const back = () => setHistory((h) => (h.length > 1 ? h.slice(0, -1) : h));
+  const canGoBack = history.length > 1;
   const [boughtBefore, setBoughtBefore] = useState<Answer | null>(null);
   const [knewBrand, setKnewBrand] = useState<Answer | null>(null);
   const [orders, setOrders] = useState<RecentOrder[] | null>(null);
@@ -221,7 +256,7 @@ function FinishSteps({
             variant="outline"
             className="border-destructive/40 text-destructive h-14 flex-1"
             disabled={pending}
-            onClick={() => setStep("profile")}
+            onClick={() => go("bought")}
           >
             <X className="mr-1.5 size-5" /> No sale
           </Button>
@@ -230,7 +265,7 @@ function FinishSteps({
             className="h-14 flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
             disabled={pending}
             onClick={() => {
-              setStep("order");
+              go("order");
               // Fetched on demand — never on the 45s refresh loop.
               void storeRecentOrders().then((res) => {
                 setOrders(res.ok ? (res.data ?? []) : []);
@@ -310,7 +345,7 @@ function FinishSteps({
           size="lg"
           className="h-14 justify-center gap-2.5"
           disabled={pending}
-          onClick={() => setStep("contact")}
+          onClick={() => go("contact")}
         >
           {selected.length === 0 ? (
             <>
@@ -320,6 +355,7 @@ function FinishSteps({
             <>Continue</>
           )}
         </Button>
+        <BackBar onBack={back} disabled={pending} />
       </>
     );
   }
@@ -348,7 +384,7 @@ function FinishSteps({
     // flushed yet for the no-customer branch that submits immediately.)
     const proceed = (got: boolean) => {
       setGotContact(got);
-      if (primary?.customer) setStep("thankyou");
+      if (primary?.customer) go("thankyou");
       else finishSold(got);
     };
     return (
@@ -383,6 +419,7 @@ function FinishSteps({
             Yes
           </Button>
         </div>
+        <BackBar onBack={back} disabled={pending} />
       </>
     );
   }
@@ -441,34 +478,51 @@ function FinishSteps({
         >
           Skip — just record the sale
         </Button>
+        <BackBar onBack={back} disabled={pending} />
       </>
     );
   }
 
   // Asked BEFORE the reason: a reason chip alone can't tell a returning client
   // who couldn't find her size from a stranger who'd never heard of the brand.
-  if (step === "profile") {
-    const ANSWER_LABEL: Record<Answer, string> = {
-      yes: "Yes",
-      no: "No",
-      unsure: "Not sure",
+  // ONE question per screen, and the tap IS the answer — at floor speed the rep
+  // is standing next to a client who is leaving. Back makes a mis-tap cheap.
+  if (step === "bought" || step === "knew") {
+    const isBought = step === "bought";
+    const value = isBought ? boughtBefore : knewBrand;
+    const choose = (a: Answer) => {
+      if (isBought) {
+        setBoughtBefore(a);
+        go("knew");
+      } else {
+        setKnewBrand(a);
+        go("reasons");
+      }
     };
-    const group = (
-      label: string,
-      value: Answer | null,
-      set: (a: Answer) => void,
-    ) => (
-      <div className="flex flex-col gap-1.5">
-        <Label>{label}</Label>
-        <div className="flex gap-2">
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>
+            {isBought
+              ? "Had they bought from LIVE! before?"
+              : "Did they already know LIVE!?"}
+          </DialogTitle>
+          <DialogDescription>
+            {target.name} · step {NO_SALE_STEPS.indexOf(step) + 1} of{" "}
+            {NO_SALE_STEPS.length} — &ldquo;Not sure&rdquo; is a real answer, better
+            than a guess.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-2">
           {ANSWERS.map((a) => (
             <button
               key={a}
               type="button"
               disabled={pending}
-              onClick={() => set(a)}
+              onClick={() => choose(a)}
               className={cn(
-                "h-14 flex-1 rounded-md border text-sm font-medium transition-colors",
+                "h-16 rounded-md border text-base font-medium transition-colors",
                 value === a
                   ? "border-primary bg-primary text-primary-foreground"
                   : "hover:bg-muted",
@@ -478,31 +532,8 @@ function FinishSteps({
             </button>
           ))}
         </div>
-      </div>
-    );
-    return (
-      <>
-        <DialogHeader>
-          <DialogTitle>{target.name} — about this client</DialogTitle>
-          <DialogDescription>
-            Both answers help read the reason that follows. &ldquo;Not sure&rdquo; is
-            fine — better than a guess.
-          </DialogDescription>
-        </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          {group("Had they bought from LIVE! before?", boughtBefore, setBoughtBefore)}
-          {group("Did they already know LIVE!?", knewBrand, setKnewBrand)}
-        </div>
-
-        <Button
-          size="lg"
-          className="h-12"
-          disabled={pending || boughtBefore === null || knewBrand === null}
-          onClick={() => setStep("reasons")}
-        >
-          Continue
-        </Button>
+        <BackBar onBack={back} disabled={pending} />
       </>
     );
   }
@@ -510,8 +541,11 @@ function FinishSteps({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{target.name} — why no sale?</DialogTitle>
-        <DialogDescription>Pick at least one reason.</DialogDescription>
+        <DialogTitle>Why no sale?</DialogTitle>
+        <DialogDescription>
+          {target.name} · step {NO_SALE_STEPS.indexOf("reasons") + 1} of{" "}
+          {NO_SALE_STEPS.length} — pick at least one reason.
+        </DialogDescription>
       </DialogHeader>
 
       <div className="flex flex-wrap gap-2">
@@ -622,6 +656,7 @@ function FinishSteps({
       >
         Log no sale
       </Button>
+      {canGoBack && <BackBar onBack={back} disabled={pending} />}
     </>
   );
 }

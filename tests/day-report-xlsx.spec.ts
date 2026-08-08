@@ -75,4 +75,30 @@ describe("buildDayReportXlsx", () => {
     const events = wb.getWorksheet("Client events")!;
     expect(events.getRow(2).getCell(4).value).toBe("exchange"); // return type surfaced
   });
+
+  it("carries the two no-sale answers on the client-events sheet", async () => {
+    const buf = await buildDayReportXlsx({
+      ...input,
+      events: [
+        {
+          employeeName: "Veriana",
+          attended_at: "2026-07-20T16:00:00Z",
+          kind: "walkin",
+          sold: false,
+          got_contact: false,
+          reasons: ["No size"],
+          boughtBefore: "no",
+          knewBrand: "yes",
+        },
+      ],
+    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf as unknown as Parameters<typeof wb.xlsx.load>[0]);
+    const events = wb.getWorksheet("Client events")!;
+
+    expect(events.getRow(1).getCell(10).value).toBe("Bought before");
+    expect(events.getRow(1).getCell(11).value).toBe("Knew brand");
+    expect(events.getRow(2).getCell(10).value).toBe("no");
+    expect(events.getRow(2).getCell(11).value).toBe("yes");
+  });
 });

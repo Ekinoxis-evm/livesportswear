@@ -17,6 +17,10 @@ export type ReportEvent = {
   sold: boolean;
   got_contact: boolean;
   reasons?: string[] | null;
+  // Asked before the reason on the no-sale walk-in path (0061); null on sold
+  // rows, returns and pre-0061 rows. Report-only labels — no metric reads them.
+  boughtBefore?: string | null; // yes | no | unsure
+  knewBrand?: string | null;
   products?: { title: string; sku?: string | null }[] | null;
   note?: string | null;
   orderName?: string | null; // primary linked Shopify order, e.g. "#1234"
@@ -93,6 +97,8 @@ export function buildDayReportCsv({
     orderLabel(e),
     e.customerName ?? "",
     (e.reasons ?? []).join("; "),
+    e.boughtBefore ?? "",
+    e.knewBrand ?? "",
     (e.products ?? []).map(productLabel).join("; "),
     e.note ?? "",
     e.got_contact ? "yes" : "no",
@@ -117,7 +123,7 @@ export function buildDayReportCsv({
     [`Daily Report ${businessDate}`],
     [],
     ["Client events"],
-    ["Time", "Employee", "Kind", "Return type", "Result", "Order", "Customer", "Reasons", "Products", "Note", "Got contact"],
+    ["Time", "Employee", "Kind", "Return type", "Result", "Order", "Customer", "Reasons", "Bought before", "Knew brand", "Products", "Note", "Got contact"],
     ...eventRows,
     [],
     ["Check-ins"],
