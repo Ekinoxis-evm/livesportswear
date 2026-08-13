@@ -64,7 +64,9 @@ CI runs the same. If you can't get them green, hand back to the user with a clea
 
 ## Applying migrations
 
-Migration files are numbered (`0001..NNNN`), but **`supabase db push` does not work here** — the remote history uses timestamp IDs it can't reconcile with the numbered files. Apply to prod via the Supabase **Management API query endpoint** (`POST /v1/projects/{ref}/database/query`); the exact `curl` is in `.claude/commands/db-migrate.md`. Leave the actual apply to the operator (the Supabase MCP is read-only and DB writes are permission-gated).
+Migration files are numbered (`0001..NNNN`), but **`supabase db push` does not work here** — the remote history uses timestamp IDs it can't reconcile with the numbered files. Apply to prod with **`.claude/scripts/db-apply.sh <name>`** (`--check` prints applied vs. on-disk); it wraps the Supabase Management API query endpoint and also writes the ledger row the API-applied migrations would otherwise skip. Never hand-roll the `curl` — see `.claude/commands/db-migrate.md`. **Ask the operator before applying**: the Supabase MCP is read-only and DB writes are permission-gated, so an apply is always an explicit, per-migration decision.
+
+**Schema leads code.** Apply the migration *before* the code that depends on it ships — a column that doesn't exist yet turns into a failing insert in production, not a build error.
 
 ## Never do
 
