@@ -46,6 +46,9 @@ pnpm supabase login
 pnpm supabase link --project-ref <YOUR_PROJECT_REF>
 
 # 4. Push schema migrations to your Supabase project
+#    NOTE: this works for a FRESH project only. On the live project the remote
+#    history uses timestamp IDs while these files are numbered 0001..NNNN, so
+#    the CLI can't reconcile them — apply there with .claude/scripts/db-apply.sh
 pnpm supabase db push
 
 # 5. Generate the TypeScript types from your schema
@@ -115,11 +118,20 @@ For Vercel deploys, set the same variables in **Vercel → Project → Settings 
 
 This project ships with [`.mcp.json`](./.mcp.json) configured for:
 
-- **Supabase MCP** — schema introspection, migration listing
-- **Vercel MCP** — deployments, logs, env
-- **Resend MCP** — send test emails from your AI agent
+- **Supabase MCP** — schema introspection, migration listing (read-only)
+- **Vercel MCP** — deployments, logs, env (hosted, OAuth)
+- **Resend MCP** — email + domain introspection, and sending (hosted, OAuth)
 
-These activate inside Claude Code (or any MCP-aware client) when the relevant env vars are set in your shell or `.env.local`.
+The two hosted servers authenticate in the browser: run `/mcp` in Claude Code and
+pick **Authenticate**. No API key goes in any config file.
+
+The Supabase entry expands `${SUPABASE_ACCESS_TOKEN}` / `${SUPABASE_PROJECT_REF}`
+from **the environment Claude Code was launched with** — *not* from `.env.local`.
+If it won't connect, export them in the shell first (or launch via a wrapper that
+sources `.env.local`); a keyless server fails at the handshake, not at first use.
+
+⚠️ The Resend MCP sends **real** email. It does not honour `RESEND_DRY_RUN` —
+that guard only covers the app's own `sendSafe` (`src/lib/resend.ts`).
 
 ## Deployment
 

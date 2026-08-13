@@ -7,9 +7,13 @@
 ## Coverage gates
 - `src/lib/scheduling/*` MUST stay at 100% line coverage. CI fails below.
 - The other pure domain libs (rewards, floor-queue/state, breaks, commission,
-  conversion, attendance, monthly-series, shopify-range) each have their own
-  spec file and are expected to keep full behavioral coverage, though only the
-  scheduling gate is CI-enforced.
+  conversion, attendance, monthly-series, shopify-range, reminders, report-note)
+  each have their own spec file and are expected to keep full behavioral
+  coverage, though only the scheduling gate is CI-enforced.
+- **New behaviour goes in a pure lib with a spec, not in the component.** The
+  rule of thumb: if you'd have to be standing in the store at 4pm to check it,
+  it belongs in `src/lib`. `reminders.ts` (is a chore due?) and `report-note.ts`
+  (what counts as a note?) exist for exactly that reason.
 
 ## Test types
 - **Pure unit tests** (default) for `lib/scheduling/*`. No mocks needed — inputs are plain objects.

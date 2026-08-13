@@ -213,15 +213,28 @@
   stores); a scoped admin keeps `"location"` + its rows. Master-only
   (`requireMasterAdmin`), so only a master can mint another master — the one way
   to create masters from the UI (previously out-of-band only).
-- **Credential email delivery caveat:** Resend on the default
-  `onboarding@resend.dev` sender only delivers to the Resend account owner.
-  Verify the company domain in Resend and point `SENDER_EMAIL_ADDRESS` at it for
-  staff-wide delivery; until then the admin hands the password over from the UI.
+- **Sender domain — resolved.** These notes used to warn that mail only reached
+  the Resend account owner because the sender was the default
+  `onboarding@resend.dev`. That stopped being true on 2026-07-21: **`ekinoxis.xyz`
+  is verified** (sending enabled) and `SENDER_EMAIL_ADDRESS` is
+  `reports@ekinoxis.xyz`. Confirmed live 2026-08-07 — a close-day report
+  delivered to seven real staff addresses across `liveactivewear.com` and
+  `liveoficial.com.br`. Credential emails reach staff directly; the admin no
+  longer has to hand the password over by hand (they still can, from Settings).
+- **Deliverability is shared, and something else is spending it.** Other projects
+  send from the same `ekinoxis.xyz` domain, and as of 2026-08-07 a daily
+  `SWRFM Daily` job was **hard-bouncing every day** (recipients
+  `hola@ekinoxis.xyz` — the domain has receiving DISABLED — and
+  `ruben@swrfmarkets.com`, plural, where the address that delivers is
+  `swrfmarket.com`). Repeated hard bounces degrade the domain's reputation for
+  **every** sender on it, including this store's daily report. That job is in
+  another repo; fixing it is not this codebase's job, but knowing it can silently
+  push the store's report into spam is.
 - **Resend is for app notifications only** — schedule published, daily Close-Day
   report, time-off decision (`src/lib/resend.ts` `sendSafe`, dry-run aware).
-  Delivery to arbitrary recipients requires a **verified domain** sender
-  (`SENDER_EMAIL_ADDRESS`); the default `onboarding@resend.dev` only reaches the
-  Resend account owner. `sendSafe` logs the masked send outcome.
+  `sendSafe` logs the masked send outcome. Note the **Resend MCP is a separate
+  path that does NOT honour `RESEND_DRY_RUN`** — it sends real mail through the
+  live account.
 
 ## Known v1 limitations (harden before changing these assumptions)
 - **Public endpoints are not rate-limited.** `submitTimeOff` and the `/s/[token]` routes rely on the 32-byte token's unguessability and bounded date ranges. Add a Vercel Firewall / token-bucket rule before exposing widely.
