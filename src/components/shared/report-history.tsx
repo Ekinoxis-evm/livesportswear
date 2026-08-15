@@ -1,0 +1,149 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { AlertTriangle, Check, Send } from "lucide-react";
+import type { ReportHistoryRow } from "@/lib/report-history";
+import type { ActionResult } from "@/server/shared";
+import { ScrollTable } from "@/components/shared/scroll-table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { formatMoney } from "@/lib/commission";
+import { formatPct } from "@/lib/conversion";
+import { weekdayName } from "@/lib/weekdays";
+import { shortDate } from "@/lib/format-date";
+
+/**
+ * Which days went out, and a way to send the ones that didn't.
+ *
+ * The column that matters is the LAST one: a day with floor activity and no
+ * send is called out, because that is the state that hid for five days in
+ * August 2026 with nothing in the app able to show it.
+ *
+ * Shared by the kiosk close-day tab and admin Performance→Daily; each binds its
+ * own `resend` action, the same way `RecipientsManager` does.
+ */
+export function ReportHistory({
+  rows,
+  currency,
+  resend,
+  density = "compact",
+}: {
+  rows: ReportHistoryRow[];
+  currency: string;
+  resend: (businessDate: string) => Promise<ActionResult<{ sentTo: number }>>;
+  density?: "compact" | "comfortable";
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const send = (businessDate: string) => {
+    setBusy(businessDate);
+    start(async () => {
+      const res = await resend(businessDate);
+      setBusy(null);
+      if (!res.ok) {
+        toast.error(res.error ?? "The report couldn't be sent.");
+        return;
+      }
+      toast.success(
+        `Report for ${shortDate(businessDate)} sent to ${res.data?.sentTo ?? 0} recipient${
+          res.data?.sentTo === 1 ? "" : "s"
+        }.`,
+      );
+      router.refresh();
+    });
+  };
+
+  const missing = rows.filter((r) => r.missing).length;
+
+  if (rows.length === 0) {
+    return <p className="text-muted-foreground text-sm">No days to show yet.</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {missing > 0 && (
+        <p className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="size-4 shrink-0" />
+          {missing} day{missing === 1 ? "" : "s"} worked with no report sent.
+        </p>
+      )}
+
+      <ScrollTable density={density} maxHeight="24rem">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-muted-foreground text-left">
+              <th className="py-2 font-medium">Day</th>
+              <th className="py-2 text-right font-medium">Attended</th>
+              <th className="hidden py-2 text-right font-medium sm:table-cell">Sold</th>
+              <th className="hidden py-2 text-right font-medium sm:table-cell">
+                Conversion
+              </th>
+              <th className="py-2 text-right font-medium">Net sales</th>
+              <th className="py-2 font-medium">Report</th>
+              <th className="py-2" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.businessDate} className="border-b last:border-0">
+                <td className="py-2 font-medium whitespace-nowrap">
+                  {weekdayName(r.businessDate).slice(0, 3)} {shortDate(r.businessDate)}
+                </td>
+                <td className="py-2 text-right tabular-nums">{r.attended}</td>
+                <td className="hidden py-2 text-right tabular-nums sm:table-cell">
+                  {r.sold}
+                </td>
+                <td className="hidden py-2 text-right tabular-nums sm:table-cell">
+                  {r.conversion === null ? "—" : formatPct(r.conversion)}
+                </td>
+                <td className="py-2 text-right tabular-nums">
+                  {r.netSales === null
+                    ? "—"
+                    : formatMoney(r.netSales, r.currency ?? currency)}
+                </td>
+                <td className="py-2">
+                  {r.missing ? (
+                    <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
+                      not sent
+                    </Badge>
+                  ) : r.sendCount > 0 ? (
+                    <span className="text-muted-foreground inline-flex items-center gap-1 whitespace-nowrap">
+                      <Check className="size-3.5 shrink-0 text-emerald-600" />
+                      {r.sendCount > 1 ? `sent ${r.sendCount}×` : "sent"}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="py-2 text-right">
+                  <Button
+                    size="sm"
+                    variant={r.missing ? "default" : "outline"}
+                    disabled={pending}
+                    onClick={() => send(r.businessDate)}
+                  >
+                    <Send className="size-3.5" />
+                    {busy === r.businessDate
+                      ? "Sending…"
+                      : r.sendCount > 0
+                        ? "Resend"
+                        : "Send"}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollTable>
+
+      <p className="text-muted-foreground text-xs">
+        Sending re-reads that day from Shopify, so a refund settled since can shift
+        a figure. Reports go only to the store&apos;s saved recipients.
+      </p>
+    </div>
+  );
+}

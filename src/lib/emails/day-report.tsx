@@ -31,6 +31,8 @@ export type DayReportEmailProps = {
   businessDate: string; // YYYY-MM-DD
   closedByName: string;
   note?: string | null; // the closer's own words, already cleaned (cleanNote)
+  /** Formatted date this was re-sent, when it arrives later than its own day. */
+  resentOn?: string | null;
   attended: number;
   sold: number;
   contacts: number;
@@ -128,6 +130,7 @@ export function DayReportEmail({
   businessDate,
   closedByName,
   note,
+  resentOn,
   attended,
   sold,
   contacts,
@@ -194,6 +197,24 @@ export function DayReportEmail({
           >
             {businessDate} · closed by {closedByName}
           </Text>
+
+          {/* A report for the 10th landing on the 15th must say so, or it reads
+              as one that was always there. */}
+          {resentOn && (
+            <Text
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                color: accent,
+                backgroundColor: strip,
+                borderRadius: "6px",
+                padding: "8px 10px",
+                margin: "0 0 20px",
+              }}
+            >
+              Re-sent on {resentOn} — this report covers {businessDate}, not today.
+            </Text>
+          )}
 
           {note && (
             <Section

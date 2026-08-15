@@ -24,6 +24,7 @@ import {
   closeDayFor,
   closeDayDraftFor,
   sendTestReportFor,
+  sendReportForDate,
   type CloseDayDraft,
 } from "@/server/conversion-core";
 import { isShopifyConfigured } from "@/lib/shopify-config";
@@ -1041,4 +1042,23 @@ export async function storeSendTestReport(
 ): Promise<ActionResult<{ sentTo: number }>> {
   const { locationId } = await storeCtx();
   return sendTestReportFor(locationId, onlyRecipients, signatories, note);
+}
+
+/**
+ * Re-send one day's report from the kiosk — the recovery path for a day whose
+ * report never went out.
+ *
+ * Deliberately NOT gated on being on shift + checked in, unlike closing: that
+ * requirement is exactly what left five days unrecoverable in August 2026. It
+ * writes no new numbers and can only reach the store's stored recipient list.
+ */
+export async function storeResendReport(
+  businessDate: string,
+): Promise<ActionResult<{ sentTo: number }>> {
+  const { locationId, bd } = await storeCtx();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate))
+    return { ok: false, error: "Invalid date." };
+  if (businessDate > bd) return { ok: false, error: "That day hasn't happened yet." };
+
+  return sendReportForDate(locationId, businessDate, { today: bd });
 }

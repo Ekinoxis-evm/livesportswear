@@ -320,6 +320,31 @@ Admin-editable client messages, per location + language. Two kinds: `thank_you`
   `whatsappLink(phone, text)`. The `wa.me` URL carries the phone to the kiosk
   for that one send only — never stored, never logged.
 
+### `store_report_sends` (added 0065)
+One row per daily-report send — the record of which days actually went out.
+- `id`, `location_id fk cascade`, `business_date`, `sent_at`,
+  `kind ('close'|'resend')`, `recipient_count`, `sent_by fk employees (null)`.
+- index `(location_id, business_date desc)`; RLS admin-read via
+  `admin_can_access_location`, writes only through the sending server actions.
+- **Why it isn't `store_day_closes`:** that answers "was this day closed", one
+  row, written once, and says nothing at all about a day never closed. Between
+  **2026-08-10 and 08-14** the week's schedule sat in `draft`, so
+  `closerEligibility` found nobody eligible, the kiosk button stayed disabled,
+  and **five days of reports silently never went out** — with nothing in the app
+  able to show it. This log is what makes a missing day visible.
+- `sent_by` is null for an admin send and for a backfill (admins have no
+  `employees` row; a late send has no on-floor closer).
+- **`buildDayReportData(locationId, forDate?)` is no longer "today"** — it takes
+  an optional business date. It used to derive today internally, which is why
+  those five days could not be recovered. A rebuilt past day reads Shopify
+  **live** for that date, so a figure can shift after the fact (a refund is
+  dated to the original order); it is a re-derivation, not a frozen snapshot.
+- **Resending is not closing.** `sendReportForDate` has NO eligibility gate —
+  requiring a published shift is what caused the outage — and it backfills the
+  `store_day_closes` row when the day has none (`closed_by` null: recorded late,
+  not pretending otherwise). `closeDayFor` keeps its eligibility rule and its
+  already-closed guard.
+
 ### `store_reminders` + `store_reminder_acks` (added 0063)
 Recurring chores the kiosk **interrupts** for — the first is spraying the store
 perfume. The floor screen shows a blocking popup (`reminder-popup.tsx`) until

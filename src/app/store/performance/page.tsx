@@ -41,7 +41,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ReportActions, type CloserEntry } from "@/components/store/report-actions";
+import {
+  ReportActions,
+  type CloserEntry,
+  type BlockedReason,
+} from "@/components/store/report-actions";
+import { StoreReportHistoryCard } from "@/components/store/report-history-card";
+import { reportHistoryFor } from "@/server/conversion-core";
 import { SyncSalesButton } from "@/components/shared/sync-sales-button";
 import { storeSyncSales } from "@/server/store-floor";
 import { resolveTiers, asTiers, commissionFor } from "@/lib/commission";
@@ -104,11 +110,12 @@ export default async function StorePerformancePage({
       .eq("location_id", locationId)
       .eq("business_date", bd)
       .maybeSingle(),
+    // Every shift today, published or not — the status is what tells the floor
+    // WHY closing is unavailable, and a draft week is invisible otherwise.
     service
       .from("shifts")
       .select("employee_id, schedules!inner(status, location_id)")
       .eq("date", bd)
-      .eq("schedules.status", "published")
       .eq("schedules.location_id", locationId),
     service
       .from("monthly_sales")
@@ -162,10 +169,20 @@ export default async function StorePerformancePage({
   const tableRows = [...perPerson, ...zeroRows];
 
   const onFloor = new Set(checkins.filter((c) => !c.left_at).map((c) => c.employee_id));
-  const onShift = new Set((shiftRows ?? []).map((s) => s.employee_id));
+  const allShifts = shiftRows ?? [];
+  const publishedShifts = allShifts.filter((s) => s.schedules?.status === "published");
+  const onShift = new Set(publishedShifts.map((s) => s.employee_id));
   const closers: CloserEntry[] = roster
     .filter((e) => onShift.has(e.id) && onFloor.has(e.id))
     .map((e) => ({ id: e.id, name: e.name }));
+
+  // Say which of the three things is actually missing, not a catch-all.
+  const blockedReason: BlockedReason =
+    allShifts.length === 0
+      ? "nobody-scheduled"
+      : publishedShifts.length === 0
+        ? "unpublished"
+        : "nobody-in";
 
   // Kick off the independent Shopify reads together — first paint waits on the
   // slowest, not the sum (all 60s-cached, so the 45s auto-refresh stays cheap).
@@ -174,12 +191,14 @@ export default async function StorePerformancePage({
     staffBounds && isShopifyConfigured()
       ? customRangeInTz(staffBounds.from, staffBounds.to, tz)
       : null;
-  const [daySales, dayOrders, staffEntries] = await Promise.all([
+  const [daySales, dayOrders, staffEntries, history] = await Promise.all([
     getDaySalesCached(bd, tz),
     getDayOrdersCached(bd, tz),
     staffRange
       ? getStaffSalesCached(staffRange.start, staffRange.endExclusive)
       : Promise.resolve(null),
+    // DB-only, so it rides along without adding a Shopify round-trip.
+    reportHistoryFor(locationId),
   ]);
   const currency = goalRow?.currency ?? daySales?.currency ?? "USD";
 
@@ -498,7 +517,24 @@ export default async function StorePerformancePage({
       <Card>
         <CardContent className="flex flex-col gap-3 py-5">
           <span className="text-sm font-medium">End of day</span>
-          <ReportActions closers={closers} alreadyClosed={Boolean(closeRow)} />
+          <ReportActions
+            closers={closers}
+            alreadyClosed={Boolean(closeRow)}
+            blockedReason={blockedReason}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Reports sent</CardTitle>
+          <CardDescription>
+            The last two weeks. Any day worked without a report can be sent from
+            here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StoreReportHistoryCard rows={history} currency={currency} />
         </CardContent>
       </Card>
       </TabsContent>

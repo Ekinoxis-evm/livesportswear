@@ -130,6 +130,19 @@
   (`requireAdmin`). Same single-writer posture as the floor: no store-JWT RLS policy on
   `inventory_counts`/`inventory_count_items`.
 
+## Report resend (0065)
+- `storeResendReport` (kiosk) is `requireStore()` + the **JWT's** location, and
+  rejects a future date; `resendReport` (admin) is `requireAdmin` + the
+  `accessibleLocationIds` check. Neither takes a destination — recipients always
+  come from the stored `store_report_recipients` list, so no caller can mail the
+  day's numbers somewhere it invented.
+- **Deliberately NOT gated on being on shift + checked in**, unlike closing.
+  That gate is what made five days of reports unrecoverable in August 2026, and
+  a resend writes no new figures — it re-derives a day that already happened and
+  mails a list the store already approved.
+- A resend re-reads Shopify for that date, so it can surface money data for a
+  past day; that is the same data the admin/kiosk already display for it.
+
 ## Kiosk reminders (0063)
 - `store_reminders` is admin-managed (RLS admin-all, location-scoped); the acks
   table is admin-**read** only. The kiosk clears a due slot through

@@ -18,9 +18,12 @@ import type { SalesBreakdown } from "@/lib/sales-breakdown";
 import { SalesBreakdownSubline } from "@/components/shared/sales-breakdown-view";
 import { listReportRecipients } from "@/server/report-recipients";
 import { ReportRecipientsCard } from "@/components/admin/report-recipients-card";
+import { ReportHistoryCard } from "@/components/admin/report-history-card";
+import { reportHistoryFor } from "@/server/conversion-core";
 import { cn } from "@/lib/utils";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -205,7 +208,10 @@ export default async function PerformancePage({
     }
   }
 
-  const recipients = await listReportRecipients({ location_id: location.id });
+  const [recipients, history] = await Promise.all([
+    listReportRecipients({ location_id: location.id }),
+    reportHistoryFor(location.id),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -449,6 +455,24 @@ export default async function PerformancePage({
           recipients={recipients.data.recipients}
         />
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Reports sent</CardTitle>
+          <CardDescription>
+            The last two weeks for {location.name}. A day worked with no report
+            can be sent from here — it re-derives that day and mails the saved
+            recipients.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ReportHistoryCard
+            locationId={location.id}
+            rows={history}
+            currency={currency}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

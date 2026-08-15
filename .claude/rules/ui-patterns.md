@@ -54,6 +54,15 @@
   permanently dismiss without doing isn't a reminder. It rides the existing 45s
   `AutoRefresh` rather than polling. One popup at a time — two stacked on a floor
   screen is a wall.
+- **A disabled action must name the cause that is actually blocking it.** The
+  kiosk close-day buttons showed one catch-all line — "Needs someone on shift &
+  checked in" — for three different causes. When a week sat unpublished in
+  August 2026 the floor read that, re-checked everyone in (the one thing that
+  was already fine), and **five days of reports were lost** before anyone
+  diagnosed it. `ReportActions` now takes a `BlockedReason`
+  (`unpublished` | `nobody-in` | `nobody-scheduled`) and says which. If a
+  message can be wrong in a way that sends someone to fix the wrong thing, it is
+  worse than no message.
 - **Check kiosk layout at 768px, not a desktop window.** The store shell is
   `max-w-3xl` (`app/store/layout.tsx`), so anything gated at `lg:` (1024px) can
   never render there. Two `lg:`-only columns shipped in 0061 and were invisible on
