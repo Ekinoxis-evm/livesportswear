@@ -26,6 +26,11 @@ import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
 import { DayReportEmail, type DayReportRow } from "@/lib/emails/day-report";
 import { joinNames } from "@/lib/format-list";
+import {
+  buildReportHistory,
+  type DayCounts,
+  type ReportHistoryRow,
+} from "@/lib/report-history";
 import type { ActionResult } from "@/server/shared";
 
 /**
@@ -52,6 +57,29 @@ async function reportRecipients(locationId: string): Promise<string[]> {
   const emails = await managedReportEmails(locationId);
   const fallback = process.env.STORE_REPORT_EMAIL;
   return emails.length ? emails : fallback ? [fallback] : [];
+}
+
+/**
+ * Record that a report went out. Best-effort: a send that reached recipients
+ * must not be reported as a failure because the log write hiccuped — the email
+ * is the real artefact, this is the receipt.
+ */
+async function logReportSend(
+  locationId: string,
+  bd: string,
+  kind: "close" | "resend",
+  recipientCount: number,
+  sentBy?: string | null,
+): Promise<void> {
+  const service = createServiceClient();
+  const { error } = await service.from("store_report_sends").insert({
+    location_id: locationId,
+    business_date: bd,
+    kind,
+    recipient_count: recipientCount,
+    sent_by: sentBy ?? null,
+  });
+  if (error) console.error(`[report-send] log failed for ${bd}: ${error.message}`);
 }
 
 /** What the kiosk shows in the draft dialog before confirming the close. */
@@ -98,7 +126,22 @@ type DayReportData = {
   checkinCount: number;
 };
 
-export async function buildDayReportData(locationId: string): Promise<DayReportData> {
+/**
+ * Build the report for ONE business date — today unless `forDate` says otherwise.
+ *
+ * It used to derive today internally and had no way to describe any other day,
+ * which is why five reports missed between 2026-08-10 and 08-14 could not be
+ * recovered. Everything downstream was already date-parameterized; only the
+ * date's origin needed to move out.
+ *
+ * A rebuilt past day reads Shopify LIVE for that date, so a figure can differ
+ * from what the night would have shown (a refund is dated to the original
+ * order). That is more accurate, not less — but it is not a frozen snapshot.
+ */
+export async function buildDayReportData(
+  locationId: string,
+  forDate?: string,
+): Promise<DayReportData> {
   const service = createServiceClient();
 
   const { data: loc } = await service
@@ -108,7 +151,7 @@ export async function buildDayReportData(locationId: string): Promise<DayReportD
     .maybeSingle();
   const tz = loc?.timezone ?? "UTC";
   const locName = loc?.name ?? "Store";
-  const bd = businessDate(tz);
+  const bd = forDate ?? businessDate(tz);
 
   const dayRange = dayRangeInTz(bd, tz);
   const tendersPromise: Promise<TenderSummary | null> = isShopifyConfigured()
@@ -505,6 +548,7 @@ export async function closeDayFor(
   // `closed_by` above stays the single recorded closer.
   const signature = joinNames(signatories?.length ? signatories : [closer.name]);
   const send = await sendDayReport(d, signature, { note });
+  await logReportSend(closer.location_id, d.bd, "close", send.sent, closer.id);
   // The day is already closed; report delivery is best-effort with no resend
   // path, so a silent failure (e.g. an unverified Resend sender) must at least
   // be logged. Recipients are already masked by sendSafe; firstError carries no PII.
@@ -545,6 +589,167 @@ export async function sendTestReportFor(
 }
 
 /**
+ * The last `days` business days: what happened on the floor, whether the day
+ * was closed, and every report that went out for it.
+ *
+ * Everything comes from Postgres — sales are read from the close snapshot, NOT
+ * re-fetched per row. Fourteen Shopify day-reads would make this table crawl,
+ * and a day that was never closed has no snapshot to show anyway.
+ */
+export async function reportHistoryFor(
+  locationId: string,
+  days = 14,
+): Promise<ReportHistoryRow[]> {
+  const service = createServiceClient();
+  const { data: loc } = await service
+    .from("locations")
+    .select("timezone")
+    .eq("id", locationId)
+    .maybeSingle();
+  const tz = loc?.timezone ?? "UTC";
+  const today = businessDate(tz);
+
+  const dates: string[] = [];
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(`${today}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  const from = dates[dates.length - 1];
+
+  const [{ data: events }, { data: checkins }, { data: closes }, { data: sends }] =
+    await Promise.all([
+      service
+        .from("client_events")
+        .select("business_date, sold, got_contact")
+        .eq("location_id", locationId)
+        .gte("business_date", from)
+        .lte("business_date", today),
+      service
+        .from("floor_checkins")
+        .select("business_date, employee_id")
+        .eq("location_id", locationId)
+        .gte("business_date", from)
+        .lte("business_date", today),
+      service
+        .from("store_day_closes")
+        .select("business_date, shopify_sales, currency, closed_at")
+        .eq("location_id", locationId)
+        .gte("business_date", from)
+        .lte("business_date", today),
+      service
+        .from("store_report_sends")
+        .select("business_date, sent_at, kind")
+        .eq("location_id", locationId)
+        .gte("business_date", from)
+        .lte("business_date", today),
+    ]);
+
+  const counts = new Map<string, DayCounts>();
+  const bump = (bd: string) => {
+    const c = counts.get(bd) ?? {
+      businessDate: bd,
+      attended: 0,
+      sold: 0,
+      contacts: 0,
+      checkins: 0,
+    };
+    counts.set(bd, c);
+    return c;
+  };
+  for (const e of events ?? []) {
+    const c = bump(e.business_date);
+    c.attended += 1;
+    if (e.sold) c.sold += 1;
+    if (e.got_contact) c.contacts += 1;
+  }
+  for (const k of checkins ?? []) bump(k.business_date).checkins += 1;
+
+  return buildReportHistory({
+    dates,
+    counts: [...counts.values()],
+    closes: (closes ?? []).map((c) => ({
+      businessDate: c.business_date,
+      netSales: c.shopify_sales != null ? Number(c.shopify_sales) : null,
+      currency: c.currency,
+      closedAt: c.closed_at,
+    })),
+    sends: (sends ?? []).map((s) => ({
+      businessDate: s.business_date,
+      sentAt: s.sent_at,
+      kind: s.kind as "close" | "resend",
+    })),
+  });
+}
+
+/**
+ * Send (or re-send) the report for ONE business date — the recovery path for a
+ * day whose report never went out, and the "send me that again" button.
+ *
+ * Deliberately NOT gated on `closerEligibility`. Closing needs someone on a
+ * published shift and checked in; requiring that here is precisely what left
+ * five days unrecoverable, and a resend writes no new numbers — it can only
+ * reach the stored recipient list, which no caller can invent.
+ *
+ * When the day has no close row (it was missed), one is backfilled from the
+ * same figures `closeDayFor` writes, with `closed_by` null: a close recorded
+ * late and honestly, rather than one pretending to have happened on the night.
+ */
+export async function sendReportForDate(
+  locationId: string,
+  forDate: string,
+  opts: { sentBy?: string | null; today?: string } = {},
+): Promise<ActionResult<{ sentTo: number }>> {
+  const service = createServiceClient();
+  const base = await buildDayReportData(locationId, forDate);
+  if (base.recipients.length === 0)
+    return { ok: false, error: "No recipients configured — add an email first." };
+
+  const isToday = forDate === (opts.today ?? businessDate(base.tz));
+  const { sent, failed, firstError } = await sendDayReport(base, "Re-sent", {
+    // Only mark it when it genuinely arrives late; a same-day resend needs no
+    // explanation and shouldn't look like a correction.
+    resentOn: isToday ? null : businessDate(base.tz),
+  });
+  if (sent === 0)
+    return { ok: false, error: firstError ?? "The report could not be sent." };
+
+  const { data: existing } = await service
+    .from("store_day_closes")
+    .select("id")
+    .eq("location_id", locationId)
+    .eq("business_date", forDate)
+    .maybeSingle();
+  if (!existing) {
+    const { error } = await service.from("store_day_closes").insert({
+      location_id: locationId,
+      business_date: forDate,
+      closed_by: null,
+      attended_count: base.t.attended,
+      sold_count: base.t.sold,
+      contact_count: base.t.contacts,
+      shopify_sales: base.shopify?.net ?? null,
+      gross_sales: base.shopify?.gross ?? null,
+      discounts: base.shopify?.discounts ?? null,
+      returns_value: base.shopify?.returns ?? null,
+      cash_sales: base.tenders?.cashNet ?? null,
+      currency: base.shopify?.currency ?? null,
+    });
+    // 23505 = another send won the race; the day is closed either way.
+    if (error && error.code !== "23505")
+      console.error(`[report-resend] close backfill failed for ${forDate}: ${error.message}`);
+  }
+
+  await logReportSend(locationId, forDate, "resend", sent, opts.sentBy);
+  if (failed > 0)
+    return {
+      ok: false,
+      error: `Sent to ${sent}, but ${failed} failed: ${firstError ?? "unknown error"}`,
+    };
+  return { ok: true, data: { sentTo: sent } };
+}
+
+/**
  * Render the report PDF + email and send it to every recipient in `d`. Shared
  * by the real close (`closeDayFor`) and the admin "Send test report" preview.
  * When `test`, the subject is prefixed `[TEST] ` and NO store_day_closes row is
@@ -556,7 +761,7 @@ export async function sendTestReportFor(
 export async function sendDayReport(
   d: DayReportData,
   closedByName: string,
-  opts: { test?: boolean; note?: string | null } = {},
+  opts: { test?: boolean; note?: string | null; resentOn?: string | null } = {},
 ): Promise<{ sent: number; failed: number; firstError?: string }> {
   const money = (v: number | null) =>
     v === null ? "—" : formatMoney(v, d.currency);
@@ -601,6 +806,7 @@ export async function sendDayReport(
         businessDate: `${weekdayName(d.bd)} · ${shortDate(d.bd)}`,
         closedByName,
         note: opts.note ?? null,
+        resentOn: opts.resentOn ? shortDate(opts.resentOn) : null,
         attended: d.t.attended,
         sold: d.t.sold,
         contacts: d.t.contacts,

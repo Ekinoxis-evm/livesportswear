@@ -8,6 +8,7 @@ import { type ActionResult, dbError } from "@/server/shared";
 import {
   managedReportEmails,
   sendTestReportFor,
+  sendReportForDate,
   reportDraftFor,
   type CloseDayDraft,
 } from "@/server/conversion-core";
@@ -108,6 +109,32 @@ export async function sendTestReport(
     undefined,
     parsed.data.note,
   );
+}
+
+/**
+ * Re-send one day's report — the admin side of the recovery path. Unlike
+ * closing, this needs no on-floor closer: it re-derives the day and mails the
+ * stored recipient list.
+ */
+const resendSchema = locationSchema.extend({
+  business_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date."),
+});
+
+export async function resendReport(
+  input: unknown,
+): Promise<ActionResult<{ sentTo: number }>> {
+  await requireAdmin();
+  const parsed = resendSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!(await canAccess(parsed.data.location_id)))
+    return { ok: false, error: "You can't manage that location." };
+
+  const res = await sendReportForDate(
+    parsed.data.location_id,
+    parsed.data.business_date,
+  );
+  if (res.ok) revalidatePath("/admin/performance/daily");
+  return res;
 }
 
 /**

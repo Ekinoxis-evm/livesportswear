@@ -1531,6 +1531,51 @@ export type Database = {
           },
         ]
       }
+      store_report_sends: {
+        Row: {
+          business_date: string
+          id: string
+          kind: string
+          location_id: string
+          recipient_count: number
+          sent_at: string
+          sent_by: string | null
+        }
+        Insert: {
+          business_date: string
+          id?: string
+          kind: string
+          location_id: string
+          recipient_count?: number
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Update: {
+          business_date?: string
+          id?: string
+          kind?: string
+          location_id?: string
+          recipient_count?: number
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_report_sends_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_report_sends_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_off_requests: {
         Row: {
           decided_at: string | null
