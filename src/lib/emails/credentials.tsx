@@ -10,6 +10,7 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import { BrandLogo } from "@/lib/emails/brand-logo";
 
 export type CredentialsEmailProps = {
   name: string;
@@ -38,6 +39,7 @@ export function CredentialsEmail({
       <Preview>Your Live access is ready — sign in with your temporary password</Preview>
       <Body style={{ backgroundColor: bg, color: text, fontFamily: "sans-serif" }}>
         <Container style={{ padding: "24px", maxWidth: "480px" }}>
+          <BrandLogo />
           <Heading as="h2" style={{ color: text, fontSize: "20px" }}>
             LIVE!
           </Heading>

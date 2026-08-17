@@ -2,6 +2,7 @@ import { requireEmployee } from "@/lib/auth";
 import { signOut } from "@/server/auth";
 import { Button } from "@/components/ui/button";
 import { PortalNav } from "@/components/portal/portal-nav";
+import { BrandMark } from "@/components/shared/brand-mark";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 
 export default async function PortalLayout({
@@ -14,7 +15,10 @@ export default async function PortalLayout({
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 p-6 pb-24">
       <header className="flex items-center justify-between">
-        <span className="text-base font-bold tracking-tight">LIVE!</span>
+        <span className="flex items-center gap-2">
+          <BrandMark size={28} />
+          <span className="text-base font-bold tracking-tight">LIVE!</span>
+        </span>
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground text-sm">{employee.name}</span>
           <ThemeToggle />

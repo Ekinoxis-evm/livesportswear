@@ -44,7 +44,17 @@
   (`useState<Step[]>`, push to go / pop to return), not a per-step back target —
   the flow branches (sold → order/contact/thank-you, no sale → bought/knew/reasons)
   and hand-wired targets would drift. Back is disabled while `pending` so it can't
-  race a submit in flight.
+  race a submit in flight. **Don't ask a question the previous answer already
+  settles**: "bought before → yes" implies "knew the brand → yes", so that screen
+  is skipped and the answer stored by implication (`src/lib/walkin-profile.ts`).
+  Inference only ever runs in the direction that is a certainty — not having
+  bought says nothing about whether they knew us, which is why the second
+  question exists at all.
+- **A rep with several clients open picks WHICH one finished.** Each open client
+  carries its own id and its own live `ClientTimer` on the board
+  (`sales-board.tsx`); the finish sends `client_id` so the duration and the
+  outcome land on the client who actually left. With one open client the UI is
+  unchanged — no extra tap for the common case.
 - **A recurring chore interrupts; it doesn't wait to be noticed.** `ReminderPopup`
   (`components/store/reminder-popup.tsx`, rendered from `app/store/layout.tsx` so
   it covers every kiosk tab) is a Dialog held `open` with `onOpenChange` ignored
@@ -63,11 +73,19 @@
   (`unpublished` | `nobody-in` | `nobody-scheduled`) and says which. If a
   message can be wrong in a way that sends someone to fix the wrong thing, it is
   worse than no message.
-- **Check kiosk layout at 768px, not a desktop window.** The store shell is
-  `max-w-3xl` (`app/store/layout.tsx`), so anything gated at `lg:` (1024px) can
-  never render there. Two `lg:`-only columns shipped in 0061 and were invisible on
-  the floor for a fortnight. On the kiosk, prefer stacking the detail **under** the
-  cell it explains over adding a column.
+- **The kiosk shell is `max-w-6xl` (1152px) — check it at BOTH 768 and 1024px.**
+  It was `max-w-3xl` (768px) until 2026-08-17, which meant anything gated at
+  `lg:` (1024px) could never render: two `lg:`-only columns shipped in 0061 and
+  were invisible on the floor for a fortnight. The store iPad is used in
+  **landscape** (~1080–1194 CSS px), so that whole column of width was being
+  thrown away. Now `lg:` is genuinely reachable — which also means a `lg:` rule
+  is live code, not decoration, and has to be looked at. The pattern that works:
+  stack the detail **under** the cell it explains below `lg:`, and promote it to
+  a real column above it (see `attendance-today.tsx`, which does both).
+- **The `/store` board is two columns past `lg:`** — left is what you act on
+  (up next, reps with clients), right is what you refer to (the floor at a
+  glance, the line, returns). Below `lg:` it collapses to the original single
+  stack, so portrait iPads and phones are unchanged.
 - **Ranked employee sales**: ALWAYS the sales-period module — `PeriodPills`
   (Today · Week · Month · Custom; Custom is a pill that reveals
   `DateRangeForm`) + `SalesRankTable` (`# · Employee (· Store) · Value ·

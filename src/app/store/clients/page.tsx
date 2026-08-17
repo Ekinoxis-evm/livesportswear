@@ -41,7 +41,7 @@ export default async function StoreClientsPage({
   };
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <Users className="text-primary size-5" />
         <h1 className="text-xl font-bold">Clients</h1>

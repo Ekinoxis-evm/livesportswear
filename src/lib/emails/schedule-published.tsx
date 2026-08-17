@@ -13,6 +13,7 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import { BrandLogo } from "@/lib/emails/brand-logo";
 
 export type SchedulePublishedEmailProps = {
   employeeName: string;
@@ -61,6 +62,7 @@ export function SchedulePublishedEmail({
             padding: "32px",
           }}
         >
+          <BrandLogo />
           <Text
             style={{
               fontSize: "24px",

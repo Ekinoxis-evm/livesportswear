@@ -11,14 +11,17 @@ import {
 } from "@/lib/floor-state";
 import type { TablesUpdate } from "@/types/db";
 import type { ActionResult } from "@/server/shared";
-import { mergeLinkedOrders, type LinkedOrder } from "@/lib/linked-orders";
+import { mergeLinkedOrders } from "@/lib/linked-orders";
+import type { FinishResult } from "@/lib/finish-result";
 import {
   asQueue,
   pushOpen,
+  popById,
   popOldest,
   popNewest,
   servedSeconds,
 } from "@/lib/attend-timer";
+import { randomUUID } from "node:crypto";
 
 /**
  * Bodies for the floor-queue writes, driven exclusively by the store kiosk
@@ -235,7 +238,12 @@ export async function doTakeClient(
     attending_return_count: next.returns,
     // Stamp this client's start time onto the open-clients queue — the timer
     // runs from here until they're finished.
-    attending_started_at: pushOpen(cur.queue, kind, new Date().toISOString()),
+    attending_started_at: pushOpen(
+      cur.queue,
+      kind,
+      new Date().toISOString(),
+      randomUUID(),
+    ),
     // Only a walk-in leaves the line — a return must not cost the member
     // their bump or dragged position (the "returns don't burn a turn" rule).
     ...(kind === "walkin" ? { bumped_at: null, manual_pos: null } : {}),
@@ -290,20 +298,9 @@ export async function doClearAttending(
   });
 }
 
-export type FinishResult = {
-  kind: "walkin" | "return";
-  sold: boolean; // for a return: the customer bought something else
-  return_type?: "return" | "exchange" | "both"; // report-only label on a return
-  got_contact: boolean;
-  reasons?: string[]; // mandatory (app layer) when a walk-in didn't buy
-  products?: { id: string; title: string; sku?: string | null }[];
-  note?: string;
-  orders?: LinkedOrder[]; // a sold walk-in can link several orders
-  // Asked before the reason on a no-sale walk-in (0061). Report-only labels —
-  // no metric reads them, same posture as return_type.
-  bought_before?: "yes" | "no" | "unsure";
-  knew_brand?: "yes" | "no" | "unsure";
-};
+// Defined in the pure lib alongside `finishResultFrom`, which builds it — the
+// mapping is where fields get silently dropped, so it is unit-tested there.
+export type { FinishResult };
 
 /**
  * Finish ONE open customer: record the event at the time it happened, then
@@ -327,10 +324,13 @@ export async function doFinishCustomer(
     return { ok: false, error: "No open client to finish." };
   }
 
-  // Pop this client's start stamp (oldest of the kind — first taken, first
-  // finished) so we can record how long they were attended.
+  // Pop THIS client's start stamp so the duration and the outcome land on the
+  // client who actually left. The rep names them when several are open; without
+  // an id (older client build, or a screen that went stale mid-tap) fall back to
+  // the oldest of the kind rather than dropping the finish on the floor.
   const finishedAt = new Date().toISOString();
-  const popped = popOldest(cur.queue, result.kind);
+  const byId = result.client_id ? popById(cur.queue, result.client_id) : null;
+  const popped = byId?.entry ? byId : popOldest(cur.queue, result.kind);
   const served = popped.entry ? servedSeconds(popped.entry.at, finishedAt) : null;
 
   // Counters FIRST, conditioned on the exact values just read: a double-tap

@@ -698,15 +698,20 @@ export async function reportHistoryFor(
 export async function sendReportForDate(
   locationId: string,
   forDate: string,
-  opts: { sentBy?: string | null; today?: string } = {},
+  opts: { sentBy?: string | null; today?: string; note?: string | null } = {},
 ): Promise<ActionResult<{ sentTo: number }>> {
   const service = createServiceClient();
   const base = await buildDayReportData(locationId, forDate);
   if (base.recipients.length === 0)
     return { ok: false, error: "No recipients configured — add an email first." };
 
+  // A day rebuilt weeks later usually needs saying WHY it is late, or why a
+  // figure is missing — a resend that can only mail bare numbers is how a
+  // report with no money in it reaches an owner with no explanation.
+  const note = cleanNote(opts.note);
   const isToday = forDate === (opts.today ?? businessDate(base.tz));
   const { sent, failed, firstError } = await sendDayReport(base, "Re-sent", {
+    note,
     // Only mark it when it genuinely arrives late; a same-day resend needs no
     // explanation and shouldn't look like a correction.
     resentOn: isToday ? null : businessDate(base.tz),
@@ -725,6 +730,7 @@ export async function sendReportForDate(
       location_id: locationId,
       business_date: forDate,
       closed_by: null,
+      note,
       attended_count: base.t.attended,
       sold_count: base.t.sold,
       contact_count: base.t.contacts,

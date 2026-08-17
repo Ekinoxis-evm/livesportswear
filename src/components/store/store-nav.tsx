@@ -81,7 +81,7 @@ export function StoreNav() {
   const pathname = usePathname();
   return (
     <nav className="bg-background/90 supports-[backdrop-filter]:bg-background/70 fixed inset-x-0 bottom-0 z-10 border-t backdrop-blur">
-      <div className="mx-auto flex max-w-3xl items-stretch">
+      <div className="mx-auto flex max-w-6xl items-stretch">
         {LEFT.map((item) => (
           <Tab key={item.href} {...item} active={pathname === item.href} />
         ))}

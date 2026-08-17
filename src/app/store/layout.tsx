@@ -6,6 +6,7 @@ import { signOut } from "@/server/auth";
 import { businessDate } from "@/lib/business-date";
 import { weekdayName } from "@/lib/weekdays";
 import { shortDate } from "@/lib/format-date";
+import { BrandMark } from "@/components/shared/brand-mark";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { AutoRefresh } from "@/components/store/auto-refresh";
 import { VersionGuard } from "@/components/store/version-guard";
@@ -109,15 +110,18 @@ export default async function StoreLayout({
   return (
     <div className="flex min-h-screen flex-col">
       <header className="bg-sidebar text-sidebar-foreground">
-        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-6 py-4">
-          <div>
-            <p className="text-sidebar-foreground/70 text-xs font-semibold uppercase tracking-wide">
-              LIVE! · Store screen
-            </p>
-            <h1 className="text-lg font-bold">{loc?.name ?? "Store"}</h1>
-            <p className="text-sidebar-foreground/70 text-sm">
-              {weekdayName(bd)} · {shortDate(bd)}
-            </p>
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <BrandMark size={44} />
+            <div>
+              <p className="text-sidebar-foreground/70 text-xs font-semibold uppercase tracking-wide">
+                LIVE! · Store screen
+              </p>
+              <h1 className="text-lg font-bold">{loc?.name ?? "Store"}</h1>
+              <p className="text-sidebar-foreground/70 text-sm">
+                {weekdayName(bd)} · {shortDate(bd)}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle className="text-sidebar-foreground/80 hover:bg-white/10 hover:text-sidebar-foreground" />
@@ -142,7 +146,7 @@ export default async function StoreLayout({
           <PackagePlus className="size-4" /> New arrival to count — tap to start
         </Link>
       )}
-      <div className="mx-auto w-full max-w-3xl flex-1 p-4 pb-24 sm:p-6 sm:pb-24">
+      <div className="mx-auto w-full max-w-6xl flex-1 p-4 pb-24 sm:p-6 sm:pb-24">
         {children}
       </div>
       <StoreNav />

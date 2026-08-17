@@ -42,6 +42,9 @@ const walkinSchema = z
     orders: z.array(orderSchema).max(10).optional(),
     bought_before: z.enum(ANSWERS).optional(),
     knew_brand: z.enum(ANSWERS).optional(),
+    // Which of the rep's open clients this closes. Optional: an older client
+    // build sends none and the floor falls back to the oldest of the kind.
+    client_id: z.string().max(64).optional(),
   })
   .refine((v) => v.sold || (v.reasons?.length ?? 0) > 0, {
     message: "Pick at least one reason.",
@@ -56,6 +59,7 @@ const returnSchema = z.object({
   kind: z.literal("return"),
   sold: z.boolean(),
   return_type: z.enum(["return", "exchange", "both"]).optional(),
+  client_id: z.string().max(64).optional(),
 });
 
 export const finishSchema = z.union([walkinSchema, returnSchema]);

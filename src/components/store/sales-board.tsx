@@ -26,6 +26,7 @@ import {
   storeFinish,
 } from "@/server/store-floor";
 import type { FinishInput } from "@/lib/finish-schema";
+import type { OpenClient } from "@/lib/attend-timer";
 import {
   FinishDialog,
   type FinishTarget,
@@ -58,7 +59,7 @@ export type SalesRow = {
   walkins: number; // open walk-in customers
   returns: number; // open returns/exchanges
   onReturn: boolean; // handling a return — stays in the line, highlighted
-  attendingStartedAt: string | null; // oldest open client's take-time (live clock)
+  openClients: OpenClient[]; // every client this rep has open, in take order
   breakStartedAt: string | null; // open break, if any
   breakPriorMinutes: number; // closed breaks earlier today
 };
@@ -207,7 +208,13 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
+      {/* The landscape iPad is ~1080–1194px wide and the board used to be one
+          768px column down the middle of it. Two columns past lg: LEFT is what
+          you act on (who's up, who's busy), RIGHT is what you refer to (the
+          floor at a glance, the line). One column below lg — portrait and
+          phones are untouched. */}
+      <div className="flex flex-col gap-5">
       {/* Up next — the biggest thing on the screen */}
       {up ? (
         <div className="border-primary bg-primary/5 flex flex-col gap-4 rounded-3xl border-2 p-6">
@@ -247,9 +254,6 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
         </Card>
       )}
 
-      {/* The whole floor in one glance */}
-      <OrderStrip line={line} attending={attending} onBreak={onBreak} />
-
       {/* With client(s) now */}
       {attending.length > 0 && (
         <SectionLabel>
@@ -270,17 +274,62 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                 {openTotal > 1 ? `With ${openTotal} clients` : "With a client"}
                 {r.returns > 0 && ` · ${r.returns} return`}
               </span>
-              <span className="text-foreground text-sm font-semibold tabular-nums">
-                {r.attendingStartedAt ? (
-                  <ClientTimer startedAt={r.attendingStartedAt} />
-                ) : (
-                  <span className="text-muted-foreground text-xs">arrived {r.arrivedLabel}</span>
-                )}
-              </span>
+              {/* With several open, each client carries its own clock below. */}
+              {r.openClients.length <= 1 && (
+                <span className="text-foreground text-sm font-semibold tabular-nums">
+                  {r.openClients[0] ? (
+                    <ClientTimer startedAt={r.openClients[0].at} />
+                  ) : (
+                    <span className="text-muted-foreground text-xs">arrived {r.arrivedLabel}</span>
+                  )}
+                </span>
+              )}
             </div>
             <p className="text-2xl font-bold">{r.name}</p>
+            {/* Two or more open: the rep says WHICH client left. Whoever is
+                finished gets their own elapsed time — the later arrival often
+                buys first, and closing "the oldest" put her minutes (and her
+                sale) on the wrong client. */}
+            {r.openClients.length > 1 && (
+              <ul className="flex flex-col gap-2">
+                {r.openClients.map((c, i) => (
+                  <li
+                    key={c.id}
+                    className="bg-background/60 flex items-center gap-3 rounded-xl border p-3"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">
+                        Client {i + 1}
+                        <span className="text-muted-foreground font-normal">
+                          {c.kind === "return" ? " · return" : " · walk-in"}
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground text-sm font-semibold tabular-nums">
+                        <ClientTimer startedAt={c.at} />
+                      </span>
+                    </span>
+                    <Button
+                      size="lg"
+                      variant={c.kind === "return" ? "outline" : "default"}
+                      className="h-12 shrink-0"
+                      disabled={busy(r.employeeId)}
+                      onClick={() =>
+                        setFinishTarget({
+                          employeeId: r.employeeId,
+                          name: r.name,
+                          kind: c.kind,
+                          clientId: c.id,
+                        })
+                      }
+                    >
+                      Finish
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="flex gap-3">
-              {walkins > 0 && (
+              {r.openClients.length <= 1 && walkins > 0 && (
                 <Button
                   size="lg"
                   className="h-14 flex-1"
@@ -290,13 +339,14 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                       employeeId: r.employeeId,
                       name: r.name,
                       kind: "walkin",
+                      clientId: r.openClients[0]?.id,
                     })
                   }
                 >
                   Finish client
                 </Button>
               )}
-              {r.returns > 0 && (
+              {r.openClients.length <= 1 && r.returns > 0 && (
                 <Button
                   size="lg"
                   variant="outline"
@@ -307,6 +357,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
                       employeeId: r.employeeId,
                       name: r.name,
                       kind: "return",
+                      clientId: r.openClients[0]?.id,
                     })
                   }
                 >
@@ -399,6 +450,11 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           </div>
         </div>
       ))}
+      </div>
+
+      <div className="flex flex-col gap-5">
+      {/* The whole floor in one glance */}
+      <OrderStrip line={line} attending={attending} onBreak={onBreak} />
 
       {/* The line — press and drag to reorder */}
       {line.length > 0 && (
@@ -421,7 +477,16 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
               onReorder={(ids) => run(storeReorderQueue(ids), "Line reordered.")}
               onMakeUpNext={(id, name) => run(storeMakeUpNext(id), `${name} is up next.`)}
               onFinishReturn={(id, name) =>
-                setFinishTarget({ employeeId: id, name, kind: "return" })
+                setFinishTarget({
+                  employeeId: id,
+                  name,
+                  kind: "return",
+                  // Name the open return so its own elapsed time is recorded,
+                  // the same as finishing from the card above.
+                  clientId: rows
+                    .find((r) => r.employeeId === id)
+                    ?.openClients.find((c) => c.kind === "return")?.id,
+                })
               }
               onTakeClient={(id, name) =>
                 run(storeTakeClient(id), `${name} is with a client.`, id)
@@ -482,6 +547,7 @@ export function SalesBoard({ open, rows }: { open: boolean; rows: SalesRow[] }) 
           </div>
         </div>
       )}
+      </div>
 
       <RetakeDialog
         open={retakeOpen}

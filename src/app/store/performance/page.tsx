@@ -15,7 +15,9 @@ import { spanDays } from "@/lib/date-range";
 import { customRangeInTz } from "@/lib/shopify-range";
 import { getStaffSalesCached } from "@/lib/shopify-range-cache";
 import { formatMoney } from "@/lib/commission";
+import Link from "next/link";
 import { shortDate, monthLabel } from "@/lib/format-date";
+import { weekdayName } from "@/lib/weekdays";
 import {
   monthRows,
   periodBounds,
@@ -52,11 +54,23 @@ import { SyncSalesButton } from "@/components/shared/sync-sales-button";
 import { storeSyncSales } from "@/server/store-floor";
 import { resolveTiers, asTiers, commissionFor } from "@/lib/commission";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { resolveViewDay } from "@/lib/day-window";
+import { DayNav } from "@/components/store/day-nav";
+
+// Stepping to another day is a navigation, so the tab has to ride the URL or the
+// rep gets bounced back to Sales on every arrow tap.
+const TABS = ["sales", "orders", "attendance", "close"];
 
 export default async function StorePerformancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; period?: string }>;
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+    period?: string;
+    date?: string;
+    tab?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const { locationId } = await requireStore();
@@ -68,12 +82,22 @@ export default async function StorePerformancePage({
     .eq("id", locationId)
     .maybeSingle();
   const tz = loc?.timezone ?? "UTC";
-  const bd = businessDate(tz);
+  const today = businessDate(tz);
+  // The day being LOOKED AT. Everything day-scoped below follows it; closing the
+  // day deliberately does not (see `day.isToday` at the close tab) — browsing
+  // back through the week must never arm a live close on the wrong date.
+  const day = resolveViewDay(sp.date, today);
+  const bd = day.date;
+  // Every day-scoped card says which day it means — "today" on a screen showing
+  // last Tuesday is how a quiet day gets read as a disaster.
+  const dayLabel = day.isToday ? "today" : `on ${weekdayName(bd)} ${shortDate(bd)}`;
   const month = bd.slice(0, 7);
   const [year, monthNum] = [Number(bd.slice(0, 4)), Number(bd.slice(5, 7))];
 
-  // One sales table, four periods (the standard module).
-  const { mode, from, to } = resolveSalesPeriod(sp, bd);
+  // One sales table, four periods (the standard module). Anchored to TODAY, not
+  // the browsed day — the period pills are their own control and shouldn't
+  // shift under someone stepping back through the attendance list.
+  const { mode, from, to } = resolveSalesPeriod(sp, today);
 
   const [
     { data: eventRows },
@@ -186,7 +210,7 @@ export default async function StorePerformancePage({
 
   // Kick off the independent Shopify reads together — first paint waits on the
   // slowest, not the sum (all 60s-cached, so the 45s auto-refresh stays cheap).
-  const staffBounds = mode !== "month" ? periodBounds(mode, { today: bd, from, to }) : null;
+  const staffBounds = mode !== "month" ? periodBounds(mode, { today, from, to }) : null;
   const staffRange =
     staffBounds && isShopifyConfigured()
       ? customRangeInTz(staffBounds.from, staffBounds.to, tz)
@@ -312,7 +336,7 @@ export default async function StorePerformancePage({
   );
 
   return (
-    <Tabs defaultValue="sales" className="gap-4">
+    <Tabs defaultValue={TABS.includes(sp.tab ?? "") ? sp.tab : "sales"} className="gap-4">
       <TabsList className="w-full">
         <TabsTrigger value="sales" className="h-11 flex-1">
           Sales
@@ -329,10 +353,10 @@ export default async function StorePerformancePage({
       </TabsList>
 
       <TabsContent value="sales" className="flex flex-col gap-5">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card>
           <CardHeader>
-            <CardDescription>Net sales today</CardDescription>
+            <CardDescription>Net sales {dayLabel}</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
               {daySales ? formatMoney(daySales.net, daySales.currency ?? "USD") : "—"}
             </CardTitle>
@@ -345,7 +369,7 @@ export default async function StorePerformancePage({
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Orders today</CardDescription>
+            <CardDescription>Orders {dayLabel}</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
               {ordersView ? ordersView.total.orders : daySales ? daySales.orders : "—"}
             </CardTitle>
@@ -433,6 +457,7 @@ export default async function StorePerformancePage({
       </TabsContent>
 
       <TabsContent value="orders" className="flex flex-col gap-5">
+      <DayNav date={bd} prev={day.prev} next={day.next} tab="orders" />
       {ordersView ? (
         <OrdersToday
           total={ordersView.total}
@@ -443,18 +468,21 @@ export default async function StorePerformancePage({
       ) : (
         <Card>
           <CardContent className="text-muted-foreground py-6 text-sm">
-            No orders yet today.
+            No orders {dayLabel}.
           </CardContent>
         </Card>
       )}
       </TabsContent>
 
       <TabsContent value="attendance" className="flex flex-col gap-5">
+      <DayNav date={bd} prev={day.prev} next={day.next} tab="attendance" />
       {/* Per-employee table first, with the day totals as a strip on its header —
           the totals ARE the sum of the per-person rows, so they read as one. */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Team today</CardTitle>
+          <CardTitle className="text-base">
+            {day.isToday ? "Team today" : "Team that day"}
+          </CardTitle>
           <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
             {(
               [
@@ -497,7 +525,7 @@ export default async function StorePerformancePage({
       {t.returns > 0 && (
         <Card>
           <CardContent className="text-muted-foreground py-3 text-sm">
-            Returns today:{" "}
+            Returns {dayLabel}:{" "}
             <span className="text-foreground font-semibold tabular-nums">{t.returns}</span>
             {" · "}
             <span className="text-foreground font-semibold tabular-nums">
@@ -514,16 +542,37 @@ export default async function StorePerformancePage({
       <TabsContent value="close" className="flex flex-col gap-4">
       {/* Just the two buttons — no email block. Recipients are step 1 of the
           wizard each button opens, editable per send. */}
-      <Card>
-        <CardContent className="flex flex-col gap-3 py-5">
-          <span className="text-sm font-medium">End of day</span>
-          <ReportActions
-            closers={closers}
-            alreadyClosed={Boolean(closeRow)}
-            blockedReason={blockedReason}
-          />
-        </CardContent>
-      </Card>
+      {/* Closing always means TODAY. While a past day is being browsed the live
+          buttons are gone entirely — a resend for that day belongs to the
+          history table below, which is the honest tool for it. */}
+      {day.isToday ? (
+        <Card>
+          <CardContent className="flex flex-col gap-3 py-5">
+            <span className="text-sm font-medium">End of day</span>
+            <ReportActions
+              closers={closers}
+              alreadyClosed={Boolean(closeRow)}
+              blockedReason={blockedReason}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="text-muted-foreground flex flex-col gap-2 py-5 text-sm">
+            <span>
+              You&rsquo;re looking at {weekdayName(bd)} {shortDate(bd)}. Closing the
+              day is only ever today&rsquo;s job.
+            </span>
+            <Link
+              href="/store/performance?tab=close"
+              prefetch={false}
+              className="text-foreground font-medium underline underline-offset-4"
+            >
+              Back to today
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
