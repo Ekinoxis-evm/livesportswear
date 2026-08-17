@@ -112,35 +112,6 @@ export async function storeOpenDay(): Promise<ActionResult> {
   return res;
 }
 
-const MAX_PHOTO_BYTES = 200 * 1024; // client targets ~25KB; this is the hard ceiling
-
-/**
- * Face-photo evidence for a stamp. Upload failure returns null instead of an
- * error: the photo is evidence, not a gate, and its absence is itself visible
- * in the day's records.
- */
-async function uploadStampPhoto(
-  service: ReturnType<typeof createServiceClient>,
-  formData: FormData,
-  locationId: string,
-  bd: string,
-  employeeId: string,
-  kind: "entry" | "exit",
-): Promise<string | null> {
-  const photo = formData.get("photo");
-  if (!(photo instanceof File) || photo.size === 0) return null;
-  if (photo.type !== "image/jpeg" || photo.size > MAX_PHOTO_BYTES) return null;
-
-  const path = `${locationId}/${bd}/${employeeId}-${kind}.jpg`;
-  const upload = await service.storage
-    .from("checkin-photos")
-    .upload(path, await photo.arrayBuffer(), {
-      contentType: "image/jpeg",
-      upsert: true,
-    });
-  return upload.error ? null : path;
-}
-
 const stampSchema = z.object({
   employeeId: z.string().uuid(),
   pin: z.string().regex(PIN_RE),
@@ -155,8 +126,11 @@ function parseStampForm(formData: FormData) {
 
 /**
  * Kiosk check-in: PIN-confirmed, and the stamp counts as validated — the
- * device standing in the store is the attestation, so no QR is issued.
- * The optional face photo is stored as evidence (30-day retention).
+ * device standing in the store IS the attestation, so no QR is issued.
+ *
+ * There is no face photo. It was a second step at the door on every arrival and
+ * departure, producing evidence nobody read; the PIN on the shop's own iPad is
+ * what the stamp rests on. Dropped 2026-08-17 along with the stored images.
  */
 export async function storeCheckIn(formData: FormData): Promise<ActionResult> {
   const parsed = parseStampForm(formData);
@@ -168,27 +142,9 @@ export async function storeCheckIn(formData: FormData): Promise<ActionResult> {
   const bad = pinError(emp, parsed.data.pin);
   if (bad) return { ok: false, error: bad };
 
-  // A same-day re-check-in resets the row's photo pointers; the previous
-  // cycle's files must go too, or retention can never find them (it deletes
-  // by the paths still referenced on the row).
-  const { data: prev } = await service
-    .from("floor_checkins")
-    .select("entry_photo_path, exit_photo_path")
-    .eq("location_id", locationId)
-    .eq("business_date", bd)
-    .eq("employee_id", emp.id)
-    .maybeSingle();
-
-  const photoPath = await uploadStampPhoto(service, formData, locationId, bd, emp.id, "entry");
   const now = new Date().toISOString();
-  const res = await doCheckIn(service, locationId, bd, emp.id, now, photoPath);
+  const res = await doCheckIn(service, locationId, bd, emp.id, now);
   if (res.ok) {
-    const stale = [prev?.entry_photo_path, prev?.exit_photo_path].filter(
-      (p): p is string => Boolean(p) && p !== photoPath,
-    );
-    if (stale.length > 0) {
-      await service.storage.from("checkin-photos").remove(stale); // best-effort
-    }
     revalidatePath("/store", "layout");
   }
   return res;
@@ -205,9 +161,8 @@ export async function storeCheckOut(formData: FormData): Promise<ActionResult> {
   const bad = pinError(emp, parsed.data.pin);
   if (bad) return { ok: false, error: bad };
 
-  const photoPath = await uploadStampPhoto(service, formData, locationId, bd, emp.id, "exit");
   const now = new Date().toISOString();
-  const res = await doCheckOut(service, locationId, bd, emp.id, now, photoPath);
+  const res = await doCheckOut(service, locationId, bd, emp.id, now);
   if (res.ok) {
     revalidatePath("/store", "layout");
   }

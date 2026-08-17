@@ -189,6 +189,15 @@
   the attestation. The kiosk is the ONLY check-in surface — the employee-portal
   floor UI and the QR peer-validation flow were removed with it
   (`attendance_validations` is legacy/read-only history now).
+- **Face photos are gone (2026-08-17).** Entry/exit capture, the private
+  `checkin-photos` bucket, its 30-day retention cron and all 193 stored images
+  were removed; `floor_checkins.entry_photo_path`/`exit_photo_path` are nulled
+  and no longer written (columns kept, unused). It was never a large cost — 4 MB
+  and self-limiting — but it was a camera step at the door on every arrival and
+  departure producing evidence nobody read. **Know what this gives up:** the
+  photo was the only thing tying a PIN tap to a face, so a shared PIN can now
+  clock in a colleague and nothing in the data would show it. The PIN on the
+  shop's own iPad is the whole attestation, and these stamps feed worked hours.
 
 ## Roles & accounts
 - Admins and employees are both Supabase Auth users, distinguished by `app_metadata.role`. The admin claim is set out-of-band (service role). Employees get accounts via the admin "Invite to portal" action (`src/server/employee-accounts.ts`), which creates the auth user with `role=employee` + `employee_id` and links `employees.auth_user_id`.

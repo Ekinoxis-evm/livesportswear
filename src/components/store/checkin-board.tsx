@@ -13,7 +13,6 @@ import {
 import { overBreakBudget } from "@/lib/breaks";
 import { cn } from "@/lib/utils";
 import { PinPad } from "@/components/store/pin-pad";
-import { CameraCapture } from "@/components/store/camera-capture";
 import { BreakTimer } from "@/components/store/break-timer";
 import { EmployeeAvatar } from "@/components/shared/employee-avatar";
 import { Button } from "@/components/ui/button";
@@ -33,8 +32,6 @@ export type CheckinRow = {
   breakStartedAt: string | null;
   breakPriorMinutes: number;
   attending: boolean; // with client(s) — can't start a break
-  entryPhotoUrl: string | null;
-  exitPhotoUrl: string | null;
 };
 
 export type RosterEntry = {
@@ -73,14 +70,11 @@ export function CheckinBoard({
   const onBreakCount = onFloor.filter((r) => r.onBreak).length;
   const outCount = checkins.length - onFloor.length;
 
-  function submit(f: Flow, photo: Blob | null) {
+  function submit(f: Flow) {
     start(async () => {
       const formData = new FormData();
       formData.set("employeeId", f.id);
       formData.set("pin", f.pin ?? "");
-      if (photo) {
-        formData.set("photo", new File([photo], "face.jpg", { type: "image/jpeg" }));
-      }
       const action = {
         in: storeCheckIn,
         out: storeCheckOut,
@@ -105,21 +99,13 @@ export function CheckinBoard({
     });
   }
 
-  // Breaks skip the photo step — PIN alone confirms them.
+  // The PIN IS the attestation — a tap on the shop's own iPad plus a code only
+  // that employee knows. The face photo that used to follow it was a second
+  // step at the door for evidence nobody read, so it's gone.
   const submitPin = (pin: string) => {
     if (!flow) return;
-    if (flow.kind === "break-start" || flow.kind === "break-end") {
-      submit({ ...flow, pin }, null);
-      return;
-    }
-    setFlow({ ...flow, pin });
+    submit({ ...flow, pin });
   };
-
-  const photoThumb = (url: string | null, alt: string) =>
-    url ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={url} alt={alt} className="size-11 rounded-lg border object-cover" />
-    ) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -234,10 +220,6 @@ export function CheckinBoard({
                           )}
                         </span>
                       </span>
-                      <span className="flex gap-1">
-                        {photoThumb(r.entryPhotoUrl, `${r.name} check-in`)}
-                        {photoThumb(r.exitPhotoUrl, `${r.name} check-out`)}
-                      </span>
                       {!out && (
                         <span className="flex items-center gap-2">
                           {r.onBreak ? (
@@ -316,25 +298,6 @@ export function CheckinBoard({
         onSubmit={submitPin}
         onClose={() => setFlow(null)}
       />
-
-      <Dialog
-        open={flow !== null && flow.pin !== null}
-        onOpenChange={(o) => {
-          if (!o && !pending) setFlow(null);
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogTitle className="sr-only">Face photo</DialogTitle>
-          {flow && flow.pin !== null && (
-            <CameraCapture
-              title={`${flow.name} — look at the camera`}
-              pending={pending}
-              onCapture={(photo) => submit(flow, photo)}
-              onCancel={() => setFlow(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

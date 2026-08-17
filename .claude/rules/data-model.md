@@ -477,8 +477,11 @@ is display-only ("N turns today"). See `src/lib/floor-queue.ts`
   (device + PIN); the earlier peer/QR flow (`attendance_validations`) is
   legacy history. Hours math stays pure in `src/lib/attendance.ts`
   (`workedHours`, `stampStatus`).
-- `entry_photo_path`, `exit_photo_path` (added 0020) — face-photo evidence in
-  the private `checkin-photos` bucket, 30-day retention (photo-retention cron)
+- `entry_photo_path`, `exit_photo_path` (added 0020) — **dead since 2026-08-17.**
+  Held face-photo evidence in the private `checkin-photos` bucket. Capture, the
+  bucket's 193 objects, and the retention cron are all gone; both columns are
+  nulled and never written. Kept (nullable, unused) rather than dropped — see
+  security.md for what the removal gives up
 - `attending_count`, `attending_return_count`, `manual_pos` (added 0022) —
   multi-client counters + kiosk drag order (see floor-queue.ts precedence)
 - `unique (location_id, business_date, employee_id)`
