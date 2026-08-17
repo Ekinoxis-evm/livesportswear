@@ -151,7 +151,7 @@ export function CheckinBoard({
           <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
             Check in
           </span>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {offFloor.map((e) => (
               <Button
                 key={e.id}

@@ -146,9 +146,10 @@ export function AttendanceToday({
                         )}
                         {r.gotContact && <Badge variant="secondary">contact</Badge>}
                       </div>
-                      {/* The kiosk is capped at max-w-3xl (768px), so the two
-                          `lg:` columns below can never render there. On the
-                          floor screen the answers ride the result they explain. */}
+                      {/* Below lg the answers ride the result they explain,
+                          because there is no room for two more columns. Past lg
+                          (the landscape iPad, since the shell widened to
+                          max-w-6xl) the real columns take over and this hides. */}
                       {(r.boughtBefore || r.knewBrand) && (
                         <div className="text-muted-foreground mt-1 flex flex-col text-xs lg:hidden">
                           {r.boughtBefore && (
