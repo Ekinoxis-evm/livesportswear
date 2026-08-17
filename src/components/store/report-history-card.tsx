@@ -17,7 +17,7 @@ export function StoreReportHistoryCard({
       rows={rows}
       currency={currency}
       density="comfortable"
-      resend={(businessDate) => storeResendReport(businessDate)}
+      resend={(businessDate, note) => storeResendReport(businessDate, note)}
     />
   );
 }

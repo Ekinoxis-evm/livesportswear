@@ -3,12 +3,22 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Check, Send } from "lucide-react";
+import { AlertTriangle, Check, ClipboardPaste, Send } from "lucide-react";
 import type { ReportHistoryRow } from "@/lib/report-history";
 import type { ActionResult } from "@/server/shared";
 import { ScrollTable } from "@/components/shared/scroll-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cleanNote, NOTE_MAX } from "@/lib/report-note";
 import { formatMoney } from "@/lib/commission";
 import { formatPct } from "@/lib/conversion";
 import { weekdayName } from "@/lib/weekdays";
@@ -32,17 +42,40 @@ export function ReportHistory({
 }: {
   rows: ReportHistoryRow[];
   currency: string;
-  resend: (businessDate: string) => Promise<ActionResult<{ sentTo: number }>>;
+  resend: (
+    businessDate: string,
+    note?: string,
+  ) => Promise<ActionResult<{ sentTo: number }>>;
   density?: "compact" | "comfortable";
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
+  // A day rebuilt weeks later almost always needs saying WHY — it is late, or a
+  // figure is missing. Asking once, here, beats a bare table of numbers landing
+  // on an owner with no explanation.
+  const [asking, setAsking] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+
+  /** Safari refuses a clipboard read outside a gesture — say so, don't look broken. */
+  async function pasteNote() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        toast.error("The clipboard is empty.");
+        return;
+      }
+      setNote((prev) => (prev.trim() ? `${prev.trimEnd()}\n${text}` : text));
+    } catch {
+      toast.error("Couldn't read the clipboard — long-press the box and choose Paste.");
+    }
+  }
 
   const send = (businessDate: string) => {
+    setAsking(null);
     setBusy(businessDate);
     start(async () => {
-      const res = await resend(businessDate);
+      const res = await resend(businessDate, cleanNote(note) ?? undefined);
       setBusy(null);
       if (!res.ok) {
         toast.error(res.error ?? "The report couldn't be sent.");
@@ -53,6 +86,7 @@ export function ReportHistory({
           res.data?.sentTo === 1 ? "" : "s"
         }.`,
       );
+      setNote("");
       router.refresh();
     });
   };
@@ -124,7 +158,10 @@ export function ReportHistory({
                     size="sm"
                     variant={r.missing ? "default" : "outline"}
                     disabled={pending}
-                    onClick={() => send(r.businessDate)}
+                    onClick={() => {
+                      setNote("");
+                      setAsking(r.businessDate);
+                    }}
                   >
                     <Send className="size-3.5" />
                     {busy === r.businessDate
@@ -144,6 +181,65 @@ export function ReportHistory({
         Sending re-reads that day from Shopify, so a refund settled since can shift
         a figure. Reports go only to the store&apos;s saved recipients.
       </p>
+
+      <Dialog
+        open={asking !== null}
+        onOpenChange={(o) => {
+          if (!o && !pending) setAsking(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Send the report for {asking ? shortDate(asking) : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Add a note if the numbers need explaining — it goes at the top of the
+              email. Optional.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))}
+            maxLength={NOTE_MAX}
+            rows={5}
+            className="min-h-32 text-base"
+            placeholder="e.g. sent late — Shopify was disconnected, so there are no sales figures."
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={pasteNote}>
+                <ClipboardPaste className="size-4" /> Paste
+              </Button>
+              {note.length > 0 && (
+                <Button type="button" variant="ghost" onClick={() => setNote("")}>
+                  Clear
+                </Button>
+              )}
+            </div>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {note.length}/{NOTE_MAX}
+            </span>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              disabled={pending}
+              onClick={() => setAsking(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={pending}
+              onClick={() => asking && send(asking)}
+            >
+              <Send className="size-4" /> Send report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

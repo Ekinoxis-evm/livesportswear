@@ -118,6 +118,7 @@ export async function sendTestReport(
  */
 const resendSchema = locationSchema.extend({
   business_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date."),
+  note: z.string().max(2000).optional(),
 });
 
 export async function resendReport(
@@ -132,6 +133,7 @@ export async function resendReport(
   const res = await sendReportForDate(
     parsed.data.location_id,
     parsed.data.business_date,
+    { note: parsed.data.note },
   );
   if (res.ok) revalidatePath("/admin/performance/daily");
   return res;

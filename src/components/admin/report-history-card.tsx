@@ -18,7 +18,9 @@ export function ReportHistoryCard({
     <ReportHistory
       rows={rows}
       currency={currency}
-      resend={(business_date) => resendReport({ location_id: locationId, business_date })}
+      resend={(business_date, note) =>
+        resendReport({ location_id: locationId, business_date, note })
+      }
     />
   );
 }

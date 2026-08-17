@@ -144,6 +144,19 @@ layer (counts), not money.
   rep who never got to ask must not be forced into a yes/no. NULL = not
   captured (pre-0061 rows, and every sold / return / re-take row). Required by
   `finishSchema` (`src/lib/finish-schema.ts`) on the no-sale walk-in path only.
+  **They were NULL on every row until 2026-08-17** — 1,119 no-sale walk-ins with
+  zero answers stored. The schema required them and the reps were answering; the
+  hand-written object literal in `storeFinish` that fed `doFinishCustomer`
+  simply omitted the two keys, so the insert wrote `?? null` every time. The
+  mapping now lives in the pure, tested `finishResultFrom`
+  (`src/lib/finish-result.ts`) precisely because that is where a validated field
+  goes missing without anything failing. Those historic nulls stay null — the
+  answers are gone and must not be invented.
+  Since 2026-08-17 `knew_brand` may also be filled **by implication**: answering
+  "bought before → yes" stores `knew_brand = 'yes'` without asking, because you
+  cannot have bought from a brand you did not know (`src/lib/walkin-profile.ts`).
+  That is a certainty derived from the rep's own answer, not a guess — the
+  distinction that keeps `unsure` meaningful.
   Asked **one question per screen**, the tap being the answer (`finish-dialog.tsx`).
   Surfaced on the kiosk attendance row **under the result**, plus sortable
   `lg:` columns on wide screens, and as two columns on the day report's CSV +
@@ -339,6 +352,14 @@ One row per daily-report send — the record of which days actually went out.
   those five days could not be recovered. A rebuilt past day reads Shopify
   **live** for that date, so a figure can shift after the fact (a refund is
   dated to the original order); it is a re-derivation, not a frozen snapshot.
+- **A resend carries a note** (2026-08-17). `sendReportForDate` took no note, so
+  a day rebuilt weeks later mailed bare numbers with nothing to explain them —
+  which is exactly wrong for the case it exists to serve. Both `resendReport`
+  (admin) and `storeResendReport` (kiosk) now accept one, the shared
+  `ReportHistory` Send button asks for it in a dialog (same Textarea + Paste +
+  `n/1000` counter as the close wizard), and it is cleaned by `cleanNote` inside
+  `sendReportForDate` so the counter, the email and `store_day_closes.note`
+  cannot disagree. A backfilled close row stores it.
 - **Resending is not closing.** `sendReportForDate` has NO eligibility gate —
   requiring a published shift is what caused the outage — and it backfills the
   `store_day_closes` row when the day has none (`closed_by` null: recorded late,
@@ -432,12 +453,21 @@ is display-only ("N turns today"). See `src/lib/floor-queue.ts`
 - `rotation_count int not null default 0` — display-only since 0036
 - `available_since timestamptz` (added 0036) — the FIFO ordering key; null
   on pre-0036 rows (readers fall back to `arrived_at`)
-- `attending_started_at jsonb` (added 0056) — a QUEUE of the rep's currently-open
-  clients (`[{kind, at}]`), for the per-client timer. Pushed on take, popped
-  (oldest of the kind, FIFO) on finish → `client_events.served_seconds`, popped
-  (newest) on undo, cleared on back-to-line. Kiosk single-writer, so the
+- `attending_started_at jsonb` (added 0056; **`id` added 2026-08-17, no
+  migration — it's jsonb**) — a QUEUE of the rep's currently-open clients
+  (`[{id, kind, at}]`), for the per-client timer. Pushed on take (server-issued
+  `randomUUID`), popped **by id** on finish → `client_events.served_seconds`,
+  popped (newest) on undo, cleared on back-to-line. Kiosk single-writer, so the
   read-modify-write is safe. Pure helpers in `src/lib/attend-timer.ts`; the
-  `/store` board clocks the oldest open `at` live (`ClientTimer`)
+  `/store` board renders one live `ClientTimer` per open client.
+  **Why the id exists:** finishing used to pop the *oldest* of the kind, so a
+  rep holding two clients had the outcome AND the elapsed time attributed to
+  whoever was taken first — routinely wrong, since the later arrival often buys
+  first. `popById` fixes that; `popOldest` remains the fallback when no id is
+  sent (an older client build, or a screen that went stale mid-tap), because a
+  finish that lands on the wrong client is still better than one that is lost.
+  Entries written before ids get a **deterministic** derived id (`kind-at`) in
+  `asQueue`, so a queue open across the deploy keeps working
 - `bumped_at timestamptz` (added 0014) — manual "make up next" override by a
   lead; non-null puts the member at the front of the line (latest bump wins),
   cleared when they take a customer or re-check-in

@@ -1051,11 +1051,14 @@ export async function storeSendTestReport(
  */
 export async function storeResendReport(
   businessDate: string,
+  note?: string,
 ): Promise<ActionResult<{ sentTo: number }>> {
   const { locationId, bd } = await storeCtx();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate))
     return { ok: false, error: "Invalid date." };
   if (businessDate > bd) return { ok: false, error: "That day hasn't happened yet." };
 
-  return sendReportForDate(locationId, businessDate, { today: bd });
+  // The note is cleaned + capped inside sendReportForDate (`cleanNote`), so the
+  // wizard's counter, the email and the stored close row can't disagree.
+  return sendReportForDate(locationId, businessDate, { today: bd, note });
 }
