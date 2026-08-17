@@ -20,6 +20,7 @@ import {
   storeThankYouLink,
 } from "@/server/store-floor";
 import { ANSWERS, type Answer, type FinishInput } from "@/lib/finish-schema";
+import { impliedKnewBrand, profileStepCount } from "@/lib/walkin-profile";
 import type { ProductHit, RecentOrder } from "@/lib/shopify";
 import type { MessageLanguage } from "@/lib/message-languages";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,8 @@ export type FinishTarget = {
   employeeId: string;
   name: string;
   kind: "walkin" | "return";
+  /** Which open client this closes. Absent = let the floor pick the oldest. */
+  clientId?: string;
 };
 
 type Step = "choice" | "order" | "contact" | "thankyou" | "bought" | "knew" | "reasons";
@@ -64,9 +67,6 @@ const ANSWER_LABEL: Record<Answer, string> = {
   no: "No",
   unsure: "Not sure",
 };
-
-/** The no-sale path: bought → knew → reasons. */
-const NO_SALE_STEPS: Step[] = ["bought", "knew", "reasons"];
 
 /**
  * Bottom-of-dialog escape hatch, on every step but the first. Disabled while a
@@ -107,7 +107,9 @@ export function FinishDialog({
       <DialogContent className="max-w-lg">
         {target && (
           <FinishSteps
-            key={`${target.employeeId}-${target.kind}`}
+            // Keyed by the CLIENT, not just the kind — two open walk-ins for
+            // one rep used to share a single dialog instance (and its answers).
+            key={`${target.employeeId}-${target.clientId ?? target.kind}`}
             target={target}
             pending={pending}
             onSubmit={onSubmit}
@@ -193,7 +195,12 @@ function FinishSteps({
     // One step, three choices. `sold` (which drives the metrics) is derived from
     // the type: only "both" (returned AND bought more) counts as an extra sale.
     const finishReturn = (return_type: "return" | "exchange" | "both", sold: boolean) =>
-      onSubmit(target.employeeId, { kind: "return", sold, return_type });
+      onSubmit(target.employeeId, {
+        kind: "return",
+        sold,
+        return_type,
+        client_id: target.clientId,
+      });
     return (
       <>
         <DialogHeader>
@@ -366,6 +373,7 @@ function FinishSteps({
       kind: "walkin",
       sold: true,
       got_contact,
+      client_id: target.clientId,
       orders:
         selected.length > 0
           ? selected.map((o) => ({
@@ -493,7 +501,13 @@ function FinishSteps({
     const choose = (a: Answer) => {
       if (isBought) {
         setBoughtBefore(a);
-        go("knew");
+        // Buying implies knowing, so "yes" answers the next screen too — skip it
+        // rather than make the rep tap an answer that can't be anything else.
+        // Always reassign: a rep who went Back and changed this must not leave
+        // the previous screen's answer behind.
+        const implied = impliedKnewBrand(a);
+        setKnewBrand(implied);
+        go(implied ? "reasons" : "knew");
       } else {
         setKnewBrand(a);
         go("reasons");
@@ -508,9 +522,9 @@ function FinishSteps({
               : "Did they already know LIVE!?"}
           </DialogTitle>
           <DialogDescription>
-            {target.name} · step {NO_SALE_STEPS.indexOf(step) + 1} of{" "}
-            {NO_SALE_STEPS.length} — &ldquo;Not sure&rdquo; is a real answer, better
-            than a guess.
+            {target.name} · step {isBought ? 1 : 2} of{" "}
+            {profileStepCount(boughtBefore)} — &ldquo;Not sure&rdquo; is a real
+            answer, better than a guess.
           </DialogDescription>
         </DialogHeader>
 
@@ -543,8 +557,8 @@ function FinishSteps({
       <DialogHeader>
         <DialogTitle>Why no sale?</DialogTitle>
         <DialogDescription>
-          {target.name} · step {NO_SALE_STEPS.indexOf("reasons") + 1} of{" "}
-          {NO_SALE_STEPS.length} — pick at least one reason.
+          {target.name} · step {profileStepCount(boughtBefore)} of{" "}
+          {profileStepCount(boughtBefore)} — pick at least one reason.
         </DialogDescription>
       </DialogHeader>
 
@@ -651,6 +665,7 @@ function FinishSteps({
             note: note.trim() || undefined,
             bought_before: boughtBefore ?? undefined,
             knew_brand: knewBrand ?? undefined,
+            client_id: target.clientId,
           })
         }
       >

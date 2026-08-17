@@ -40,6 +40,7 @@ import {
   type ShopifyCustomer,
 } from "@/lib/shopify";
 import { finishSchema, type FinishInput } from "@/lib/finish-schema";
+import { finishResultFrom } from "@/lib/finish-result";
 import { buildMessage } from "@/lib/client-message";
 import { whatsappLink } from "@/lib/contact-links";
 import { countryFromIso, type Country } from "@/lib/phone-country";
@@ -476,17 +477,13 @@ export async function storeFinish(
     return { ok: false, error: firstError(parsed.error) };
   }
 
-  const d = parsed.data;
-  const res = await doFinishCustomer(service, locationId, bd, emp.id, {
-    kind: d.kind,
-    sold: d.sold,
-    return_type: d.kind === "return" ? d.return_type : undefined,
-    got_contact: d.kind === "walkin" ? d.got_contact : false,
-    reasons: d.kind === "walkin" && !d.sold ? d.reasons : undefined,
-    products: d.kind === "walkin" && !d.sold ? d.products : undefined,
-    note: d.kind === "walkin" && !d.sold ? d.note : undefined,
-    orders: d.kind === "walkin" && d.sold ? d.orders : undefined,
-  });
+  const res = await doFinishCustomer(
+    service,
+    locationId,
+    bd,
+    emp.id,
+    finishResultFrom(parsed.data),
+  );
   if (res.ok) {
     revalidatePath("/store", "layout");
   }

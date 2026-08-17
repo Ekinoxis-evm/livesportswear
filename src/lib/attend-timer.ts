@@ -1,31 +1,63 @@
 /**
  * The per-client attend timer queue. Each open client a rep is attending is one
- * entry `{kind, at}` on `floor_checkins.attending_started_at`; the duration is
+ * entry `{id, kind, at}` on `floor_checkins.attending_started_at`; the duration is
  * the difference between the finish time and the entry's `at`. Walk-ins and
  * returns queue independently by `kind` so finishing one kind pops the right
  * start. Pure: no DB, no network, no clock (the caller passes ISO timestamps).
  */
 
 export type AttendKind = "walkin" | "return";
-export type OpenClient = { kind: AttendKind; at: string }; // at = ISO taken-time
+/** `at` = ISO taken-time; `id` names THIS client so a finish can say which one. */
+export type OpenClient = { id: string; kind: AttendKind; at: string };
 export type AttendQueue = OpenClient[];
 
-/** Read a stored jsonb value back into a clean queue (tolerates null/garbage). */
+/**
+ * Read a stored jsonb value back into a clean queue (tolerates null/garbage).
+ *
+ * Entries written before ids existed carry none, so one is derived from the two
+ * fields they do have. It must be DETERMINISTIC: the board hands these ids to
+ * the browser and the finish sends one back, so a fresh read has to produce the
+ * same id or the pop would miss. (Only ever relevant to clients already open at
+ * deploy time — the queue empties as the floor closes them.)
+ */
 export function asQueue(value: unknown): AttendQueue {
   if (!Array.isArray(value)) return [];
-  return value.filter(
-    (e): e is OpenClient =>
-      !!e &&
-      typeof e === "object" &&
-      (e as OpenClient).kind !== undefined &&
-      ((e as OpenClient).kind === "walkin" || (e as OpenClient).kind === "return") &&
-      typeof (e as OpenClient).at === "string",
-  );
+  const out: AttendQueue = [];
+  for (const e of value) {
+    if (!e || typeof e !== "object") continue;
+    const { id, kind, at } = e as Partial<OpenClient>;
+    if (kind !== "walkin" && kind !== "return") continue;
+    if (typeof at !== "string") continue;
+    out.push({ id: typeof id === "string" && id ? id : `${kind}-${at}`, kind, at });
+  }
+  return out;
 }
 
-/** Push a newly-taken client onto the end of the queue. */
-export function pushOpen(queue: AttendQueue, kind: AttendKind, at: string): AttendQueue {
-  return [...queue, { kind, at }];
+/**
+ * Push a newly-taken client onto the end of the queue. The caller supplies the
+ * id (this stays pure — no randomness in here).
+ */
+export function pushOpen(
+  queue: AttendQueue,
+  kind: AttendKind,
+  at: string,
+  id: string,
+): AttendQueue {
+  return [...queue, { id, kind, at }];
+}
+
+/**
+ * Finish a SPECIFIC open client. `entry` is null when the id isn't in the queue
+ * (a stale screen, or a client already closed from another tap) — the caller
+ * falls back to `popOldest` rather than refusing, so a finish is never lost.
+ */
+export function popById(
+  queue: AttendQueue,
+  id: string,
+): { entry: OpenClient | null; queue: AttendQueue } {
+  const i = queue.findIndex((e) => e.id === id);
+  if (i === -1) return { entry: null, queue };
+  return { entry: queue[i], queue: [...queue.slice(0, i), ...queue.slice(i + 1)] };
 }
 
 /**

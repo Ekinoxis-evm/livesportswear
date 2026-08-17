@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { businessDate } from "@/lib/business-date";
 import { orderFloor, type FloorMember } from "@/lib/floor-queue";
 import { openBreak, breakMinutes, type BreakRow } from "@/lib/breaks";
-import { asQueue, oldestAt } from "@/lib/attend-timer";
+import { asQueue } from "@/lib/attend-timer";
 import { SalesBoard, type SalesRow } from "@/components/store/sales-board";
 
 type CheckinRow = {
@@ -76,8 +76,10 @@ export default async function StoreSalesPage() {
   const nowIso = new Date().toISOString();
 
   const checkins = (checkinRows ?? []) as CheckinRow[];
-  const attendingSinceOf = new Map(
-    checkins.map((c) => [c.employee_id, oldestAt(asQueue(c.attending_started_at))]),
+  // The whole queue reaches the board, not just its earliest stamp: a rep
+  // holding two clients needs a timer each, and the finish has to name one.
+  const openClientsOf = new Map(
+    checkins.map((c) => [c.employee_id, asQueue(c.attending_started_at)]),
   );
   const members: FloorMember[] = checkins.map((c) => ({
     employeeId: c.employee_id,
@@ -109,7 +111,7 @@ export default async function StoreSalesPage() {
       walkins: r.attendingCount ?? 0,
       returns: r.returnCount ?? 0,
       onReturn: r.onReturn,
-      attendingStartedAt: attendingSinceOf.get(r.employeeId) ?? null,
+      openClients: openClientsOf.get(r.employeeId) ?? [],
       breakStartedAt: open?.startedAt ?? null,
       // closed breaks only — the open one is clocked live by the timer
       breakPriorMinutes: breakMinutes(
