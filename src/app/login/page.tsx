@@ -11,6 +11,7 @@ import { signIn } from "@/server/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BrandMark } from "@/components/shared/brand-mark";
 import {
   Card,
   CardContent,
@@ -50,7 +51,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-6">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+      <BrandMark size={88} priority />
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-xl font-bold tracking-tight">LIVE!</CardTitle>

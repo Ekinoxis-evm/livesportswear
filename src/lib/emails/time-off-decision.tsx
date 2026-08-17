@@ -11,6 +11,7 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import { BrandLogo } from "@/lib/emails/brand-logo";
 
 export type TimeOffDecisionEmailProps = {
   employeeName: string;
@@ -74,6 +75,7 @@ export function TimeOffDecisionEmail({
             padding: "32px",
           }}
         >
+          <BrandLogo />
           <Text
             style={{
               fontSize: "24px",

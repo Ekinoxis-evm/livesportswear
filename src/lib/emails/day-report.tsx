@@ -12,6 +12,7 @@ import {
   Section,
   Text,
 } from "@react-email/components";
+import { BrandLogo } from "@/lib/emails/brand-logo";
 
 export type DayReportRow = {
   name: string;
@@ -174,6 +175,7 @@ export function DayReportEmail({
             padding: "32px",
           }}
         >
+          <BrandLogo />
           <Text
             style={{
               fontSize: "24px",
