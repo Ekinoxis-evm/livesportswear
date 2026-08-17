@@ -55,7 +55,6 @@ export async function doCheckIn(
   bd: string,
   employeeId: string,
   now: string,
-  photoPath: string | null = null,
 ): Promise<ActionResult> {
   // First arrival opens the store day.
   const opened = await doOpenDay(service, locationId, bd, employeeId, true);
@@ -79,12 +78,10 @@ export async function doCheckIn(
       entry_validated_at: now,
       entry_validated_by: null,
       entry_self: false,
-      entry_photo_path: photoPath,
       exit_validated_at: null,
       exit_validated_by: null,
       exit_self: false,
       exit_missed: false,
-      exit_photo_path: null,
     },
     { onConflict: "location_id,business_date,employee_id" },
   );
@@ -104,7 +101,6 @@ export async function doCheckOut(
   bd: string,
   employeeId: string,
   now: string,
-  photoPath: string | null = null,
 ): Promise<ActionResult> {
   const cur = await readCounts(service, locationId, bd, employeeId);
   const open =
@@ -124,7 +120,6 @@ export async function doCheckOut(
       exit_validated_at: now,
       exit_validated_by: null,
       exit_self: false,
-      exit_photo_path: photoPath,
     })
     .eq("location_id", locationId)
     .eq("business_date", bd)

@@ -63,8 +63,6 @@ export function AttendanceToday({
     duration: (r) => r.servedSeconds,
     customer: (r) => r.customer,
     order: (r) => r.orderTotal,
-    boughtBefore: (r) => r.boughtBefore,
-    knewBrand: (r) => r.knewBrand,
   });
 
   return (
@@ -114,8 +112,6 @@ export function AttendanceToday({
                   <SortableTh sortKey="result" sort={sort} onSort={onSort} className="py-2 font-medium">Result</SortableTh>
                   <SortableTh sortKey="duration" sort={sort} onSort={onSort} className="hidden py-2 text-right font-medium sm:table-cell">Duration</SortableTh>
                   <SortableTh sortKey="customer" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Customer</SortableTh>
-                  <SortableTh sortKey="boughtBefore" sort={sort} onSort={onSort} className="hidden py-2 font-medium lg:table-cell">Bought before</SortableTh>
-                  <SortableTh sortKey="knewBrand" sort={sort} onSort={onSort} className="hidden py-2 font-medium lg:table-cell">Knew LIVE!</SortableTh>
                   <SortableTh sortKey="order" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Order</SortableTh>
                 </tr>
               </thead>
@@ -146,27 +142,28 @@ export function AttendanceToday({
                         )}
                         {r.gotContact && <Badge variant="secondary">contact</Badge>}
                       </div>
-                      {/* Below lg the answers ride the result they explain,
-                          because there is no room for two more columns. Past lg
-                          (the landscape iPad, since the shell widened to
-                          max-w-6xl) the real columns take over and this hides. */}
+                      {/* ALWAYS under the result, never a column of their own.
+                          As columns these sat 6th and 7th of eight in a table
+                          that scrolls sideways, so on the floor screen they were
+                          off-frame — the second time these answers shipped
+                          somewhere nobody could actually see them. */}
                       {(r.boughtBefore || r.knewBrand) && (
-                        <div className="text-muted-foreground mt-1 flex flex-col text-xs lg:hidden">
+                        <div className="mt-1 flex flex-wrap gap-1">
                           {r.boughtBefore && (
-                            <span>
-                              bought before:{" "}
-                              <span className="text-foreground">
+                            <Badge variant="outline" className="font-normal">
+                              bought before:&nbsp;
+                              <span className="text-foreground font-medium">
                                 {ANSWER_LABEL[r.boughtBefore] ?? r.boughtBefore}
                               </span>
-                            </span>
+                            </Badge>
                           )}
                           {r.knewBrand && (
-                            <span>
-                              knew LIVE!:{" "}
-                              <span className="text-foreground">
+                            <Badge variant="outline" className="font-normal">
+                              knew LIVE!:&nbsp;
+                              <span className="text-foreground font-medium">
                                 {ANSWER_LABEL[r.knewBrand] ?? r.knewBrand}
                               </span>
-                            </span>
+                            </Badge>
                           )}
                         </div>
                       )}
@@ -176,12 +173,6 @@ export function AttendanceToday({
                     </td>
                     <td className="text-muted-foreground hidden py-2 sm:table-cell">
                       {r.customer ?? "—"}
-                    </td>
-                    <td className="text-muted-foreground hidden py-2 lg:table-cell">
-                      {r.boughtBefore ? (ANSWER_LABEL[r.boughtBefore] ?? r.boughtBefore) : "—"}
-                    </td>
-                    <td className="text-muted-foreground hidden py-2 lg:table-cell">
-                      {r.knewBrand ? (ANSWER_LABEL[r.knewBrand] ?? r.knewBrand) : "—"}
                     </td>
                     <td className="py-2 text-right tabular-nums">
                       {r.orderTotal != null ? (
