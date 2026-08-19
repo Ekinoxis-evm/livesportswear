@@ -5,7 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { accessibleLocationIds } from "@/lib/auth";
 import { businessDate } from "@/lib/business-date";
 import { totals, byPerson, formatPct, formatDuration } from "@/lib/conversion";
-import { stampStatus, workedHours, type AttendanceStamp } from "@/lib/attendance";
+import { stampStatus, workedHours } from "@/lib/attendance";
 import { PerformancePeopleTable } from "@/components/admin/performance-people-table";
 import { breakMinutes, overBreakBudget, type BreakRow } from "@/lib/breaks";
 import { weekdayName } from "@/lib/weekdays";
@@ -30,13 +30,9 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DayAttendanceTable,
+  type DayAttendanceRow,
+} from "@/components/admin/day-attendance-table";
 
 type EventRow = {
   employee_id: string;
@@ -138,28 +134,32 @@ export default async function PerformancePage({
   const staffName = new Map((staffRows ?? []).map((s) => [s.id, s.name]));
   const tz = location.timezone;
   const hhmm = (iso: string) => formatInTimeZone(new Date(iso), tz, "HH:mm");
-  const stampBadge = (stamp: AttendanceStamp, validatedBy: string | null, kind: "entry" | "exit") => {
-    const status = stampStatus(stamp);
-    if (status === "none") return null;
-    if (status === "validated") {
-      return (
-        <span className="text-emerald-600">
-          ✓ {staffName.get(validatedBy ?? "") ?? "validated"}
-        </span>
-      );
-    }
-    if (status === "self") {
-      return (
-        <span className="text-amber-600">
-          ⚑ {kind === "entry" ? "first in" : "last out"}
-        </span>
-      );
-    }
-    if (status === "missed") {
-      return <span className="text-destructive">✗ missed check-out</span>;
-    }
-    return <span className="text-muted-foreground">⏳ pending</span>;
-  };
+  const attendanceRows: DayAttendanceRow[] = checkins.map((c) => {
+    const bm = breakOf(c.employee_id);
+    return {
+      employeeId: c.employee_id,
+      name: c.employees?.name ?? staffName.get(c.employee_id) ?? "Unknown",
+      entryLabel: hhmm(c.arrived_at),
+      entryStatus: stampStatus({
+        at: c.arrived_at,
+        validatedAt: c.entry_validated_at,
+        self: c.entry_self,
+      }),
+      entryValidator: staffName.get(c.entry_validated_by ?? "") ?? null,
+      exitLabel: c.left_at ? hhmm(c.left_at) : null,
+      exitStatus: stampStatus({
+        at: c.left_at,
+        validatedAt: c.exit_validated_at,
+        self: c.exit_self,
+        missed: c.exit_missed,
+      }),
+      exitValidator: staffName.get(c.exit_validated_by ?? "") ?? null,
+      breakMinutes: bm,
+      overBreak: overBreakBudget(bm),
+      hours: workedHours(c.arrived_at, c.left_at),
+    };
+  });
+
   const totalHours = checkins.reduce(
     (sum, c) => sum + (workedHours(c.arrived_at, c.left_at) ?? 0),
     0,
@@ -363,84 +363,7 @@ export default async function PerformancePage({
           </p>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Entry</TableHead>
-                  <TableHead>Exit</TableHead>
-                  <TableHead className="text-right">Break</TableHead>
-                  <TableHead className="text-right">Hours</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {checkins.map((c) => {
-                  const hours = workedHours(c.arrived_at, c.left_at);
-                  return (
-                    <TableRow key={c.employee_id}>
-                      <TableCell className="font-medium">
-                        {c.employees?.name ?? staffName.get(c.employee_id) ?? "Unknown"}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {hhmm(c.arrived_at)}{" "}
-                        <span className="text-xs">
-                          {stampBadge(
-                            {
-                              at: c.arrived_at,
-                              validatedAt: c.entry_validated_at,
-                              self: c.entry_self,
-                            },
-                            c.entry_validated_by,
-                            "entry",
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {c.left_at ? (
-                          <>
-                            {hhmm(c.left_at)}{" "}
-                            <span className="text-xs">
-                              {stampBadge(
-                                {
-                                  at: c.left_at,
-                                  validatedAt: c.exit_validated_at,
-                                  self: c.exit_self,
-                                  missed: c.exit_missed,
-                                },
-                                c.exit_validated_by,
-                                "exit",
-                              )}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">on floor</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {(() => {
-                          const bm = breakOf(c.employee_id);
-                          if (bm === 0) return "—";
-                          return (
-                            <span
-                              className={
-                                overBreakBudget(bm)
-                                  ? "text-destructive font-semibold"
-                                  : undefined
-                              }
-                            >
-                              {bm}m{overBreakBudget(bm) && " ⚑"}
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {hours != null ? hours.toFixed(1) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <DayAttendanceTable rows={attendanceRows} />
             <p className="text-muted-foreground px-6 pb-4 text-right text-sm tabular-nums">
               Day total: <span className="font-semibold">{totalHours.toFixed(1)}h</span>
             </p>

@@ -4,7 +4,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { normalizeStaffId } from "@/lib/shopify-range";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollTable } from "@/components/shared/scroll-table";
+import { AttributionTable } from "@/components/admin/attribution-table";
 import { RebuildAttributionButton } from "@/components/admin/rebuild-attribution-button";
 
 type TallyRow = { staff_id: string | null; country_iso: string | null; clients: number };
@@ -103,45 +103,7 @@ export default async function ClientsAttributionPage() {
               your Shopify order history.
             </p>
           ) : (
-            <ScrollTable maxHeight="30rem">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground border-b text-left">
-                    <th className="py-2 font-medium">Rep</th>
-                    <th className="py-2 text-right font-medium">Clients</th>
-                    <th className="py-2 text-right font-medium">Share</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.staff || "none"} className="border-b last:border-0">
-                      <td className="py-2 font-medium">
-                        <span
-                          className={
-                            r.mapped
-                              ? r.active === false
-                                ? "text-muted-foreground"
-                                : ""
-                              : "text-muted-foreground italic"
-                          }
-                        >
-                          {r.name}
-                        </span>
-                        {r.mapped && r.active === false && (
-                          <span className="text-muted-foreground ml-1.5 text-xs">(inactive)</span>
-                        )}
-                      </td>
-                      <td className="py-2 text-right tabular-nums">{r.clients.toLocaleString()}</td>
-                      <td className="text-muted-foreground py-2 text-right tabular-nums">
-                        {attributedTotal > 0
-                          ? `${Math.round((r.clients / attributedTotal) * 100)}%`
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </ScrollTable>
+            <AttributionTable rows={rows} attributedTotal={attributedTotal} />
           )}
         </CardContent>
       </Card>

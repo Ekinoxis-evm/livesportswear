@@ -34,6 +34,8 @@ export type AttendanceRow = {
   // Asked on the no-sale flow only (0061); null on sold rows and pre-0061 rows.
   boughtBefore: string | null; // 'yes' | 'no' | 'unsure'
   knewBrand: string | null;
+  reasons: string[] | null; // why they didn't buy — on ~82% of events
+  note: string | null; // the rep's own words; rare (~5%) and short
 };
 
 const ANSWER_LABEL: Record<string, string> = {
@@ -44,6 +46,10 @@ const ANSWER_LABEL: Record<string, string> = {
 
 type Filter = "all" | "sold" | "nosale";
 
+/** Every column carries one variable, ordered so the ones read on the floor sit
+ *  left of the fold. Time and Customer are the two that earn their width least
+ *  (Customer is filled on ~7% of rows), so they are the first to go on a narrow
+ *  screen — never Result, the two profile answers, or the reason. */
 export function AttendanceToday({
   rows,
   currency,
@@ -52,23 +58,46 @@ export function AttendanceToday({
   currency: string;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  // A note is ~27 chars on average but can run to 300; show it inline and let
+  // the row grow on tap rather than spending a wide column on a mostly-empty
+  // field or hiding the text behind a tooltip nobody finds on a touchscreen.
+  const [openNotes, setOpenNotes] = useState<Set<string>>(new Set());
+  const toggleNote = (id: string) =>
+    setOpenNotes((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   const filtered = rows.filter(
     (r) => filter === "all" || (filter === "sold" ? r.sold : !r.sold),
   );
   const soldCount = rows.filter((r) => r.sold).length;
-  const { rows: shown, sort, onSort } = useTableSort(filtered, {
-    time: (r) => r.time,
+  const {
+    rows: shown,
+    sort,
+    onSort,
+  } = useTableSort(filtered, {
     rep: (r) => r.rep,
+    time: (r) => r.time,
     result: (r) => (r.sold ? 1 : 0),
+    boughtBefore: (r) => r.boughtBefore,
+    knewBrand: (r) => r.knewBrand,
+    reason: (r) => r.reasons?.[0] ?? null,
+    note: (r) => r.note,
     duration: (r) => r.servedSeconds,
     customer: (r) => r.customer,
     order: (r) => r.orderTotal,
   });
 
+  const answer = (v: string | null) =>
+    v ? (ANSWER_LABEL[v] ?? v) : <span className="text-muted-foreground/50">—</span>;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Clients attended today</CardTitle>
+        <CardTitle className="text-base">Clients attended</CardTitle>
         <CardDescription>
           Every walk-in logged on the floor and how it went.
         </CardDescription>
@@ -100,97 +129,132 @@ export function AttendanceToday({
 
         {shown.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            {rows.length === 0 ? "No clients logged yet today." : "None in this filter."}
+            {rows.length === 0
+              ? "No clients logged yet."
+              : "None in this filter."}
           </p>
         ) : (
           <ScrollTable density="comfortable">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-muted-foreground text-left">
-                  <SortableTh sortKey="time" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Time</SortableTh>
-                  <SortableTh sortKey="rep" sort={sort} onSort={onSort} className="py-2 font-medium">Salesperson</SortableTh>
-                  <SortableTh sortKey="result" sort={sort} onSort={onSort} className="py-2 font-medium">Result</SortableTh>
-                  <SortableTh sortKey="duration" sort={sort} onSort={onSort} className="hidden py-2 text-right font-medium sm:table-cell">Duration</SortableTh>
-                  <SortableTh sortKey="customer" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">Customer</SortableTh>
-                  <SortableTh sortKey="order" sort={sort} onSort={onSort} className="py-2 text-right font-medium">Order</SortableTh>
+                  <SortableTh sortKey="rep" sort={sort} onSort={onSort} className="py-2 font-medium">
+                    Salesperson
+                  </SortableTh>
+                  <SortableTh sortKey="time" sort={sort} onSort={onSort} className="hidden py-2 font-medium sm:table-cell">
+                    Time
+                  </SortableTh>
+                  <SortableTh sortKey="result" sort={sort} onSort={onSort} className="py-2 font-medium">
+                    Result
+                  </SortableTh>
+                  <SortableTh sortKey="boughtBefore" sort={sort} onSort={onSort} className="py-2 font-medium">
+                    Bought before
+                  </SortableTh>
+                  <SortableTh sortKey="knewBrand" sort={sort} onSort={onSort} className="py-2 font-medium">
+                    Knew LIVE!
+                  </SortableTh>
+                  <SortableTh sortKey="reason" sort={sort} onSort={onSort} className="py-2 font-medium">
+                    Reason
+                  </SortableTh>
+                  <SortableTh sortKey="note" sort={sort} onSort={onSort} className="py-2 font-medium">
+                    Note
+                  </SortableTh>
+                  <SortableTh sortKey="duration" sort={sort} onSort={onSort} className="py-2 text-right font-medium">
+                    Duration
+                  </SortableTh>
+                  <SortableTh sortKey="customer" sort={sort} onSort={onSort} className="hidden py-2 font-medium xl:table-cell">
+                    Customer
+                  </SortableTh>
+                  <SortableTh sortKey="order" sort={sort} onSort={onSort} className="py-2 text-right font-medium">
+                    Order
+                  </SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {shown.map((r) => (
-                  <tr key={r.id} className="border-b last:border-0 align-top">
-                    <td className="text-muted-foreground hidden py-2 tabular-nums sm:table-cell">
-                      {r.time}
-                    </td>
-                    <td className="py-2 font-medium">
-                      {r.rep}
-                      {r.isReturn && (
-                        <Badge variant="outline" className="ml-1.5 align-middle capitalize">
-                          {r.returnType ?? "return"}
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="py-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {r.sold ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
-                            <Check className="size-3.5" /> Sold
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground inline-flex items-center gap-1">
-                            <X className="size-3.5" /> No sale
-                          </span>
+                {shown.map((r) => {
+                  const open = openNotes.has(r.id);
+                  return (
+                    <tr key={r.id} className="border-b last:border-0 align-top">
+                      <td className="py-2 font-medium">
+                        {r.rep}
+                        {r.isReturn && (
+                          <Badge variant="outline" className="ml-1.5 align-middle capitalize">
+                            {r.returnType ?? "return"}
+                          </Badge>
                         )}
-                        {r.gotContact && <Badge variant="secondary">contact</Badge>}
-                      </div>
-                      {/* ALWAYS under the result, never a column of their own.
-                          As columns these sat 6th and 7th of eight in a table
-                          that scrolls sideways, so on the floor screen they were
-                          off-frame — the second time these answers shipped
-                          somewhere nobody could actually see them. */}
-                      {(r.boughtBefore || r.knewBrand) && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {r.boughtBefore && (
-                            <Badge variant="outline" className="font-normal">
-                              bought before:&nbsp;
-                              <span className="text-foreground font-medium">
-                                {ANSWER_LABEL[r.boughtBefore] ?? r.boughtBefore}
-                              </span>
-                            </Badge>
-                          )}
-                          {r.knewBrand && (
-                            <Badge variant="outline" className="font-normal">
-                              knew LIVE!:&nbsp;
-                              <span className="text-foreground font-medium">
-                                {ANSWER_LABEL[r.knewBrand] ?? r.knewBrand}
-                              </span>
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-muted-foreground hidden py-2 text-right tabular-nums sm:table-cell">
-                      {formatDuration(r.servedSeconds)}
-                    </td>
-                    <td className="text-muted-foreground hidden py-2 sm:table-cell">
-                      {r.customer ?? "—"}
-                    </td>
-                    <td className="py-2 text-right tabular-nums">
-                      {r.orderTotal != null ? (
-                        <>
-                          <span className="font-medium">{formatMoney(r.orderTotal, currency)}</span>
-                          {r.orderName && (
-                            <span className="text-muted-foreground block text-xs">
-                              {r.orderName}
-                              {r.orderCount > 1 && ` +${r.orderCount - 1}`}
+                      </td>
+                      <td className="text-muted-foreground hidden py-2 tabular-nums sm:table-cell">
+                        {r.time}
+                      </td>
+                      <td className="py-2">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          {r.sold ? (
+                            <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
+                              <Check className="size-3.5" /> Sold
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground inline-flex items-center gap-1">
+                              <X className="size-3.5" /> No sale
                             </span>
                           )}
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          {r.gotContact && <Badge variant="secondary">contact</Badge>}
+                        </span>
+                      </td>
+                      <td className="py-2">{answer(r.boughtBefore)}</td>
+                      <td className="py-2">{answer(r.knewBrand)}</td>
+                      <td className="text-muted-foreground py-2">
+                        {r.reasons?.length ? (
+                          <span className="flex flex-wrap gap-1">
+                            {r.reasons.map((x) => (
+                              <Badge key={x} variant="outline" className="font-normal">
+                                {x}
+                              </Badge>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
+                      </td>
+                      <td className="text-muted-foreground py-2">
+                        {r.note ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleNote(r.id)}
+                            className="text-foreground/80 hover:text-foreground max-w-[14rem] text-left"
+                            title={open ? "Tap to collapse" : "Tap to read"}
+                          >
+                            <span className={open ? "" : "line-clamp-1"}>{r.note}</span>
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
+                      </td>
+                      <td className="text-muted-foreground py-2 text-right tabular-nums">
+                        {formatDuration(r.servedSeconds)}
+                      </td>
+                      <td className="text-muted-foreground hidden py-2 xl:table-cell">
+                        {r.customer ?? "—"}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {r.orderTotal != null ? (
+                          <span className="flex flex-col items-end leading-tight">
+                            <span className="font-medium">
+                              {formatMoney(r.orderTotal, currency)}
+                            </span>
+                            {r.orderName && (
+                              <span className="text-muted-foreground text-xs">
+                                {r.orderName}
+                                {r.orderCount > 1 && ` +${r.orderCount - 1}`}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </ScrollTable>
