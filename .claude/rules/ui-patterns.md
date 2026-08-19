@@ -169,10 +169,33 @@ reading as truncated.
   and portal keep the compact default.
 - All rules are descendant selectors, so call sites keep their own markup and
   their `hidden sm:table-cell` column rules.
-- **Exception — the calendar grids.** `schedule-grid.tsx`, `schedule-board.tsx`,
-  `store/schedule/page.tsx` and `w/[token]/[week]` use `<table>` for week layout,
-  not data. They keep their own sticky column; pinning would fight the
-  drag-and-drop. Don't convert them.
+- **Exception — grids that aren't lists.** `schedule-grid.tsx`,
+  `schedule-board.tsx`, `store/schedule/page.tsx` and `w/[token]/[week]` use
+  `<table>` for week layout, not data. They keep their own sticky column; pinning
+  would fight the drag-and-drop. The same exemption covers the **matrices and
+  input grids**: `shift-count-grid.tsx` (employees × AM/PM),
+  `receive-screen.tsx` (reference × size) and `receiving-count.tsx` (per-size qty
+  inputs). Sorting a matrix by a column is meaningless. **Every other data table
+  in the app is sortable** — audited 2026-08-19; if you add one, it sorts.
+
+## One column per variable
+A data table shows one variable per column. Don't fold two fields into a cell,
+and don't hide a field in a badge under another one — a reader scanning a column
+should see every value of that variable in a line.
+
+The width that buys is scarce, so **order columns by how often they are read,
+not by how the data is shaped**, and drop the least-read ones first
+(`hidden sm:table-cell`, then `xl:table-cell`). The attendance table is the
+worked example: `Salesperson · Time · Result · Bought before · Knew LIVE! ·
+Reason · Note · Duration · Customer · Order`, where Time drops below `sm` and
+Customer below `xl` (it is filled on ~7% of rows). Position is what decides
+whether a column is seen at all — two answers once sat 6th and 7th of eight in a
+sideways-scrolling table and were invisible on the floor for a fortnight.
+
+A **rare, long, free-text field earns a cell, not a wide column**: the note is
+filled on ~5% of rows and averages 27 characters, so it renders `line-clamp-1`
+and expands in place on tap. Not a tooltip — nobody finds a tooltip on a
+touchscreen.
 
 ## Responsive tables
 - Two idioms, no card-stack: **(a)** wrap the table in `overflow-x-auto` (it scrolls

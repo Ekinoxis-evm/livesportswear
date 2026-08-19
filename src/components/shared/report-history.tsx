@@ -7,6 +7,8 @@ import { AlertTriangle, Check, ClipboardPaste, Send } from "lucide-react";
 import type { ReportHistoryRow } from "@/lib/report-history";
 import type { ActionResult } from "@/server/shared";
 import { ScrollTable } from "@/components/shared/scroll-table";
+import { SortableTh } from "@/components/shared/sortable-header";
+import { useTableSort } from "@/lib/use-table-sort";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,6 +93,24 @@ export function ReportHistory({
     });
   };
 
+  const {
+    rows: shown,
+    sort,
+    onSort,
+  } = useTableSort(
+    rows,
+    {
+      day: (r) => r.businessDate,
+      attended: (r) => r.attended,
+      sold: (r) => r.sold,
+      conversion: (r) => r.conversion,
+      netSales: (r) => r.netSales,
+      report: (r) => (r.missing ? -1 : r.sendCount),
+    },
+    // Newest first — the day you are most likely to be chasing.
+    { key: "day", dir: "desc" },
+  );
+
   const missing = rows.filter((r) => r.missing).length;
 
   if (rows.length === 0) {
@@ -110,19 +130,29 @@ export function ReportHistory({
         <table className="w-full text-sm">
           <thead>
             <tr className="text-muted-foreground text-left">
-              <th className="py-2 font-medium">Day</th>
-              <th className="py-2 text-right font-medium">Attended</th>
-              <th className="hidden py-2 text-right font-medium sm:table-cell">Sold</th>
-              <th className="hidden py-2 text-right font-medium sm:table-cell">
+              <SortableTh sortKey="day" sort={sort} onSort={onSort} className="py-2 font-medium">
+                Day
+              </SortableTh>
+              <SortableTh sortKey="attended" sort={sort} onSort={onSort} className="py-2 text-right font-medium">
+                Attended
+              </SortableTh>
+              <SortableTh sortKey="sold" sort={sort} onSort={onSort} className="hidden py-2 text-right font-medium sm:table-cell">
+                Sold
+              </SortableTh>
+              <SortableTh sortKey="conversion" sort={sort} onSort={onSort} className="hidden py-2 text-right font-medium sm:table-cell">
                 Conversion
-              </th>
-              <th className="py-2 text-right font-medium">Net sales</th>
-              <th className="py-2 font-medium">Report</th>
+              </SortableTh>
+              <SortableTh sortKey="netSales" sort={sort} onSort={onSort} className="py-2 text-right font-medium">
+                Net sales
+              </SortableTh>
+              <SortableTh sortKey="report" sort={sort} onSort={onSort} className="py-2 font-medium">
+                Report
+              </SortableTh>
               <th className="py-2" />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {shown.map((r) => (
               <tr key={r.businessDate} className="border-b last:border-0">
                 <td className="py-2 font-medium whitespace-nowrap">
                   {weekdayName(r.businessDate).slice(0, 3)} {shortDate(r.businessDate)}
